@@ -1,0 +1,21 @@
+/* Terminal.css */
+.terminal-container {
+    overflow: hidden;
+}
+
+.xterm-viewport {
+    overflow-y: auto !important;
+    /* background-color: transparent !important; */
+}
+
+.xterm-screen {
+    padding: 8px !important;
+}
+
+.xterm-char {
+    vertical-align: top !important;
+}
+
+.xterm-decoration {
+    z-index: 0 !important;
+}

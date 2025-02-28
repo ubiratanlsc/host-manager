@@ -1,0 +1,41 @@
+[package]
+name = "jext"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "jext_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1.24", features = ["macros", "rt", "sync", "time"] }
+cuid = { version = "1.2.0" }
+cuid2 = "0.1.4"
+portable-pty = { git = "https://github.com/wez/wezterm.git", features = ["serde_support"] }
+phf = { version = "0.11.1", features = ["macros"] }
+ssh2 = "0.9"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winreg = "0.10.1"
+
+[features]
+# by default Tauri runs in production mode
+# when `jexpe dev` runs it is executed with `cargo run --no-default-features` if `devPath` is an URL
+default = ["custom-protocol"]
+# this feature is used used for production builds where `devPath` points to the filesystem
+# DO NOT remove this
+custom-protocol = ["tauri/custom-protocol"]
