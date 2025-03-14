@@ -9,6 +9,11 @@ mod pty;
 mod shell;
 mod ssh;
 
+// mod crypto;
+// mod models;
+// mod storage;
+// mod ui;
+
 pub struct JexpeState {
     ptys: Mutex<HashMap<String, PtyProcess>>,
     ssh_sessions: Mutex<HashMap<String, ssh::SshSession>>,
@@ -25,7 +30,16 @@ impl JexpeState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // let storage = match ui::commands::init_storage() {
+    //     Ok(storage) => storage,
+    //     Err(e) => {
+    //         eprintln!("Erro ao inicializar armazenamento: {:?}", e);
+    //         std::process::exit(1);
+    //     }
+    // };
+
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
         .manage(JexpeState::new())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![

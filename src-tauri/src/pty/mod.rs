@@ -1,11 +1,11 @@
+use crate::shell::SystemShell;
 use portable_pty::MasterPty;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
-use crate::shell::SystemShell;
 
-mod constants;
 pub mod commands;
+mod constants;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct PtyStdoutPayload {
