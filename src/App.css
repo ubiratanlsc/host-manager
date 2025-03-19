@@ -1,3 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@theme {
+  --color-windows-black: #202020;
+  --color-windows-component: #2b2b2b;
+  --color-fiap-pink: #ed145b;
+  --radius-windows: 3px;
+  --font-SegoeUI: "Segoe UI";
+  --font-JB: "JetBrains Mono";
+  --font-Tim: "Tim Sans";
+}

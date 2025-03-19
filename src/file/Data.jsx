@@ -5,15 +5,18 @@ export const hosts = {
     port: "",
     username: "",
     password: "",
+    groups: [],
     tagId: ""
 }
 export const groups = {
     id: "",
     name: "",
-    tagId: "",
-    description: "",
-    hostsIds: [],
-    subGroupIds: []
+    username: "",
+    password: "",
+    // tagId: "",
+    // description: "",
+    // hostsIds: [],
+    // subGroupIds: []
 }
 export const tags = {
     id: "",

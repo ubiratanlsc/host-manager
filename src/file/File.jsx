@@ -7,14 +7,13 @@ import * as path from '@tauri-apps/api/path';
 
 
 const FileProvider = ({ children }) => {
-    const [file, setFile] = useSetState({ data: {} })
+    const [file, setFile] = useSetState({})
 
 
     useEffect(() => {
         (async () => {
 
-            const caminho = await path.resourceDir();
-            console.log(caminho);
+            // const caminho = await path.resourceDir();
 
             const tokenExists = await exists('config.json', {
                 baseDir: BaseDirectory.Resource,
@@ -26,7 +25,8 @@ const FileProvider = ({ children }) => {
             } else {
                 const file = await readFile('config.json', { baseDir: BaseDirectory.Resource });
                 const data = new TextDecoder().decode(file);
-                setFile({ data: JSON.parse(data) });
+
+                setFile(JSON.parse(data));
             }
         })();
     }, [])
