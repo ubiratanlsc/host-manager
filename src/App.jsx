@@ -51,7 +51,7 @@ const App = () => {
               </nav>
 
               <main className="">
-                <Sidebar />
+                
               </main>
             </div>
           </SSHProvider >
