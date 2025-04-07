@@ -8,6 +8,7 @@ import * as path from '@tauri-apps/api/path';
 import FileProvider from './file/File';
 import Grid from './components/grid/grid';
 import Sidebar from './components/sidebar/Sidebar';
+import Header from './components/header/Header';
 
 const App = () => {
   // useEffect(() => {
@@ -39,7 +40,7 @@ const App = () => {
 
   return (
 
-    <div className="h-screen bg-[#09090b] text-gray-100">
+    <div className="min-h-screen min-w-screen text-zinc-100 ">
       <FileProvider>
         <TerminalProvider>
           <SSHProvider>
@@ -47,11 +48,12 @@ const App = () => {
               <nav className="">
                 <div className="">
                   {/* <h1 className="text-xl font-semibold text-gray-800">Terminal Manager</h1> */}
+                  <Header />
                 </div>
               </nav>
 
-              <main className="">
-                <Sidebar />
+              <main className="flex items-center">
+                {/* <Sidebar /> */}
               </main>
             </div>
           </SSHProvider >
