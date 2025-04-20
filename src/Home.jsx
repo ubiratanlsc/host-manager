@@ -13,16 +13,15 @@ const Home = () => {
         spawnSSH();
         setShowList(true); // Usa setState para causar re-renderização
     }
+    spawnSSH('1');
     useEffect(() => {
         console.log('home', sshs);
         // }, [terminals]);
     }, [sshs]);
     let terminalList = showList ? <TerminalList /> : null;
     return (
-        <div>
-            <h1> Home </h1>
-            <button onClick={handleTerminalSpawn}>Criar Terminal</button>
-            {terminalList}
+        <div className="">
+            <TerminalList />
         </div>
     );
 }

@@ -40,8 +40,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
-        .manage(JexpeState::new())
         .plugin(tauri_plugin_opener::init())
+        .manage(JexpeState::new())
         .invoke_handler(tauri::generate_handler![
             shell::commands::get_system_shells,
             pty::commands::spawn_pty,

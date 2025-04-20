@@ -13,6 +13,7 @@ const SSHProvider = ({ children }) => {
     const term = []
     const [state, setState] = useSetState([])
     let comando = []
+    let i = 0;
     useEffect(() => {
         console.log(sshs.ssh);
 
@@ -23,10 +24,8 @@ const SSHProvider = ({ children }) => {
     }, [open])
 
     const spawnSSH = useCallback((id) => {
-        console.log(id);
-
         invoke(SSH_SPAWN_COMMAND, {
-            windowId: '1',
+            windowId: id,
             host: '192.168.2.164',
             port: 22,
             username: 'root',
@@ -112,6 +111,9 @@ const SSHProvider = ({ children }) => {
                 });
                 // xterm.onData((data) => writeSSH(id, data))
                 xterm.onData((data) => {
+                    const bytes = new TextEncoder().encode(data);
+                    
+                    
                     if (data === '\r') {
                         xterm.writeln(data); // Exibe o que o usuário digitou no terminal
                     } else {
@@ -151,7 +153,7 @@ const SSHProvider = ({ children }) => {
 
             const text = String.fromCharCode(...bytes);
             const fixedData = text.replace(/\r?\n/g, "\r\n");
-            console.log(fixedData);
+            console.log('fixedssss', fixedData);
 
             if (!terminal) {
                 // TODO: Maybe kill pty, just to be on the safe side (?)

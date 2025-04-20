@@ -1,56 +1,50 @@
-import { Connect, Folder, HostIcon, Shell } from "../Icons/Icons";
+import { useContext, useState } from "react";
+import { useGlobalState } from '../../global/SetGlobal';
+import GlobalContext from "../../context/GlobalContext";
 
+const Sidebar = ({ children }) => {
+    const { global, setGlobal } = useContext(GlobalContext);
+    const { getGlobalState } = useGlobalState();
+    let isOpen = getGlobalState("isOpen");
+console.log(children);
 
-
-const Sidebar = () => {
     return (
-        <div className="max-w-60 min-w-60 h-[98vh] ml-2.5 font-bold bg-white/5 backdrop-blur-lg shadow-lg rounded-sm">
-            <h1 className="font-Tim text-neutral-400 text-lg ml-5">Host Manager</h1>
-            {/* <div className="h-52"></div> */}
-            <div className="ml-5">
-                <spam className="font-Tim text-neutral-400 text-xs ">Hosts</spam>
-                <div className="mt-2.5">
-                    <div className="flex items-center gap-x-2.5">
-                        <Folder className="size-4" />
-                        <span className="text-xs">BRB</span>
-                    </div>
-                    <div className="ml-2.5 max-w-64 border-l-[0.01px] border-gray-500">
-                        <div className=" flex justify-between items-center gap-x-1 ml-1.5 mt-1.5">
-                            <div className="flex gap-x-1 items-center">
-                                <Shell className="size-5" />
-                                <span className="text-xs">URA 00</span>
-                            </div>
-                            <Connect />
-                        </div>
-
-                        <div className=" flex justify-between items-center gap-x-1 ml-1.5 mt-1.5">
-                            <div className="flex gap-x-1 items-center">
-                                <Shell className="size-5" />
-                                <span className="text-xs">URA 01</span>
-                            </div>
-                            <Connect status="online" />
-                        </div>
-
-                        <div className=" flex justify-between items-center gap-x-1 ml-1.5 mt-1.5">
-                            <div className="flex gap-x-1 items-center">
-                                <Shell className="size-5" />
-                                <span className="text-xs">URA 02</span>
-                            </div>
-                            <Connect status="online" />
-                        </div>
-
-                        <div className=" flex justify-between items-center gap-x-1 ml-1.5 mt-1.5">
-                            <div className="flex gap-x-1 items-center">
-                                <Shell className="size-5" />
-                                <span className="text-xs">URA 03</span>
-                            </div>
-                            <Connect />
-                        </div>
-                    </div>
+        <div className="flex flex-1 overflow-hidden">
+            <div className={`fixed h-full w-64 overflow-hidden bg-gray-800/7 text-white flex flex-col transition-all duration-300 ease-in-out z-40 ${isOpen ? "left-0" : "-left-64"}`}>
+                <div className="p-5  text-center">
+                    <h3>Menu</h3>
                 </div>
+
+                <div className="flex-1 flex flex-col py-5 overflow-y-auto  justify-between">
+                    <ul className="flex-1  list-none p-0 m-0">
+                        <li className="py-2.5 px-5 hover:bg-gray-700 rounded-sm">
+                            <a href="/" className="text-white no-underline block">Home</a>
+                        </li>
+                        <li className="py-2.5 px-5 hover:bg-gray-700">
+                            <a href="/dashboard" className="text-white no-underline block">Dashboard</a>
+                        </li>
+                        <li className="py-2.5 px-5 hover:bg-gray-700">
+                            <a href="/profile" className="text-white no-underline block">Profile</a>
+                        </li>
+                        <li className="py-2.5 px-5 hover:bg-gray-700">
+                            <a href="/settings" className="text-white no-underline block">Settings</a>
+                        </li>
+                        <li className="py-2.5 px-5 hover:bg-gray-700">
+                            <a href="/help" className="text-white no-underline block">Help</a>
+                        </li>
+                    </ul>
+                    <div className="p-4 text-center text-xs border-t border-gray-700">
+                        <p>© 2025 Host Manager</p>
+                    </div>
+                </div>s
+
+            </div>
+
+            <div className={`flex-1 transition-all duration-300 ease-in-out h-[screen] ${isOpen ? "md:ml-64" : "ml-0"}`}>
+                {children}
             </div>
         </div>
     );
-}
+};
 
 export default Sidebar;

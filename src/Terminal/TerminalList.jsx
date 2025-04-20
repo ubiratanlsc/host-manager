@@ -13,7 +13,6 @@ const TerminalList = () => {
     return (
         <>
             {sshs.ssh.map((terminal) => (
-
                 <SSHComponent key={terminal.id} terminal={terminal} focused={focused === terminal.id} />
             ))}
         </>
