@@ -14,6 +14,10 @@ import Header from './components/header/Header';
 import Titlebar from './titlebar/Titlebar';
 import SSHContext from './context/SSHContext';
 import TerminalList from './Terminal/TerminalList';
+import ComplexNavbar from './components/header/Header';
+import { Dialog, Input } from 'material-v2';
+import { ThemeProvider } from 'material-v2';
+import DialogMessage from './components/Modal/DialogMessage';
 
 const App = () => {
 
@@ -31,24 +35,25 @@ const App = () => {
   }, [sshs]);
   let terminalList = showList ? <TerminalList /> : null;
 
-  return (
 
-    <div className="text-zinc-100 h-screen flex flex-col overflow-hidden">
+  return (
+    // <ThemeProvider>
+    <div className="h-screen flex flex-col overflow-hidden text-gray-100 dark ">
       <GlobalProvider>
         <FileProvider>
           <TerminalProvider>
             <SSHProvider>
-              <main className="">
-                <Titlebar title="Host Manager" />
-                <Sidebar>
-                  <Home />
-                </Sidebar>
-              </main>
+              <div className="flex flex-col">
+                <ComplexNavbar />
+                <Home />
+
+              </div>
             </SSHProvider >
           </TerminalProvider >
         </FileProvider>
       </GlobalProvider>
     </div>
+    // </ThemeProvider>
   );
 };
 

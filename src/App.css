@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 @theme {
   --color-windows-black: #202020;
   --color-windows-component: #2b2b2b;
@@ -9,7 +11,7 @@
   --font-Tim: "Tim Sans";
   
 }
-@extend theme;
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 body {
   height: 100vh;
   background: radial-gradient(ellipse at center, #1e293b, #000000);

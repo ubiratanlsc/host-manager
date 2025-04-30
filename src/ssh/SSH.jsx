@@ -97,23 +97,24 @@ const SSHProvider = ({ children }) => {
                     // TODO: Add possibility to customize theme
                     theme: {
 
-                        background: '#1A1B1E',
+                        // background: 'transparent',
                         cursor: '#10B981',
-                        cursorAccent: '#10B98100'
+                        selectionForeground: 'transparent'
+
                     },
                     fontFamily: 'Cascadia Mono, Consolas, "DejaVu Sans Mono", monospace',
                     fontSize: 14,
                     lineHeight: 1.2,
                     cursorBlink: true,
-                    allowTransparency: true,
+                    allowTransparency: false,
                     allowProposedApi: true,
                     overviewRulerWidth: 8,
                 });
                 // xterm.onData((data) => writeSSH(id, data))
                 xterm.onData((data) => {
                     const bytes = new TextEncoder().encode(data);
-                    
-                    
+
+
                     if (data === '\r') {
                         xterm.writeln(data); // Exibe o que o usuário digitou no terminal
                     } else {
