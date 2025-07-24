@@ -4,11 +4,13 @@ import { Archive, Copy, GridPlus, HeadsetHelp, LogOut, Menu as MenuIcon, Minus, 
 import { useGlobalState } from "../../global/SetGlobal";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { NavArrowRight } from "iconoir-react";
-import DialogMessage from "../Modal/DialogMessage";
+import DialogMessage from "../Modal/DialogConection";
 import { Dialog } from "@material-tailwind/react";
 import { button } from "material-v2";
 import { Terminal } from "../Icons/Icons";
 import { Tags } from "lucide-react";
+import DialogConection from "../Modal/DialogConection";
+import DialogHost from "../Modal/DialogHost";
 
 const LINKS = [
   {
@@ -104,7 +106,16 @@ export default function ComplexNavbar({ Children }) {
   const [openNav, setOpenNav] = React.useState(false);
   const [openMax, setOpenMax] = React.useState(true);
   const { getGlobalState, setGlobalState } = useGlobalState();
-  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [dialogOpen, setDialogOpen] = React.useState({
+    conection: false,
+    host: false,
+  });
+  const handleToggleOpen = (dialog) => {
+    setDialogOpen(prev => ({
+      ...prev,
+      [dialog]: !prev[dialog] // ou !prev.open2 se quiser alternar
+    }));
+  };
 
 
   const appWindow = getCurrentWindow();
@@ -169,13 +180,13 @@ export default function ComplexNavbar({ Children }) {
                       Novo <NavArrowRight className="h-4 w-4 translate-x-1" />
                     </Menu.Trigger>
                     <Menu.Content>
-                      <Menu.Item onClick={() => setDialogOpen(true)}>
+                      <Menu.Item onClick={() => handleToggleOpen('conection')}>
                         <List.ItemStart className="mr-1.5">
                           <TerminalTag className="h-4 w-4" />
                         </List.ItemStart>
                         <Typography type="small">Conexão</Typography>
                       </Menu.Item>
-                      <Menu.Item>
+                      <Menu.Item onClick={() => handleToggleOpen('host')}>
                         <List.ItemStart className="mr-1.5">
                           <Server className="h-4 w-4" />
                         </List.ItemStart>
@@ -248,10 +259,10 @@ export default function ComplexNavbar({ Children }) {
                 </List.Item>
               </Accordion.Trigger>
               <Accordion.Content>
-                <Menu.Item onClick={() => setDialogOpen(true)}>
+                <Menu.Item onClick={() => handleToggleOpen('conection')}>
                   Conexão
                 </Menu.Item>
-                <Menu.Item>Host</Menu.Item>
+                <Menu.Item onClick={() => handleToggleOpen('host')}>Host</Menu.Item>
                 <Menu.Item>Grupo</Menu.Item>
                 <Menu.Item>Tags</Menu.Item>
               </Accordion.Content>
@@ -260,7 +271,8 @@ export default function ComplexNavbar({ Children }) {
           <NavList />
         </Collapse>
       </Navbar>
-      <DialogMessage open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      <DialogConection open={dialogOpen.conection} onClose={() => handleToggleOpen('conection')} />
+      <DialogHost open={dialogOpen.host} onClose={() => handleToggleOpen('host')} />
     </>
   );
 }

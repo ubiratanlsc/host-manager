@@ -8,8 +8,8 @@ import {
 import { Xmark } from "iconoir-react";
 
 
-export default function DialogMessage(props) {
-    console.log("DialogMessage", props);
+export default function DialogConection(props) {
+
 
     return (
         <Dialog size="sm" open={props.open} onOpenChange={(state) => {
@@ -23,7 +23,9 @@ export default function DialogMessage(props) {
                     isCircular
                     color="secondary"
                     className="absolute right-2 top-2"
-                    onClick={props.onClose}
+                    onClick={(state) => {
+                        if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
+                    }}
                 >
                     <Xmark className="h-5 w-5" />
                 </Dialog.DismissTrigger>
@@ -34,6 +36,23 @@ export default function DialogMessage(props) {
                     Digite seu nome de usuário e senha para autenticar via SSH.
                 </Typography>
                 <form action="#" className="mt-6">
+                    <div className="mb-4 mt-2 space-y-1.5">
+                        <Typography
+                            as="label"
+                            htmlFor="username"
+                            type="small"
+                            color="primary"
+                            className="font-semibold"
+                        >
+                            Host
+                        </Typography>
+                        <Input
+                            id="username"
+                            type="text"
+                            placeholder="Username"
+                            isFullWidth
+                        />
+                    </div>
                     <div className="mb-4 mt-2 space-y-1.5">
                         <Typography
                             as="label"
@@ -65,7 +84,9 @@ export default function DialogMessage(props) {
                     </div>
                     <Input id="password" type="password" placeholder="************" />
                     <div className="mt-4 flex justify-end gap-2">
-                        <Dialog.DismissTrigger as={Button} color="secondary " onClick={props.onClose} >
+                        <Dialog.DismissTrigger as={Button} color="secondary " onClick={(state) => {
+                            if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
+                        }} >
                             Cancel
                         </Dialog.DismissTrigger>
                         <Button>Login</Button>

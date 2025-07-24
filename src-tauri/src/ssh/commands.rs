@@ -97,13 +97,13 @@ pub async fn spawn_ssh(
     // Configurar o canal apropriadamente
     let mut term_modes = ssh2::PtyModes::new();
     term_modes.set_u32(ssh2::PtyModeOpcode::ECHO, 0); // Desabilita echo
-    // term_modes.set_u32(ssh2::PtyModeOpcode::ECHOE, 0); // Desabilita erase
-    // term_modes.set_u32(ssh2::PtyModeOpcode::ECHOK, 0); // Desabilita kill
-    // term_modes.set_u32(ssh2::PtyModeOpcode::ECHONL, 0); // Desabilita newline echo
-    // term_modes.set_u32(ssh2::PtyModeOpcode::ECHOCTL, 0); // Desabilita echo de controles
-    // term_modes.set_u32(ssh2::PtyModeOpcode::ICRNL, 1); // Converte CR para NL na entrada
-    // term_modes.set_u32(ssh2::PtyModeOpcode::ONLCR, 1); // Mapeia NL para CR-NL na saída
-    // term_modes.set_u32(ssh2::PtyModeOpcode::OPOST, 1);
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHOE, 0); // Desabilita erase
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHOK, 0); // Desabilita kill
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHONL, 0); // Desabilita newline echo
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHOCTL, 0); // Desabilita echo de controles
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ICRNL, 1); // Converte CR para NL na entrada
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ONLCR, 1); // Mapeia NL para CR-NL na saída
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::OPOST, 1);
 
     channel
         // .request_pty("xterm", None, None)

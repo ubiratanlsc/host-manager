@@ -17,7 +17,7 @@ import TerminalList from './Terminal/TerminalList';
 import ComplexNavbar from './components/header/Header';
 import { Dialog, Input } from 'material-v2';
 import { ThemeProvider } from 'material-v2';
-import DialogMessage from './components/Modal/DialogMessage';
+import DialogMessage from './components/Modal/DialogConection';
 
 const App = () => {
 
@@ -45,7 +45,7 @@ const App = () => {
             <SSHProvider>
               <div className="flex flex-col">
                 <ComplexNavbar />
-                <Home />
+                {/* <Home /> */}
 
               </div>
             </SSHProvider >

@@ -37,7 +37,7 @@ pub fn init_storage() -> Result<FileStorage, StorageError> {
     let app_data_dir = tauri::api::path::app_data_dir(&tauri::Config::default())
         .expect("Falha ao obter diretório de dados da aplicação");
 
-    let data_dir = app_data_dir.join("host-manager");
+    let data_dir = app_data_dir.join("jexpe");
     FileStorage::new(data_dir)
 }
 

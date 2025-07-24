@@ -29,7 +29,7 @@ project/
 The main entry point for the Rust backend that initializes the application state and defines the available Tauri commands.
 
 Key components:
-- `JexpeState`: Main application state struct that holds:
+- `jexpeState`: Main application state struct that holds:
   - `ptys`: A thread-safe HashMap of active PTY processes
   - `ssh_sessions`: A thread-safe HashMap of active SSH sessions
 
