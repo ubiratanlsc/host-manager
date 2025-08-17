@@ -18,9 +18,10 @@ import ComplexNavbar from './components/header/Header';
 import { Dialog, Input } from 'material-v2';
 import { ThemeProvider } from 'material-v2';
 import DialogMessage from './components/Modal/DialogConection';
-
+import useConfigStore from './store/ConfigData';
 const App = () => {
 
+  const { customers, groups, tags, configs} = useConfigStore();
   // const { spawnPty, shells, terminals, focused } = useContext(TerminalContext);
   const { spawnSSH, shells, sshs, focused } = useContext(SSHContext);
   const [showList, setShowList] = useState(false);
@@ -39,6 +40,7 @@ const App = () => {
   return (
     // <ThemeProvider>
     <div className="h-screen flex flex-col overflow-hidden text-gray-100 dark ">
+      {console.log({customers, groups, tags, configs})}
       <GlobalProvider>
         <FileProvider>
           <TerminalProvider>

@@ -46,62 +46,6 @@ function NavList() {
   );
 }
 
-function ProfileMenu() {
-  return (
-    <Menu>
-      <Menu.Trigger
-        as={Avatar}
-        src="https://raw.githubusercontent.com/creativetimofficial/public-assets/master/ct-assets/team-4.jpg"
-        alt="profile-picture"
-        size="sm"
-        className="border border-primary p-0.5 lg:ml-auto"
-      />
-      <Menu.Content>
-        <Menu.Item>
-          <UserCircle className="mr-2 h-[18px] w-[18px]" /> My Profile
-        </Menu.Item>
-        <Menu.Item>
-          <Settings className="mr-2 h-[18px] w-[18px]" /> Edit Profile
-        </Menu.Item>
-        <Menu.Item>
-          <HeadsetHelp className="mr-2 h-[18px] w-[18px]" /> Support
-        </Menu.Item>
-        <hr className="!my-1 -mx-1 border-surface" />
-        <Menu.Item className="text-error hover:bg-error/10 hover:text-error focus:bg-error/10 focus:text-error">
-          <LogOut className="mr-2 h-[18px] w-[18px]" />
-          Logout
-        </Menu.Item>
-      </Menu.Content>
-    </Menu>
-  );
-}
-
-const MenuItem = React.forwardRef(({ title, description, ...rest }, ref) => {
-  return (
-    <Menu.Item ref={ref} {...rest} className="flex-col items-start">
-      <Typography color="default" className="font-semibold">
-        {title}
-      </Typography>
-      <Typography type="small" className="text-foreground">
-        {description}
-      </Typography>
-    </Menu.Item>
-  );
-});
-
-const NavItem = React.forwardRef(({ title, description, ...rest }, ref) => {
-  return (
-    <Menu.Item ref={ref} {...rest} className="flex-col items-start">
-      <Typography color="default" className="font-semibold">
-        {title}
-      </Typography>
-      <Typography type="small" className="text-foreground">
-        {description}
-      </Typography>
-    </Menu.Item>
-  );
-});
-
 export default function ComplexNavbar({ Children }) {
   const [openNav, setOpenNav] = React.useState(false);
   const [openMax, setOpenMax] = React.useState(true);
@@ -113,6 +57,7 @@ export default function ComplexNavbar({ Children }) {
   const handleToggleOpen = (dialog) => {
     setDialogOpen(prev => ({
       ...prev,
+      
       [dialog]: !prev[dialog] // ou !prev.open2 se quiser alternar
     }));
   };

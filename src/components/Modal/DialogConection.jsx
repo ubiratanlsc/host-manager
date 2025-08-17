@@ -6,10 +6,20 @@ import {
     IconButton,
 } from "@material-tailwind/react";
 import { Xmark } from "iconoir-react";
+import { use, useState } from "react";
+import useConfigStore from "../../store/ConfigData";
 
 
 export default function DialogConection(props) {
+    const [host, setHost] = useState("");
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
+    const { customers, addCustomer } = useConfigStore();
 
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        addCustomer(host, username, password);
+    };
 
     return (
         <Dialog size="sm" open={props.open} onOpenChange={(state) => {
@@ -35,11 +45,11 @@ export default function DialogConection(props) {
                 <Typography className="text-foreground">
                     Digite seu nome de usuário e senha para autenticar via SSH.
                 </Typography>
-                <form action="#" className="mt-6">
+                <form action="#" className="mt-6" onSubmit={handleSubmit}>
                     <div className="mb-4 mt-2 space-y-1.5">
                         <Typography
                             as="label"
-                            htmlFor="username"
+                            htmlFor="hostname"
                             type="small"
                             color="primary"
                             className="font-semibold"
@@ -47,10 +57,12 @@ export default function DialogConection(props) {
                             Host
                         </Typography>
                         <Input
-                            id="username"
+                            id="hostname"
                             type="text"
-                            placeholder="Username"
+                            placeholder="Hostname ou IP"
                             isFullWidth
+                            value={host}
+                            onChange={(e) => setHost(e.target.value)}
                         />
                     </div>
                     <div className="mb-4 mt-2 space-y-1.5">
@@ -68,6 +80,8 @@ export default function DialogConection(props) {
                             type="text"
                             placeholder="Username"
                             isFullWidth
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
                         />
                     </div>
                     <div className="w-full space-y-1.5">
@@ -82,14 +96,14 @@ export default function DialogConection(props) {
                         </Typography>
 
                     </div>
-                    <Input id="password" type="password" placeholder="************" />
+                    <Input id="password" type="password" placeholder="************" value={password} onChange={(e) => setPassword(e.target.value)} />
                     <div className="mt-4 flex justify-end gap-2">
                         <Dialog.DismissTrigger as={Button} color="secondary " onClick={(state) => {
                             if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
                         }} >
                             Cancel
                         </Dialog.DismissTrigger>
-                        <Button>Login</Button>
+                        <Button type="submit">Login</Button>
                     </div>
                 </form>
             </Dialog.Content>

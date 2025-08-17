@@ -8,9 +8,28 @@ import {
     Tabs,
 } from "@material-tailwind/react";
 import { Xmark } from "iconoir-react";
-
+import useSaveData from "../../store/SaveData";
+import useConfigStore from "../../store/ConfigData";
+import { v4 as uuidv4 } from 'uuid';
+import { useState } from "react";
 
 export default function DialogHost(props) {
+    const { saveData } = useSaveData();
+    const { addCustomer, tags, customers } = useConfigStore();
+    const [name, setName] = useState("");
+    const [group, setGroup] = useState("");
+    const [host, setHost] = useState("");
+    const [port, setPort] = useState(22);
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
+    const [sshKey, setSshKey] = useState("");
+    const [sshKeyType, setSshKeyType] = useState("password");
+    const [tag, setTag] = useState("");
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        saveData(uuidv4(), name, host, port, username, password, group, tag);
+    };
 
     return (
         <Dialog size="sm" open={props.open} onOpenChange={(state) => {
@@ -36,7 +55,7 @@ export default function DialogHost(props) {
                 <Typography className="text-foreground">
                     Digite seu nome de usuário e senha para autenticar via SSH.
                 </Typography>
-                <form action="#" className="mt-6 flex flex-wrap">
+                <form action="#" className="mt-6 flex flex-wrap" onSubmit={handleSubmit}>
                     <div className="flex w-full gap-4">
                         <div className="mb-2 mt-2 space-y-1.5 flex-1">
                             <Typography
@@ -53,6 +72,8 @@ export default function DialogHost(props) {
                                 type="text"
                                 placeholder="Meu servidor"
                                 isFullWidth
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
                             />
                         </div>
                         <div className="mb-2 mt-2 space-y-1.5 flex-1">
@@ -91,6 +112,8 @@ export default function DialogHost(props) {
                             type="text"
                             placeholder="127.0.0.1"
                             isFullWidth
+                            value={host}
+                            onChange={(e) => setHost(e.target.value)}
                         />
                     </div>
                     <div className="flex w-full gap-3">
@@ -106,7 +129,8 @@ export default function DialogHost(props) {
                                 Porta
                             </Typography>
 
-                            <Input id="port" type="number" placeholder="22" />
+                            <Input id="port" type="number" placeholder="22" value={port}
+                                onChange={(e) => setPort(e.target.value)} />
                         </div>
                         <div className="mb-2 mt-2 space-y-1.5 flex-1">
                             <Typography
@@ -123,6 +147,8 @@ export default function DialogHost(props) {
                                 type="text"
                                 placeholder="Admin"
                                 isFullWidth
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
                             />
                         </div>
 
@@ -150,7 +176,10 @@ export default function DialogHost(props) {
                                         Senha
                                     </Typography>
 
-                                    <Input id="password" type="password" placeholder="************" />
+                                    <Input id="password" type="password" placeholder="************"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                    />
                                 </div>
                             </Tabs.Panel>
                             <Tabs.Panel value="chave">
@@ -166,7 +195,7 @@ export default function DialogHost(props) {
                         }} >
                             Cancel
                         </Dialog.DismissTrigger> */}
-                        <Button variant="solid" color="info">Salvar</Button>
+                        <Button variant="solid" color="info" type="submit">Salvar</Button>
                     </div>
                 </form>
             </Dialog.Content>

@@ -8,10 +8,13 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "fs:scope",
     "fs:allow-app-write",
     "fs:allow-exists",
     "fs:write-all",
     "fs:allow-read",
+    "fs:allow-read-dir",
+    "fs:allow-app-read-recursive",
     "fs:allow-write",
     "fs:write-files",
     "fs:allow-app-write-recursive",
@@ -25,13 +28,36 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
     {
-      "identifier": "fs:allow-exists",
+      "identifier": "fs:allow-app-write-recursive",
       "allow": [
         {
           "path": "$APPDATA/*"
         },
         {
           "path": "$DESKTOP/*"
+        },
+        {
+          "path": "$DOCUMENTS/*"
+        },
+        {
+          "path": "$DOWNLOADS/*"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-app-read-recursive",
+      "allow": [
+        {
+          "path": "$APPDATA/*"
+        },
+        {
+          "path": "$DESKTOP/*"
+        },
+        {
+          "path": "$DOCUMENTS/*"
+        },
+        {
+          "path": "$DOWNLOADS/*"
         }
       ]
     }
