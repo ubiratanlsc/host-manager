@@ -11,6 +11,7 @@ import { Terminal } from "../Icons/Icons";
 import { Tags } from "lucide-react";
 import DialogConection from "../Modal/DialogConection";
 import DialogHost from "../Modal/DialogHost";
+import DialogGroup from "../Modal/DialogGroup";
 
 const LINKS = [
   {
@@ -57,7 +58,7 @@ export default function ComplexNavbar({ Children }) {
   const handleToggleOpen = (dialog) => {
     setDialogOpen(prev => ({
       ...prev,
-      
+
       [dialog]: !prev[dialog] // ou !prev.open2 se quiser alternar
     }));
   };
@@ -137,13 +138,13 @@ export default function ComplexNavbar({ Children }) {
                         </List.ItemStart>
                         <Typography type="small">Host</Typography>
                       </Menu.Item>
-                      <Menu.Item>
+                      <Menu.Item onClick={() => handleToggleOpen('group')}>
                         <List.ItemStart className="mr-1.5">
                           <GridPlus className="h-4 w-4" />
                         </List.ItemStart>
                         <Typography type="small">Grupo</Typography>
                       </Menu.Item>
-                      <Menu.Item>
+                      <Menu.Item onClick={() => handleToggleOpen('tag')}>
                         <List.ItemStart className="mr-1.5">
                           <Tags className="h-5 w-4" />
                         </List.ItemStart>
@@ -218,6 +219,8 @@ export default function ComplexNavbar({ Children }) {
       </Navbar>
       <DialogConection open={dialogOpen.conection} onClose={() => handleToggleOpen('conection')} />
       <DialogHost open={dialogOpen.host} onClose={() => handleToggleOpen('host')} />
+      <DialogGroup open={dialogOpen.group} onClose={() => handleToggleOpen('group')} />
+      <DialogHost open={dialogOpen.host} onClose={() => handleToggleOpen('tag')} />
     </>
   );
 }

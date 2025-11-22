@@ -18,19 +18,21 @@ const FileProvider = ({ children }) => {
             // Verifica se o arquivo de configuração já existe
 
             const tokenExists = await exists('config.json', {
-                baseDir: BaseDirectory.AppData,
+                baseDir: BaseDirectory.Resource,
             });
             initLoadData();
             if (!tokenExists) {
                 const dir = await readDir('', {
-                    baseDir: BaseDirectory.AppData,
+                    baseDir: BaseDirectory.Resource,
                 });
+                console.log(dir);
+                
                 if(!dir) {
                     await mkdir('', {
-                        baseDir: BaseDirectory.AppData,
+                        baseDir: BaseDirectory.Resource,
                     });
                 }
-                const file = await create('config.json', { baseDir: BaseDirectory.AppData });
+                const file = await create('config.json', { baseDir: BaseDirectory.Resource });
                 await file.write(new TextEncoder().encode('{customers: [], groups: [], tags: [], configs: {theme: "dark", font: "Roboto"}}'));
                 await file.close();
             } else {

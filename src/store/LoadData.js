@@ -1,4 +1,4 @@
-import { writeFile, BaseDirectory, readFile } from '@tauri-apps/plugin-fs';
+import { writeFile, BaseDirectory, readFile, readDir } from '@tauri-apps/plugin-fs';
 import { create } from "zustand";
 import useConfigStore from './ConfigData';
 
@@ -7,6 +7,9 @@ const useLoadData = create((set) => ({
         const file = await readFile('config.json', {
             baseDir: BaseDirectory.AppConfig,
         });
+        let diretorio = await readDir('', {baseDir: BaseDirectory.AppConfig})
+        console.log(diretorio);
+        
         const contents = new TextDecoder().decode(file);
 
         console.log('Loading data:',  JSON.parse(contents));
