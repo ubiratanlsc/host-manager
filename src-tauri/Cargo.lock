@@ -1674,6 +1674,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "host-manager"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "base64 0.21.7",
+ "cuid",
+ "cuid2",
+ "once_cell",
+ "phf 0.11.2",
+ "portable-pty",
+ "rand 0.8.5",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "ssh2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-fs",
+ "tauri-plugin-opener",
+ "tauri-utils 1.6.2",
+ "thiserror 1.0.69",
+ "tokio",
+ "uuid",
+ "winreg 0.10.1",
+]
+
+[[package]]
 name = "hostname"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2070,33 +2097,6 @@ dependencies = [
  "gobject-sys",
  "libc",
  "system-deps",
-]
-
-[[package]]
-name = "jext"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "base64 0.21.7",
- "cuid",
- "cuid2",
- "once_cell",
- "phf 0.11.2",
- "portable-pty",
- "rand 0.8.5",
- "rusqlite",
- "serde",
- "serde_json",
- "ssh2",
- "tauri",
- "tauri-build",
- "tauri-plugin-fs",
- "tauri-plugin-opener",
- "tauri-utils 1.6.2",
- "thiserror 1.0.69",
- "tokio",
- "uuid",
- "winreg 0.10.1",
 ]
 
 [[package]]

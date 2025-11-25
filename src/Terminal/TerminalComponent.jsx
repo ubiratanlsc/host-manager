@@ -1,130 +1,112 @@
-import { useContext, useEffect, useRef, useState } from 'react'
-import { FitAddon } from 'xterm-addon-fit'
-import { useSize } from 'ahooks'
-import { Unicode11Addon } from 'xterm-addon-unicode11'
-import { CanvasAddon } from '@xterm/addon-unicode11'
-// import { WebglAddon } from '@xterm/addon-webgl'
-// import { LigaturesAddon } from 'xterm-addon-ligatures'
-import { LigaturesAddon } from '@xterm/addon-ligatures'
-// import { ImageAddon } from 'xterm-addon-image'
-// import { WebLinksAddon } from '@xterm/addon-web-links'
-import { WebglAddon } from 'xterm-addon-webgl'  // caminho correto
-import { WebLinksAddon } from 'xterm-addon-web-links'  // caminho correto
-// import { CanvasAddon } from 'xterm-addon-canvas'  // caminho correto
-import TerminalContext from '../context/TerminalContext'
-import { SearchAddon } from 'xterm-addon-search'
-const TerminalComponent = ({ terminal, focused }) => {
+import { useEffect, useRef } from 'react';
+import { FitAddon } from '@xterm/addon-fit';
+import { useSize } from 'ahooks';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import useTerminalStore from '../stores/useTerminalStore';
 
+/**
+ * TerminalComponent - Renderiza um terminal individual usando xterm.js
+ * Agora usa Zustand store ao invés de Context API
+ */
+const TerminalComponent = ({ terminalId }) => {
+    const target = useRef(null);
+    const targetSize = useSize(target);
 
-    const target = useRef(null)
-    const targetSize = useSize(target)
-    const { open } = useContext(TerminalContext);
-    const resize = new FitAddon()
-    // const render = new WebglAddon() // TODO: user.config.renderMode === 'CANVAS' ? new CanvasAddon() : new WebglAddon(),
-    //const render = new CanvasAddon(), // TODO: user.config.renderMode === 'CANVAS' ? new CanvasAddon() : new WebglAddon(),
-    const webLinks = new WebLinksAddon()
-    const unicode11 = new Unicode11Addon()
-    const ligaturesAddon = new LigaturesAddon()
-    const search = new SearchAddon({
-        highlightLimit: 500
-    })
+    // Buscar terminal da store usando selector otimizado
+    const terminal = useTerminalStore((state) => state.getTerminal(terminalId));
+    const focusedTerminal = useTerminalStore((state) => state.focusedTerminal);
+
+    const isFocused = focusedTerminal === terminalId;
+
+    // Addons do xterm
+    const resize = new FitAddon();
+    const webLinks = new WebLinksAddon();
+
+    /**
+     * Debounce utility para evitar chamadas excessivas de resize
+     */
     function debounce(func, wait) {
         let timeout;
-
         return function executedFunction(...args) {
             const later = () => {
                 clearTimeout(timeout);
                 func(...args);
             };
-
             clearTimeout(timeout);
             timeout = setTimeout(later, wait);
         };
     }
+
+    /**
+     * Resize com debounce
+     */
     const debouncedFit = debounce(() => {
-        // resize.fit();
-        let proposedDimensions = resize.proposeDimensions();
-        terminal.xterm.resize(proposedDimensions.cols + 1, proposedDimensions.rows + 1);
+        if (terminal?.xterm && resize) {
+            let proposedDimensions = resize.proposeDimensions();
+            if (proposedDimensions) {
+                terminal.xterm.resize(
+                    proposedDimensions.cols + 1,
+                    proposedDimensions.rows + 1
+                );
+            }
+        }
     }, 100);
 
+    /**
+     * Controlar foco do terminal
+     */
     useEffect(() => {
-        terminal.xterm.focus()
-        return () => terminal.xterm.blur()
-    }, [focused])
+        if (!terminal?.xterm) return;
 
-    useEffect(() => {
-        if (!target.current) {
-            return
+        if (isFocused) {
+            terminal.xterm.focus();
+        } else {
+            terminal.xterm.blur();
         }
 
-        terminal.xterm.loadAddon(resize)
-        // terminal.xterm.loadAddon(render)
-        terminal.xterm.loadAddon(webLinks)
-        // terminal.xterm.loadAddon(unicode11)
-        // Open terminal in target element
-        // const fitAddons = new FitAddon();
-        // open.forEach(element => {
-        // if (terminal.id == element.id) {
-        terminal.xterm.open(target.current)
-        //     }
-        // });
-        terminal.xterm.focus()
-        // terminal.xterm.loadAddon(ligaturesAddon)
-        terminal.xterm.loadAddon(search)
-        // ligaturesAddon.activate(terminal.xterm)
+        return () => terminal.xterm.blur();
+    }, [isFocused, terminal]);
 
+    /**
+     * Inicializar terminal e addons
+     */
+    useEffect(() => {
+        if (!target.current || !terminal?.xterm) {
+            return;
+        }
+
+        const xterm = terminal.xterm;
+
+        // Carregar addons
+        xterm.loadAddon(resize);
+        xterm.loadAddon(webLinks);
+
+        // Abrir terminal no elemento DOM
+        xterm.open(target.current);
+        xterm.focus();
+
+        // Event listener para resize da janela
         window.addEventListener('resize', debouncedFit);
-        // Extra configurations for xtermjs addons
-        // terminal.xterm.unicode.activeVersion = '11'
 
-        if (terminal.xterm.unicode) {
-            // terminal.xterm.unicode.activeVersion = '11'
-        }
-
-
-        const searchWithDecorations = (term) => {
-            const options = {
-                regex: false,
-                wholeWord: true,
-                caseSensitive: false,
-                incremental: true,
-                decorations: {
-                    matchBackground: '#555555',
-                    matchBorder: '#ffffff',
-                    matchOverviewRuler: '#ffffff',
-                    activeMatchBackground: '#ff0000',
-                    activeMatchBorder: '#ffffff',
-                    activeMatchColorOverviewRuler: '#ff0000'
-                }
-            };
-
-            search.findNext(term, options);
-        };
-
-        search.onDidChangeResults(({ resultIndex, resultCount }) => {
-            if (resultIndex === -1) {
-                console.log('Limite de matches excedido');
-            } else {
-                console.log(`Resultado ${resultIndex + 1} de ${resultCount}`);
-            }
-        });
-
-        searchWithDecorations('');
-
+        // Cleanup
         return () => {
+            window.removeEventListener('resize', debouncedFit);
             resize.dispose();
-            // terminal.xterm.fitAddon
-            // render.dispose();
             webLinks.dispose();
-            // unicode11.dispose();
-            ligaturesAddon.dispose();
-            search.dispose();
-            // terminal.xterm.ligaturesAddon.dispose()
-        }
-    }, [])
+        };
+    }, [terminal]);
 
+    // Se terminal não existe, não renderizar nada
+    if (!terminal) {
+        return null;
+    }
 
-    return <div ref={target} className="overflow-y-hidden overflow-x-hidden text-3xl font-bold underline w-full h-[100vh]" />
-}
+    return (
+        <div
+            ref={target}
+            className="overflow-y-hidden overflow-x-hidden w-full h-[100vh]"
+        />
+    );
+};
 
-export default TerminalComponent
+export default TerminalComponent;

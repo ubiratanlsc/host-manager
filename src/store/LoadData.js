@@ -5,21 +5,22 @@ import useConfigStore from './ConfigData';
 const useLoadData = create((set) => ({
     loadData: async () => {
         const file = await readFile('config.json', {
-            baseDir: BaseDirectory.AppConfig,
+            baseDir: BaseDirectory.Resource,
         });
-        let diretorio = await readDir('', {baseDir: BaseDirectory.AppConfig})
-        console.log(diretorio);
-        
-        const contents = new TextDecoder().decode(file);
+        let diretorio = await readDir('', { baseDir: BaseDirectory.Resource })
 
-        console.log('Loading data:',  JSON.parse(contents));
+        const contents = new TextDecoder().decode(file);
 
         const { addCustomer, addGroup, addTag, addConfig } = useConfigStore.getState();
         JSON.parse(contents).customers?.forEach(
             ({ id, name, host, port, username, password, groups, tagId }) => addCustomer(id, name, host, port, username, password, groups[0], tagId)
         );
-        JSON.parse(contents).groups?.forEach(addGroup);
-        JSON.parse(contents).tags?.forEach(addTag);
+        JSON.parse(contents).groups?.forEach(
+            ({ id, name, username, password }) => addGroup(id, name, username, password)
+        );
+        JSON.parse(contents).tags?.forEach(
+            ({ id, name, description, color }) => addTag(id, name, description, color)
+        );
         Object.entries(JSON.parse(contents).configs)?.forEach(([key, value]) => addConfig(key, value));
         // JSON.parse(contents).configs?.forEach(([key, value]) => addConfig(key, value));
     },

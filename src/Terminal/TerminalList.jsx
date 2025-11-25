@@ -1,30 +1,43 @@
-import { useContext } from "react";
-import TerminalComponent from "./TerminalComponent"
-import TerminalContext from "../context/TerminalContext";
-import SSHContext from "../context/SSHContext";
+import { useMemo } from "react";
+import TerminalComponent from "./TerminalComponent";
 import SSHComponent from "../ssh/SSHComponent";
+import useTerminalStore from "../stores/useTerminalStore";
+import useSSHStore from "../stores/useSSHStore";
 
-
+/**
+ * TerminalList - Lista todos os terminais e sessões SSH ativas
+ * Agora usa Zustand stores ao invés de Context API
+ */
 const TerminalList = () => {
-    // const { terminals, focused } = useContext(TerminalContext)
-    const { sshs, focused } = useContext(SSHContext)
-    console.log('ssh list', sshs);
+    // Buscar Maps diretamente (referências estáveis)
+    const terminalsMap = useTerminalStore((state) => state.terminals);
+    const sessionsMap = useSSHStore((state) => state.sessions);
+
+    // Converter Maps para arrays usando useMemo (evita loop infinito)
+    const terminals = useMemo(() => Array.from(terminalsMap.values()), [terminalsMap]);
+    const sessions = useMemo(() => Array.from(sessionsMap.values()), [sessionsMap]);
+
+    console.log('[TerminalList] Terminals:', terminals.length, 'Sessions:', sessions.length);
 
     return (
         <>
-            {sshs.ssh.map((terminal) => (
-                <SSHComponent key={terminal.id} terminal={terminal} focused={focused === terminal.id} />
+            {/* Renderizar terminais PTY locais */}
+            {terminals.map((terminal) => (
+                <TerminalComponent
+                    key={terminal.id}
+                    terminalId={terminal.id}
+                />
+            ))}
+
+            {/* Renderizar sessões SSH */}
+            {sessions.map((session) => (
+                <SSHComponent
+                    key={session.id}
+                    sessionId={session.id}
+                />
             ))}
         </>
-    )
-    // return (
-    //     <>
-    //         {terminals.terminais.map((terminal) => (
+    );
+};
 
-    //             <TerminalComponent key={terminal.id} terminal={terminal} focused={focused === terminal.id} />
-    //         ))}
-    //     </>
-    // )
-}
-
-export default TerminalList
+export default TerminalList;

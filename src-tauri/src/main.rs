@@ -36,5 +36,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    jext_lib::run()
+    host_manager_lib::run()
 }

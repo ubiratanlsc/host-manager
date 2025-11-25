@@ -1,7 +1,9 @@
 {
-  "name": "jext",
+  "name": "host-manager",
   "private": true,
   "version": "0.1.0",
+  "description": "Cross-platform host manager with embedded terminal",
+  "author": "ubiratanlsc",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -24,22 +26,11 @@
     "@xterm/xterm": "^5.5.0",
     "ahooks": "^3.8.4",
     "iconoir-react": "^7.11.0",
-    "install": "^0.13.0",
-    "keep-react": "^1.6.1",
     "lucide-react": "^0.468.0",
-    "material-v2": "npm:@material-tailwind/react@^2.1.9",
-    "npm": "^11.0.0",
     "phosphor-react": "^1.4.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "uuid": "^11.1.0",
-    "xterm": "^5.3.0",
-    "xterm-addon-fit": "^0.8.0",
-    "xterm-addon-ligatures": "^0.7.0",
-    "xterm-addon-search": "^0.13.0",
-    "xterm-addon-unicode11": "^0.6.0",
-    "xterm-addon-web-links": "^0.9.0",
-    "xterm-addon-webgl": "^0.16.0",
     "zustand": "^5.0.6"
   },
   "devDependencies": {

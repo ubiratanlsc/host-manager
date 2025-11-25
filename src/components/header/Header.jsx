@@ -1,17 +1,16 @@
 import * as React from "react";
 import { IconButton, Typography, Collapse, Navbar, Card, List, Avatar, Menu, Tooltip, Accordion, ButtonGroup, Button } from "@material-tailwind/react";
 import { Archive, Copy, GridPlus, HeadsetHelp, LogOut, Menu as MenuIcon, Minus, MultiplePages, NavArrowDown, ProfileCircle, Rocket, SelectFace3d, Server, Settings, Square, TerminalTag, UserCircle, Xmark, } from "iconoir-react";
-import { useGlobalState } from "../../global/SetGlobal";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { NavArrowRight } from "iconoir-react";
 import DialogMessage from "../Modal/DialogConection";
 import { Dialog } from "@material-tailwind/react";
-import { button } from "material-v2";
 import { Terminal } from "../Icons/Icons";
 import { Tags } from "lucide-react";
 import DialogConection from "../Modal/DialogConection";
 import DialogHost from "../Modal/DialogHost";
 import DialogGroup from "../Modal/DialogGroup";
+import DialogConections from "../Modal/DialogConections";
 
 const LINKS = [
   {
@@ -50,7 +49,6 @@ function NavList() {
 export default function ComplexNavbar({ Children }) {
   const [openNav, setOpenNav] = React.useState(false);
   const [openMax, setOpenMax] = React.useState(true);
-  const { getGlobalState, setGlobalState } = useGlobalState();
   const [dialogOpen, setDialogOpen] = React.useState({
     conection: false,
     host: false,
@@ -152,6 +150,7 @@ export default function ComplexNavbar({ Children }) {
                       </Menu.Item>
                     </Menu.Content>
                   </Menu>
+                  <Menu.Item>Hosts</Menu.Item>
                   <Menu.Item>Grupos</Menu.Item>
                   <Menu.Item>Tags</Menu.Item>
                 </Menu.Content>
@@ -217,6 +216,7 @@ export default function ComplexNavbar({ Children }) {
           <NavList />
         </Collapse>
       </Navbar>
+      <DialogConections open={dialogOpen.conection} onClose={() => handleToggleOpen('conections')} />
       <DialogConection open={dialogOpen.conection} onClose={() => handleToggleOpen('conection')} />
       <DialogHost open={dialogOpen.host} onClose={() => handleToggleOpen('host')} />
       <DialogGroup open={dialogOpen.group} onClose={() => handleToggleOpen('group')} />

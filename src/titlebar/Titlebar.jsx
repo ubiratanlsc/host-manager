@@ -1,19 +1,15 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import GlobalContext from '../context/GlobalContext';
-import { useContext, useEffect } from 'react';
-import { useGlobalState } from '../global/SetGlobal';
+import useAppStore from '../stores/useAppStore';
 
 const Titlebar = ({ title = 'Host Manager', children }) => {
-    const { getGlobalState, setGlobalState } = useGlobalState();
-
-    let current = getGlobalState("isOpen");
+    const sidebarOpen = useAppStore((state) => state.sidebarOpen);
+    const toggleSidebar = useAppStore((state) => state.toggleSidebar);
 
     const appWindow = getCurrentWindow();
 
     const toggle = () => {
-        console.log("Toggle sidebar", current);
-
-        setGlobalState("isOpen", !current);
+        console.log("Toggle sidebar", sidebarOpen);
+        toggleSidebar();
     };
 
     const minimizeWindow = async () => {
@@ -35,7 +31,7 @@ const Titlebar = ({ title = 'Host Manager', children }) => {
                     className="flex ml-2 items-start justify-center w-8 h-8 text-xl text-white bg-gray-800 rounded cursor-pointer z-10 [app-region:no-drag] [-webkit-app-region:no-drag]"
                     onClick={toggle}
                 >
-                    {current ? "×" : "☰"}
+                    {sidebarOpen ? "×" : "☰"}
                 </button>
                 <div className="w-full flex justify-between items-center px-2">
                     <div className="flex items-center [app-region:drag] [-webkit-app-region:drag]">
