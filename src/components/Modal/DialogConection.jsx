@@ -7,7 +7,7 @@ import {
 } from "@material-tailwind/react";
 import { Xmark } from "iconoir-react";
 import { use, useState } from "react";
-import useConfigStore from "../../store/ConfigData";
+import useConfigStore from "../../stores/ConfigData";
 
 
 export default function DialogConection(props) {

@@ -8,8 +8,8 @@ import {
     Tabs,
 } from "@material-tailwind/react";
 import { Xmark } from "iconoir-react";
-import useSaveData from "../../store/SaveData";
-import useConfigStore from "../../store/ConfigData";
+import useSaveData from "../../stores/SaveData";
+import useConfigStore from "../../stores/ConfigData";
 import { v4 as uuidv4 } from 'uuid';
 import { useState } from "react";
 

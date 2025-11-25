@@ -6,7 +6,7 @@ import useSSHStore from './stores/useSSHStore';
 import useAppStore from './stores/useAppStore';
 import DialogConections from './components/Modal/DialogConections';
 import HostCard from './components/HostsCards/Hostscard';
-import useLoadData from './store/LoadData';
+import useLoadData from './stores/LoadData';
 
 const App = () => {
   // Inicializar stores
