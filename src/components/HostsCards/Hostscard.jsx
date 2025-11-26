@@ -30,7 +30,7 @@ const HostCard = ({ host, onEdit, onConnect }) => {
 
     return (
         <>
-            <div className="group flex-grow  relative overflow-hidden rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:shadow-lg hover:-translate-y-1">
+            <div className="group relative overflow-hidden rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:shadow-lg hover:-translate-y-1">
                 {/* Status Bar */}
                 <div className={`absolute top-0 left-0 w-1 h-full ${statusColor}`} />
 
@@ -54,11 +54,11 @@ const HostCard = ({ host, onEdit, onConnect }) => {
                     <div className="flex gap-2 text-sm text-slate-600 dark:text-slate-400 mb-6 ml-2">
                         <div className="flex items-center space-x-2">
                             <Globe size={14} className="text-slate-400 dark:text-slate-500" />
-                            <span className="font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300">{host.ip}</span>
+                            <span className=" bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300">{host.ip}</span>
                         </div>
                         <div className="flex items-center space-x-2">
-                            <div className="text-slate-400 dark:text-slate-500 font-mono text-[10px] border border-slate-300 dark:border-slate-700 rounded px-1">PORT</div>
-                            <span className="font-mono text-slate-700 dark:text-slate-300">{host.port}</span>
+                            <div className="text-slate-400 dark:text-slate-500 text-[10px] border border-slate-300 dark:border-slate-700 rounded px-1">PORT</div>
+                            <span className=" text-slate-700 dark:text-slate-300">{host.port}</span>
                         </div>
                     </div>
 

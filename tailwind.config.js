@@ -1,31 +1,27 @@
 import { mtConfig } from "@material-tailwind/react";
+
 module.exports = {
     content: ["./index.html",
         "./src/**/*.{js,ts,jsx,tsx}",
         "./node_modules/@material-tailwind/react/**/*.{js,ts,jsx,tsx}"
 
     ],
-    // theme: {
-    //     extend: {
-
-    //         colors: {
-    //             primary: "#9CA3AF",
-    //             secondary: "#64748B",
-    //             accent: "#FBBF24",
-    //             neutral: "#374151",
-    //             "base-100": "#FFFFFF",
-    //             info: "#3ABFF8",
-    //             success: "#36D399",
-    //             warning: "#FBBD23",
-    //             error: "#F87272",
-    //         },
-    //         fontFamily: {
-    //             // sans: ["Inter", "sans-serif"],
-    //         },
-    //     },
-    // },
+    theme: {
+        extend: {
+            fontFamily: {
+                // CORREÇÃO: Movido para dentro da chave fontFamily
+                sans: ['Tim Sans', 'JetBrainsMono Nerd Font', 'sans-serif', "IBM Plex Sans", "Inter"],
+                mono: ['JetBrainsMono Nerd Font', 'monospace'],
+                system: ['Tim Sans', 'JetBrainsMono Nerd Font', 'sans-serif', 'Inter', "IBM Plex Sans"],
+            },
+        },
+    },
     darkMode: "class",
     plugins: [mtConfig({
+        fontFamily: {
+            sans: ['Tim Sans', 'JetBrainsMono Nerd Font', 'sans-serif', "IBM Plex Sans"],
+            body: ['Tim Sans', 'JetBrainsMono Nerd Font', 'sans-serif', "IBM Plex Sans"],
+        },
         colors: {
             black: "#030712",
             inherit: "#9CA3AF",

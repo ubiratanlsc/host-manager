@@ -45,7 +45,7 @@ const App = () => {
   }, []);
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden text-gray-100 dark">
+    <div className="h-screen flex flex-col overflow-hidden text-gray-100 dark font-[IBM Plex Sans]">
       <ComplexNavbar />
       <DialogConections />
       {/* <Home /> */}

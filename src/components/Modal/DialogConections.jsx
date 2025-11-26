@@ -10,19 +10,29 @@ import { NavArrowDown, Xmark } from "iconoir-react";
 import { use, useEffect, useState } from "react";
 import useConfigStore from "../../stores/ConfigData";
 import HostCard from "../HostsCards/Hostscard";
-
-
+import { Tabs } from "@material-tailwind/react";
+import { Spinner } from "@material-tailwind/react";
 export default function DialogConections(props) {
     let aberto = true
     const [host, setHost] = useState("");
+    const [defaultTab, setDefaultTab] = useState(null);
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const { customers, groups, addCustomer } = useConfigStore();
-
+    useEffect(() => {
+        if (groups.length > 0) {
+            setDefaultTab(groups[0].id)
+        }
+    }, [groups])
     const handleSubmit = (e) => {
         e.preventDefault();
         addCustomer(host, username, password);
     };
+
+    if (defaultTab === null) {
+        // enquanto não carrega, evita erro e pode mostrar loading
+        return <Spinner color="info" />
+    }
 
     return (
         <Dialog size="xl" className="" open={aberto} onOpenChange={(state) => {
@@ -42,45 +52,48 @@ export default function DialogConections(props) {
                 >
                     <Xmark className="h-5 w-5" />
                 </Dialog.DismissTrigger>
-                <Typography type="h-6" className="mb-1" color="primary">
-                    Hosts
-                </Typography>
-                <Typography className="text-foreground">
+                <Tabs defaultValue={defaultTab} orientation="vertical">
+                    <Tabs.List>
+                        {groups.map(({ id, name }) => (
+                            <Tabs.Trigger key={name} value={name}>
+                                {name}
+                            </Tabs.Trigger>
+                        ))}
+                        <Tabs.TriggerIndicator />
+                    </Tabs.List>
+                    {groups.map(({ id, name }) => {
+                        const filteredCustomers = customers.filter(customer => customer.groups.includes(id));
 
-                </Typography>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-1 md:grid-cols-1">
-                    {console.log('Groups data:') || groups.map(({ id, name }, index) => (
-                        <Accordion type="single" key={index} defaultValue={[id]}>
-                            <Accordion.Item value="react">
-                                <Accordion.Trigger>
-                                    {name}
-                                    <NavArrowDown className="h-4 w-4 group-data-[open=true]:rotate-180" />
-                                </Accordion.Trigger>
-                                <Accordion.Content className="flex gap-2 flex-wrap">
-                                    {customers
-                                        .filter(customer => customer.groups.includes(id))
-                                        .map(customer => {
-                                            console.log('teste', customer.host); // For debugging
-                                            return (
-                                                <HostCard
-                                                    key={customer.id}
-                                                    host={{
-                                                        status: 'online',
-                                                        hostname: customer.name,
-                                                        group: name,
-                                                        ip: customer.host,
-                                                        port: customer.port
-                                                    }}
-                                                />
-                                            );
-                                        })
-                                    }
-                                </Accordion.Content>
-                            </Accordion.Item>
-                        </Accordion>
-                    ))}
-                </div>
+                        return (
+                            <Tabs.Panel key={name} value={name} className="flex gap-4">
+                                {filteredCustomers.length > 0 ? (
+                                    filteredCustomers.map(customer => (
+                                        <HostCard
+                                            key={customer.id}
+                                            host={{
+                                                status: 'online',
+                                                hostname: customer.name,
+                                                group: name,
+                                                ip: customer.host,
+                                                port: customer.port
+                                            }}
+                                        />
+                                    ))
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center p-8 text-center">
+                                        <Typography variant="h6" color="gray" className="mb-2">
+                                            Nenhum host encontrado
+                                        </Typography>
+                                        <Typography variant="small" color="gray">
+                                            Não há hosts neste grupo ainda.
+                                        </Typography>
+                                    </div>
+                                )}
+                            </Tabs.Panel>
+                        );
+                    })}
+                </Tabs>
             </Dialog.Content>
-        </Dialog>
+        </Dialog >
     );
 }
