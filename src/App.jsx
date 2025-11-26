@@ -3,10 +3,13 @@ import ComplexNavbar from './components/header/Header';
 import Home from './Home';
 import useTerminalStore from './stores/useTerminalStore';
 import useSSHStore from './stores/useSSHStore';
-import useAppStore from './stores/useAppStore';
 import DialogConections from './components/Modal/DialogConections';
-import HostCard from './components/HostsCards/Hostscard';
 import useLoadData from './stores/LoadData';
+import DialogHost from './components/Modal/DialogHost';
+import useModalStore from './stores/useModalStore';
+import DialogConection from './components/Modal/DialogConection';
+import DialogGroup from './components/Modal/DialogGroup';
+
 
 const App = () => {
   // Inicializar stores
@@ -16,7 +19,7 @@ const App = () => {
   const cleanupTerminal = useTerminalStore((state) => state.cleanup);
   const cleanupSSH = useSSHStore((state) => state.cleanup);
   const initLoadData = useLoadData(state => state.initLoadData);
-
+  const { modals, openModal, closeModal } = useModalStore();
 
   useEffect(() => {
     // Inicializar listeners e carregar configurações
@@ -46,8 +49,13 @@ const App = () => {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden text-gray-100 dark font-[IBM Plex Sans]">
+      <DialogHost />
       <ComplexNavbar />
-      <DialogConections />
+      <DialogConections onClose={() => closeModal('connections')} />
+      <DialogConection onClose={() => closeModal('conection')} />
+      <DialogHost onClose={() => closeModal('host')} />
+      <DialogGroup onClose={() => closeModal('group')} />
+      <DialogHost onClose={() => closeModal('tag')} />
       {/* <Home /> */}
     </div>
   );

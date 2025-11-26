@@ -7,10 +7,8 @@ import DialogMessage from "../Modal/DialogConection";
 import { Dialog } from "@material-tailwind/react";
 import { Terminal } from "../Icons/Icons";
 import { Tags } from "lucide-react";
-import DialogConection from "../Modal/DialogConection";
-import DialogHost from "../Modal/DialogHost";
-import DialogGroup from "../Modal/DialogGroup";
-import DialogConections from "../Modal/DialogConections";
+import useModalStore from "../../stores/useModalStore";
+
 
 const LINKS = [
   {
@@ -49,17 +47,7 @@ function NavList() {
 export default function ComplexNavbar({ Children }) {
   const [openNav, setOpenNav] = React.useState(false);
   const [openMax, setOpenMax] = React.useState(true);
-  const [dialogOpen, setDialogOpen] = React.useState({
-    conection: false,
-    host: false,
-  });
-  const handleToggleOpen = (dialog) => {
-    setDialogOpen(prev => ({
-      ...prev,
-
-      [dialog]: !prev[dialog] // ou !prev.open2 se quiser alternar
-    }));
-  };
+  const { openModal } = useModalStore();
 
 
   const appWindow = getCurrentWindow();
@@ -124,25 +112,25 @@ export default function ComplexNavbar({ Children }) {
                       Novo <NavArrowRight className="h-4 w-4 translate-x-1" />
                     </Menu.Trigger>
                     <Menu.Content>
-                      <Menu.Item onClick={() => handleToggleOpen('conection')}>
+                      <Menu.Item onClick={() => openModal('connect')}>
                         <List.ItemStart className="mr-1.5">
                           <TerminalTag className="h-4 w-4" />
                         </List.ItemStart>
                         <Typography type="small">Conexão</Typography>
                       </Menu.Item>
-                      <Menu.Item onClick={() => handleToggleOpen('host')}>
+                      <Menu.Item onClick={() => openModal('host')}>
                         <List.ItemStart className="mr-1.5">
                           <Server className="h-4 w-4" />
                         </List.ItemStart>
                         <Typography type="small">Host</Typography>
                       </Menu.Item>
-                      <Menu.Item onClick={() => handleToggleOpen('group')}>
+                      <Menu.Item onClick={() => openModal('group')}>
                         <List.ItemStart className="mr-1.5">
                           <GridPlus className="h-4 w-4" />
                         </List.ItemStart>
                         <Typography type="small">Grupo</Typography>
                       </Menu.Item>
-                      <Menu.Item onClick={() => handleToggleOpen('tag')}>
+                      <Menu.Item onClick={() => openModal('tag')}>
                         <List.ItemStart className="mr-1.5">
                           <Tags className="h-5 w-4" />
                         </List.ItemStart>
@@ -216,11 +204,6 @@ export default function ComplexNavbar({ Children }) {
           <NavList />
         </Collapse>
       </Navbar>
-      <DialogConections open={dialogOpen.conection} onClose={() => handleToggleOpen('conections')} />
-      <DialogConection open={dialogOpen.conection} onClose={() => handleToggleOpen('conection')} />
-      <DialogHost open={dialogOpen.host} onClose={() => handleToggleOpen('host')} />
-      <DialogGroup open={dialogOpen.group} onClose={() => handleToggleOpen('group')} />
-      <DialogHost open={dialogOpen.host} onClose={() => handleToggleOpen('tag')} />
     </>
   );
 }

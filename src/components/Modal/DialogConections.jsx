@@ -12,16 +12,17 @@ import useConfigStore from "../../stores/ConfigData";
 import HostCard from "../HostsCards/Hostscard";
 import { Tabs } from "@material-tailwind/react";
 import { Spinner } from "@material-tailwind/react";
+import useModalStore from "../../stores/useModalStore";
 export default function DialogConections(props) {
-    let aberto = true
     const [host, setHost] = useState("");
     const [defaultTab, setDefaultTab] = useState(null);
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const { customers, groups, addCustomer } = useConfigStore();
+    const { modals, closeModal } = useModalStore();
     useEffect(() => {
         if (groups.length > 0) {
-            setDefaultTab(groups[0].id)
+            setDefaultTab(groups[0].name)
         }
     }, [groups])
     const handleSubmit = (e) => {
@@ -33,9 +34,8 @@ export default function DialogConections(props) {
         // enquanto não carrega, evita erro e pode mostrar loading
         return <Spinner color="info" />
     }
-
     return (
-        <Dialog size="xl" className="" open={aberto} onOpenChange={(state) => {
+        <Dialog size="xl" className="" open={modals.connections} onOpenChange={(state) => {
             if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
         }}>
             <Dialog.Content className="overflow-auto max-h-[88vh]">
@@ -46,9 +46,7 @@ export default function DialogConections(props) {
                     isCircular
                     color="secondary"
                     className="absolute right-2 top-2"
-                    onClick={(state) => {
-                        if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
-                    }}
+                    onClick={() => closeModal('connections')}
                 >
                     <Xmark className="h-5 w-5" />
                 </Dialog.DismissTrigger>
@@ -65,11 +63,11 @@ export default function DialogConections(props) {
                         const filteredCustomers = customers.filter(customer => customer.groups.includes(id));
 
                         return (
-                            <Tabs.Panel key={name} value={name} className="flex gap-4">
+                            <Tabs.Panel key={name} value={name} className="flex gap-4 flex-wrap">
                                 {filteredCustomers.length > 0 ? (
                                     filteredCustomers.map(customer => (
                                         <HostCard
-                                            key={customer.id}
+                                            key={customer.name}
                                             host={{
                                                 status: 'online',
                                                 hostname: customer.name,

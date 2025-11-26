@@ -8,6 +8,7 @@ import {
 import { Xmark } from "iconoir-react";
 import { use, useState } from "react";
 import useConfigStore from "../../stores/ConfigData";
+import useModalStore from "../../stores/useModalStore";
 
 
 export default function DialogConection(props) {
@@ -15,14 +16,14 @@ export default function DialogConection(props) {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const { customers, addCustomer } = useConfigStore();
-
+    const { modals, closeModal } = useModalStore();
     const handleSubmit = (e) => {
         e.preventDefault();
         addCustomer(host, username, password);
     };
 
     return (
-        <Dialog size="sm" open={props.open} onOpenChange={(state) => {
+        <Dialog size="sm" open={modals.connect} onOpenChange={(state) => {
             if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
         }}>
             <Dialog.Content>
@@ -33,9 +34,7 @@ export default function DialogConection(props) {
                     isCircular
                     color="secondary"
                     className="absolute right-2 top-2"
-                    onClick={(state) => {
-                        if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
-                    }}
+                    onClick={() => closeModal('connect')}
                 >
                     <Xmark className="h-5 w-5" />
                 </Dialog.DismissTrigger>
