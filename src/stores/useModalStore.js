@@ -2,10 +2,11 @@ import { create } from "zustand";
 
 const useModalStore = create((set) => ({
     modals: {
-        connections: true,
+        connections: false,
         connect: false,
         group: false,
         host: false,
+        settings: false,
     },
 
     // Abre um modal específico pelo ID

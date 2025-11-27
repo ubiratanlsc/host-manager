@@ -14,8 +14,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { useState } from "react";
 import useModalStore from "../../stores/useModalStore";
 
-export default function DialogHost(props) {
+export default function DialogSettings(props) {
     const { saveData } = useSaveData();
+    const { addCustomer, tags, customers } = useConfigStore();
     const [name, setName] = useState("");
     const [group, setGroup] = useState("");
     const [host, setHost] = useState("");
@@ -26,14 +27,13 @@ export default function DialogHost(props) {
     const [sshKeyType, setSshKeyType] = useState("password");
     const [tag, setTag] = useState("");
     const { modals, closeModal } = useModalStore();
-    const { addCustomer, tags, customers, groups } = useConfigStore();
     const handleSubmit = (e) => {
         e.preventDefault();
         saveData(uuidv4(), name, host, port, username, password, group, tag);
     };
 
     return (
-        <Dialog size="sm" open={modals.host} onOpenChange={(state) => {
+        <Dialog size="sm" open={modals.settings} onOpenChange={(state) => {
             if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
         }}>
             <Dialog.Content className="">
@@ -44,15 +44,15 @@ export default function DialogHost(props) {
                     isCircular
                     color="secondary"
                     className="absolute right-2 top-2"
-                    onClick={() => closeModal('host')}
+                    onClick={() => closeModal('settings')}
                 >
                     <Xmark className="h-5 w-5" />
                 </Dialog.DismissTrigger>
                 <Typography type="h6" className="mb-1" color="primary">
-                    Host
+                    Configurações
                 </Typography>
                 <Typography className="text-foreground">
-                    Digite seu nome de usuário e senha para autenticar via SSH.
+                    Escolha seu Thema e sua fonte.
                 </Typography>
                 <form action="#" className="mt-6 flex flex-wrap" onSubmit={handleSubmit}>
                     <div className="flex w-full gap-4">
@@ -88,9 +88,10 @@ export default function DialogHost(props) {
                             <Select>
                                 <Select.Trigger className="" placeholder="Select Version" />
                                 <Select.List>
-                                    {groups.map((group) => (
-                                        <Select.Option key={group.id}>{group.name}</Select.Option>
-                                    ))}
+                                    <Select.Option>Material Tailwind React</Select.Option>
+                                    <Select.Option>Material Tailwind HTML</Select.Option>
+                                    <Select.Option>Material Tailwind Vue</Select.Option>
+                                    <Select.Option>Material Tailwind Svelte</Select.Option>
                                 </Select.List>
                             </Select>
                         </div>
@@ -180,8 +181,9 @@ export default function DialogHost(props) {
                                     />
                                 </div>
                             </Tabs.Panel>
-                            <Tabs.Panel value="chave" className="text-center">
-                                Inativo por enquanto!
+                            <Tabs.Panel value="chave">
+                                Because it&apos;s about motivating the doers. Because I&apos;m here to
+                                follow my dreams and inspire other people to follow their dreams, too.
                             </Tabs.Panel>
                         </Tabs>
                     </div>

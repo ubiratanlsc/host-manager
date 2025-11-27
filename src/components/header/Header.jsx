@@ -12,20 +12,10 @@ import useModalStore from "../../stores/useModalStore";
 
 const LINKS = [
   {
-    icon: ProfileCircle,
-    title: "Account",
-    href: "#",
-  },
-  {
-    icon: SelectFace3d,
-    title: "Blocks",
-    href: "#",
-  },
-  {
-    icon: Archive,
-    title: "Docs",
-    href: "#",
-  },
+    icon: Settings,
+    title: "Configurações",
+    href: "settings",
+  }
 ];
 
 
@@ -33,7 +23,7 @@ function NavList() {
   return (
     <>
       {LINKS.map(({ icon: Icon, title, href }) => (
-        <List.Item key={title} as="a" href={href}>
+        <List.Item key={title} as="a" href={href} onClick={() => openModal(href)}>
           <List.ItemStart className="mr-1.5">
             <Icon className="h-4 w-4" />
           </List.ItemStart>
@@ -90,7 +80,6 @@ export default function ComplexNavbar({ Children }) {
           <div className="hidden lg:block">
             <List className="mt-4 flex flex-col gap-1 lg:mt-0 lg:flex-row lg:items-center hover:text-zinc-200">
               <Menu>
-
                 <Menu.Trigger
                   as={Button}
                   size="sm"
@@ -138,9 +127,9 @@ export default function ComplexNavbar({ Children }) {
                       </Menu.Item>
                     </Menu.Content>
                   </Menu>
-                  <Menu.Item>Hosts</Menu.Item>
-                  <Menu.Item>Grupos</Menu.Item>
-                  <Menu.Item>Tags</Menu.Item>
+                  <Menu.Item onClick={() => openModal('connections')}>Hosts</Menu.Item>
+                  <Menu.Item onClick={() => openModal('group')}>Grupos</Menu.Item>
+                  <Menu.Item onClick={() => openModal('tag')}>Tags</Menu.Item>
                 </Menu.Content>
               </Menu>
               <NavList />
@@ -160,7 +149,7 @@ export default function ComplexNavbar({ Children }) {
             )}
           </IconButton>
           {/* <ProfileMenu /> */}
-          <ButtonGroup variant="ghost" size="sm" className="lg:ml-auto">
+          <ButtonGroup variant="ghost" size="sm" className="lg:ml-auto">{/* aqui começa o botão de minimizar, maximizar e fechar */}
             <Button onClick={minimizeWindow}>
               <Minus />
             </Button>
@@ -175,7 +164,7 @@ export default function ComplexNavbar({ Children }) {
             <Button onClick={closeWindow}>
               <Xmark />
             </Button>
-          </ButtonGroup>
+          </ButtonGroup> {/* aqui termina o botão de minimizar, maximizar e fechar */}
         </div>
         <Collapse open={openNav}>
           <Accordion>
@@ -192,12 +181,11 @@ export default function ComplexNavbar({ Children }) {
                 </List.Item>
               </Accordion.Trigger>
               <Accordion.Content>
-                <Menu.Item onClick={() => handleToggleOpen('conection')}>
-                  Conexão
-                </Menu.Item>
-                <Menu.Item onClick={() => handleToggleOpen('host')}>Host</Menu.Item>
-                <Menu.Item>Grupo</Menu.Item>
-                <Menu.Item>Tags</Menu.Item>
+                <Menu.Item onClick={() => openModal('connect')}>Conexão</Menu.Item>
+                <Menu.Item onClick={() => openModal('connections')}>Hosts</Menu.Item>
+                <Menu.Item onClick={() => openModal('group')}>Grupos</Menu.Item>
+                <Menu.Item onClick={() => openModal('tag')}>Tags</Menu.Item>
+                <Menu.Item onClick={() => openModal('config')}>Configurações</Menu.Item>
               </Accordion.Content>
             </Accordion.Item>
           </Accordion>

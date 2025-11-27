@@ -9,6 +9,7 @@ import DialogHost from './components/Modal/DialogHost';
 import useModalStore from './stores/useModalStore';
 import DialogConection from './components/Modal/DialogConection';
 import DialogGroup from './components/Modal/DialogGroup';
+import DialogSettings from './components/Modal/DialogSettings';
 
 
 const App = () => {
@@ -49,13 +50,12 @@ const App = () => {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden text-gray-100 dark font-[IBM Plex Sans]">
-      <DialogHost />
       <ComplexNavbar />
       <DialogConections onClose={() => closeModal('connections')} />
-      <DialogConection onClose={() => closeModal('conection')} />
+      <DialogConection onClose={() => closeModal('connect')} />
       <DialogHost onClose={() => closeModal('host')} />
       <DialogGroup onClose={() => closeModal('group')} />
-      <DialogHost onClose={() => closeModal('tag')} />
+      <DialogSettings onClose={() => closeModal('settings')} />
       {/* <Home /> */}
     </div>
   );

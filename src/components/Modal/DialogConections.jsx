@@ -38,14 +38,12 @@ export default function DialogConections(props) {
         <Dialog size="xl" className="" open={modals.connections} onOpenChange={(state) => {
             if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
         }}>
-            <Dialog.Content className="overflow-auto max-h-[88vh]">
+            <Dialog.Content className="overflow-auto max-h-[88vh] top-36">
                 <Dialog.DismissTrigger
                     as={IconButton}
-                    size="sm"
-                    variant="ghost"
-                    isCircular
+                    size="xs"
                     color="secondary"
-                    className="absolute right-2 top-2"
+                    className="absolute right-0 top-0"
                     onClick={() => closeModal('connections')}
                 >
                     <Xmark className="h-5 w-5" />
