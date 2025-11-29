@@ -33,7 +33,7 @@ export default function DialogHost(props) {
     };
 
     return (
-        <Dialog size="sm" open={modals.host} onOpenChange={(state) => {
+        <Dialog size="md" open={modals.host} onOpenChange={(state) => {
             if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
         }}>
             <Dialog.Content className="">
@@ -187,12 +187,12 @@ export default function DialogHost(props) {
                     </div>
 
                     <div className="mt-4 flex justify-end gap-2 w-full">
-                        {/* <Dialog.DismissTrigger as={Button} color="secondary " onClick={(state) => {
+                        <Dialog.DismissTrigger as={Button} color="secondary" onClick={(state) => {
                             if (!state) props.onClose();
                         }} >
                             Cancel
-                        </Dialog.DismissTrigger> */}
-                        <Button variant="solid" color="info" type="submit">Salvar</Button>
+                        </Dialog.DismissTrigger>
+                        <Button variant="solid" color="secondary" type="submit">Salvar</Button>
                     </div>
                 </form>
             </Dialog.Content>

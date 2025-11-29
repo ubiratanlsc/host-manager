@@ -9,11 +9,11 @@ import {
 import { NavArrowDown, Xmark } from "iconoir-react";
 import { use, useEffect, useState } from "react";
 import useConfigStore from "../../stores/ConfigData";
-import HostCard from "../HostsCards/Hostscard";
+import HostCard from "../Cards/Hostscard";
 import { Tabs } from "@material-tailwind/react";
 import { Spinner } from "@material-tailwind/react";
 import useModalStore from "../../stores/useModalStore";
-export default function DialogConections(props) {
+export default function DialogListConections(props) {
     const [host, setHost] = useState("");
     const [defaultTab, setDefaultTab] = useState(null);
     const [username, setUsername] = useState("");
@@ -38,12 +38,14 @@ export default function DialogConections(props) {
         <Dialog size="xl" className="" open={modals.connections} onOpenChange={(state) => {
             if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
         }}>
-            <Dialog.Content className="overflow-auto max-h-[88vh] top-36">
+            <Dialog.Content className="overflow-auto max-h-[88vh]">
                 <Dialog.DismissTrigger
                     as={IconButton}
-                    size="xs"
+                    size="sm"
+                    variant="ghost"
+                    isCircular
                     color="secondary"
-                    className="absolute right-0 top-0"
+                    className="absolute right-2 top-2"
                     onClick={() => closeModal('connections')}
                 >
                     <Xmark className="h-5 w-5" />

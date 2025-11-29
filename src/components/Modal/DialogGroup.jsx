@@ -18,7 +18,6 @@ export default function DialogGroup(props) {
     const { saveData } = useSaveData();
     const { addGroup } = useConfigStore();
     const [name, setName] = useState("");
-    const [port, setPort] = useState(22);
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const { modals, closeModal } = useModalStore();
@@ -73,21 +72,6 @@ export default function DialogGroup(props) {
                         </div>
                     </div>
                     <div className="flex w-full gap-3">
-
-                        <div className="mb-2 mt-2 space-y-1.5">
-                            <Typography
-                                as="label"
-                                htmlFor="password"
-                                type="small"
-                                color="primary"
-                                className="font-semibold"
-                            >
-                                Porta
-                            </Typography>
-
-                            <Input id="port" type="number" placeholder="22" value={port}
-                                onChange={(e) => setPort(e.target.value)} />
-                        </div>
                         <div className="mb-2 mt-2 space-y-1.5 flex-1">
                             <Typography
                                 as="label"
@@ -145,12 +129,12 @@ export default function DialogGroup(props) {
                     </div>
 
                     <div className="mt-4 flex justify-end gap-2 w-full">
-                        {/* <Dialog.DismissTrigger as={Button} color="secondary " onClick={(state) => {
+                        <Dialog.DismissTrigger as={Button} color="secondary" onClick={(state) => {
                             if (!state) props.onClose();
                         }} >
                             Cancel
-                        </Dialog.DismissTrigger> */}
-                        <Button variant="solid" color="info" type="submit">Salvar</Button>
+                        </Dialog.DismissTrigger>
+                        <Button color="secondary" type="submit">Salvar</Button>
                     </div>
                 </form>
             </Dialog.Content>

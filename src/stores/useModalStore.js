@@ -5,8 +5,11 @@ const useModalStore = create((set) => ({
         connections: false,
         connect: false,
         group: false,
+        groupsList: false,
         host: false,
         settings: false,
+        tag: false,
+        tagList: true,
     },
 
     // Abre um modal específico pelo ID
@@ -33,7 +36,10 @@ const useModalStore = create((set) => ({
             connections: false,
             connect: false,
             group: false,
+            groupsList: false,
             host: false,
+            settings: false,
+            tag: false,
         },
     })),
 }));
