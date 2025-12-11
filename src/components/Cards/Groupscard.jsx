@@ -1,62 +1,46 @@
-import React, { useState } from 'react';
-import { Terminal, Edit2, Server, Globe, Activity } from 'lucide-react';
-import { Badge, Button, ButtonGroup, IconButton } from "@material-tailwind/react";
-import DialogConection from '../Modal/DialogConection';
-import DialogHost from '../Modal/DialogHost';
-import { BrightStar, Terminal as TerminalIcon } from 'iconoir-react';
-import useModalStore from '../../stores/useModalStore';
-
-
+import React from 'react';
+import { Edit2, Server } from 'lucide-react';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 const GroupCard = ({ group }) => {
-    const handleToggleOpen = (dialog) => {
-        setDialogOpen(prev => ({
-            ...prev,
+    // Status logic similar to HostCard? Group usually doesn't have status online/offline unless it aggregates?
+    // Original code had status logic but unused 'status' prop in ListGroups?
+    // I'll keep it safe.
 
-            [dialog]: !prev[dialog] // ou !prev.open2 se quiser alternar
-        }));
-    };
     const statusColor =
         group.status === 'online'
-            ? 'bg-emerald-500'
+            ? 'bg-emerald-500 hover:bg-emerald-600'
             : group.status === 'offline'
-                ? 'bg-red-500'
-                : 'bg-amber-500';
-    const statusBadgeClass =
-        group.status === 'online' ? 'success' :
-            group.status === 'offline' ? 'error' :
-                'warning';
+                ? 'bg-red-500 hover:bg-red-600'
+                : 'bg-amber-500 hover:bg-amber-600';
 
     return (
-        <>
-            <div className="flex-1 max-h-24 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:shadow-lg hover:-translate-y-1">
-                {/* Status Bar */}
-                {/* <div className={`absolute top-0 left-0 w-1 h-full ${statusColor}`} /> */}
-
-                <div className="p-1">
-                    <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-2">
-                            <div className="my-1">
-                                <Badge color={statusBadgeClass} placement="bottom-end">
-                                    <Badge.Content>
-                                        <IconButton color="secondary" size="sm">
-                                            <Server size={18} />
-                                        </IconButton>
-                                    </Badge.Content>
-                                </Badge>
-                            </div>
-                            <div className="mx-1 my-1">
-                                <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight">{group.name}</h3>
-                            </div>
-                            <button className="rounded  py-1 px-2 shadow-sm hover:shadow-lg bg-slate-800 border-slate-800 text-slate-50 hover:bg-slate-700 hover:border-slate-700">
-                                <Edit2 size={20} />
-                            </button>
+        <Card className="flex-1 max-h-24 min-w-[200px] transition-all hover:shadow-lg hover:-translate-y-1 overflow-hidden">
+            <CardContent className="p-2">
+                <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                        <div className="my-1">
+                            {group.status && (
+                                <Badge className={cn("mr-2", statusColor)} />
+                            )}
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                                <Server size={18} />
+                            </Button>
                         </div>
+                        <div className="mx-1 my-1">
+                            <h3 className="font-bold text-sm leading-tight">{group.name}</h3>
+                            {/* <span className="text-xs text-muted-foreground">{group.length} hosts</span> */}
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground ml-auto">
+                            <Edit2 size={16} />
+                        </Button>
                     </div>
                 </div>
-            </div>
-            {/* <DialogHost open={dialogOpen.host} onClose={() => handleToggleOpen('host')} /> */}
-        </>
+            </CardContent>
+        </Card>
     );
 };
 

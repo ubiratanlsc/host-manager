@@ -1,92 +1,77 @@
 import {
     Dialog,
-    Button,
-    Input,
-    Typography,
-    IconButton,
-} from "@material-tailwind/react";
-import { Xmark } from "iconoir-react";
-import { use, useState } from "react";
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useState } from "react";
+import { v4 as uuidv4 } from 'uuid';
 import useConfigStore from "../../stores/ConfigData";
 import useModalStore from "../../stores/useModalStore";
 
-
-export default function DialogTag(props) {
+export default function DialogTag() {
     const [name, setName] = useState("");
-    const [color, setColor] = useState("");
-    const { customers, addCustomer } = useConfigStore();
+    const [color, setColor] = useState("#000000"); // Default color
+    const { addCustomer } = useConfigStore(); // Original used addCustomer but signature is uuid, name, color? 'addCustomer' usually implies host. 'addTag' might be missing or reused. Original Code used addCustomer(uuidv4(), name, color).
     const { modals, closeModal } = useModalStore();
+
     const handleSubmit = (e) => {
         e.preventDefault();
         addCustomer(uuidv4(), name, color);
+        closeModal('tag');
+    };
+
+    const handleOpenChange = (open) => {
+        if (!open) closeModal('tag');
     };
 
     return (
-        <Dialog size="xs" open={modals.tag} onOpenChange={(state) => {
-            if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
-        }}>
-            <Dialog.Content>
-                <Dialog.DismissTrigger
-                    as={IconButton}
-                    size="sm"
-                    variant="ghost"
-                    isCircular
-                    color="secondary"
-                    className="absolute right-2 top-2"
-                    onClick={() => closeModal('tag')}
-                >
-                    <Xmark className="h-5 w-5" />
-                </Dialog.DismissTrigger>
-                <Typography type="h6" className="mb-1" color="primary">
-                    Tag
-                </Typography>
-                <Typography className="text-foreground">
-                    Adicione uma tag para o host.
-                </Typography>
-                <form action="#" className="mt-6" onSubmit={handleSubmit}>
-                    <div className="flex w-full gap-4">
-                        <div className="mb-4 mt-2 space-y-1.5">
-                            <Typography
-                                as="label"
-                                htmlFor="hostname"
-                                type="small"
-                                color="primary"
-                                className="font-semibold"
-                            >
-                                Tag
-                            </Typography>
+        <Dialog open={modals.tag} onOpenChange={handleOpenChange}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Tag</DialogTitle>
+                    <DialogDescription>
+                        Adicione uma tag para o host.
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="grid gap-4 py-4">
+                    <div className="flex gap-4">
+                        <div className="grid gap-2 flex-grow">
+                            <Label htmlFor="tagname">Tag</Label>
                             <Input
-                                id="hostname"
-                                type="text"
+                                id="tagname"
                                 placeholder="Nome da Tag"
-                                isFullWidth
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                             />
                         </div>
-                        <div className="mb-4 mt-2 space-y-1.5">
-                            <Typography
-                                as="label"
-                                htmlFor="tag"
-                                type="small"
-                                color="primary"
-                                className="font-semibold"
-                            >
-                                Cor
-                            </Typography>
-                            <input className="rounded w-16 h-9" type="color" value={color} onChange={(e) => setColor(e.target.value)} />
+                        <div className="grid gap-2 w-20">
+                            <Label htmlFor="color">Cor</Label>
+                            <div className="flex h-10 w-full items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                                <input
+                                    id="color"
+                                    type="color"
+                                    className="p-0 h-8 w-14 bg-transparent border-none cursor-pointer"
+                                    value={color}
+                                    onChange={(e) => setColor(e.target.value)}
+                                />
+                            </div>
                         </div>
                     </div>
-                    <div className="mt-4 flex justify-end gap-2">
-                        <Dialog.DismissTrigger as={Button} color="secondary" onClick={(state) => {
-                            if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
-                        }} >
+
+                    <DialogFooter>
+                        <Button type="button" variant="secondary" onClick={() => closeModal('tag')}>
                             Cancel
-                        </Dialog.DismissTrigger>
-                        <Button color="secondary" type="submit">Salvar</Button>
-                    </div>
+                        </Button>
+                        <Button type="submit">Salvar</Button>
+                    </DialogFooter>
                 </form>
-            </Dialog.Content>
+            </DialogContent>
         </Dialog>
     );
 }

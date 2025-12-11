@@ -16,6 +16,8 @@ pub async fn spawn_pty(
     app_handle: AppHandle,
     state: State<'_, JexpeState>,
     shell: SystemShell,
+    cols: u16,
+    rows: u16,
 ) -> Result<(), String> {
     let id = cuid().map_err(|_| "Failed to generate cuid.".to_string())?;
     // let id = cuid2::create_id();
@@ -23,7 +25,12 @@ pub async fn spawn_pty(
     // Establish our new pty for the given size
     let pty_system = native_pty_system();
     let pty_pair = pty_system
-        .openpty(PtySize::default())
+        .openpty(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
         .map_err(|x| x.to_string())?;
 
     let pty_master = pty_pair.master;

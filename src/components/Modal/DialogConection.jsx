@@ -1,130 +1,94 @@
 import {
     Dialog,
-    Button,
-    Input,
-    Typography,
-    IconButton,
-} from "@material-tailwind/react";
-import { Xmark } from "iconoir-react";
-import { use, useState } from "react";
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useState } from "react";
 import useConfigStore from "../../stores/ConfigData";
 import useModalStore from "../../stores/useModalStore";
 
-
-export default function DialogConection(props) {
+export default function DialogConection() {
     const [host, setHost] = useState("");
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [port, setPort] = useState(22);
-    const { customers, addCustomer } = useConfigStore();
+    const { addCustomer } = useConfigStore();
     const { modals, closeModal } = useModalStore();
+
     const handleSubmit = (e) => {
         e.preventDefault();
         addCustomer(host, username, password);
+        closeModal('connect');
+    };
+
+    const handleOpenChange = (open) => {
+        if (!open) closeModal('connect');
     };
 
     return (
-        <Dialog size="sm" open={modals.connect} onOpenChange={(state) => {
-            if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
-        }}>
-            <Dialog.Content>
-                <Dialog.DismissTrigger
-                    as={IconButton}
-                    size="sm"
-                    variant="ghost"
-                    isCircular
-                    color="secondary"
-                    className="absolute right-2 top-2"
-                    onClick={() => closeModal('connect')}
-                >
-                    <Xmark className="h-5 w-5" />
-                </Dialog.DismissTrigger>
-                <Typography type="h6" className="mb-1" color="primary">
-                    Login
-                </Typography>
-                <Typography className="text-foreground">
-                    Digite seu nome de usuário e senha para autenticar via SSH.
-                </Typography>
-                <form action="#" className="mt-6 flex flex-wrap" onSubmit={handleSubmit}>
+        <Dialog open={modals.connect} onOpenChange={handleOpenChange}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Login</DialogTitle>
+                    <DialogDescription>
+                        Digite seu nome de usuário e senha para autenticar via SSH.
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="grid gap-4 py-4">
                     <div className="flex w-full gap-4">
-                        <div className="mb-4 mt-2 space-y-1.5 flex-2">
-                            <Typography
-                                as="label"
-                                htmlFor="hostname"
-                                type="small"
-                                color="primary"
-                                className="font-semibold"
-                            >
-                                Host
-                            </Typography>
+                        <div className="grid gap-2 flex-grow">
+                            <Label htmlFor="hostname">Host</Label>
                             <Input
                                 id="hostname"
-                                type="text"
                                 placeholder="Hostname ou IP"
-                                isFullWidth
                                 value={host}
                                 onChange={(e) => setHost(e.target.value)}
                             />
                         </div>
-                        <div className="mb-2 mt-2 space-y-1.5 flex-1">
-                            <Typography
-                                as="label"
-                                htmlFor="password"
-                                type="small"
-                                color="primary"
-                                className="font-semibold"
-                            >
-                                Porta
-                            </Typography>
-
-                            <Input id="port" type="number" placeholder="22" value={port}
-                                onChange={(e) => setPort(e.target.value)} />
-                        </div>
-                    </div>
-                    <div className="w-full gap-4">
-                        <div className="mb-2 mt-2 space-y-1.5 flex-1">
-                            <Typography
-                                as="label"
-                                htmlFor="username"
-                                type="small"
-                                color="primary"
-                                className="font-semibold"
-                            >
-                                Username
-                            </Typography>
+                        <div className="grid gap-2 w-20">
+                            <Label htmlFor="port">Porta</Label>
                             <Input
-                                id="username"
-                                type="text"
-                                placeholder="Username"
-                                isFullWidth
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
+                                id="port"
+                                type="number"
+                                placeholder="22"
+                                value={port}
+                                onChange={(e) => setPort(e.target.value)}
                             />
                         </div>
-                        <div className="mb-2 mt-2 space-y-1.5 flex-1">
-                            <Typography
-                                as="label"
-                                htmlFor="password"
-                                type="small"
-                                color="primary"
-                                className="font-semibold"
-                            >
-                                Password
-                            </Typography>
-
-                            <Input id="password" type="password" placeholder="************" value={password} onChange={(e) => setPassword(e.target.value)} />
-                        </div>
                     </div>
-                    <div className="mt-4 flex justify-end gap-2 w-full">
-                        <Dialog.DismissTrigger as={Button} color="secondary" onClick={(state) => {
-                            if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
-                        }} >
+                    <div className="grid gap-2">
+                        <Label htmlFor="username">Username</Label>
+                        <Input
+                            id="username"
+                            placeholder="Username"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                        />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="password">Password</Label>
+                        <Input
+                            id="password"
+                            type="password"
+                            placeholder="************"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="secondary" onClick={() => closeModal('connect')}>
                             Cancel
-                        </Dialog.DismissTrigger>
-                        <Button color="secondary" type="submit">Login</Button>
-                    </div>
+                        </Button>
+                        <Button type="submit">Login</Button>
+                    </DialogFooter>
                 </form>
-            </Dialog.Content>
+            </DialogContent>
         </Dialog>
     );
 }

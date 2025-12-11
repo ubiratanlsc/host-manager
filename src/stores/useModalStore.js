@@ -9,7 +9,7 @@ const useModalStore = create((set) => ({
         host: false,
         settings: false,
         tag: false,
-        tagList: true,
+        tagList: false,
     },
 
     // Abre um modal específico pelo ID

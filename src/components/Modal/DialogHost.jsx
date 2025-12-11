@@ -1,20 +1,29 @@
 import {
     Dialog,
-    Button,
-    Input,
-    Typography,
-    IconButton,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
     Select,
-    Tabs,
-} from "@material-tailwind/react";
-import { Xmark } from "iconoir-react";
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState } from "react";
+import { v4 as uuidv4 } from 'uuid';
 import useSaveData from "../../stores/SaveData";
 import useConfigStore from "../../stores/ConfigData";
-import { v4 as uuidv4 } from 'uuid';
-import { useState } from "react";
 import useModalStore from "../../stores/useModalStore";
 
-export default function DialogHost(props) {
+export default function DialogHost() {
     const { saveData } = useSaveData();
     const [name, setName] = useState("");
     const [group, setGroup] = useState("");
@@ -22,180 +31,122 @@ export default function DialogHost(props) {
     const [port, setPort] = useState(22);
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
-    const [sshKey, setSshKey] = useState("");
-    const [sshKeyType, setSshKeyType] = useState("password");
-    const [tag, setTag] = useState("");
+    const [tag, setTag] = useState(""); // tag state was defined but unused in original UI logic fully? Adding basic support if needed or keeping as is.
+
+    // Original code had sshKey states but only partially implemented Tabs.
+
     const { modals, closeModal } = useModalStore();
-    const { addCustomer, tags, customers, groups } = useConfigStore();
+    const { groups } = useConfigStore();
+
     const handleSubmit = (e) => {
         e.preventDefault();
         saveData(uuidv4(), name, host, port, username, password, group, tag);
+        closeModal('host');
+    };
+
+    const handleOpenChange = (open) => {
+        if (!open) closeModal('host');
     };
 
     return (
-        <Dialog size="md" open={modals.host} onOpenChange={(state) => {
-            if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
-        }}>
-            <Dialog.Content className="">
-                <Dialog.DismissTrigger
-                    as={IconButton}
-                    size="sm"
-                    variant="ghost"
-                    isCircular
-                    color="secondary"
-                    className="absolute right-2 top-2"
-                    onClick={() => closeModal('host')}
-                >
-                    <Xmark className="h-5 w-5" />
-                </Dialog.DismissTrigger>
-                <Typography type="h6" className="mb-1" color="primary">
-                    Host
-                </Typography>
-                <Typography className="text-foreground">
-                    Digite seu nome de usuário e senha para autenticar via SSH.
-                </Typography>
-                <form action="#" className="mt-6 flex flex-wrap" onSubmit={handleSubmit}>
-                    <div className="flex w-full gap-4">
-                        <div className="mb-2 mt-2 space-y-1.5 flex-1">
-                            <Typography
-                                as="label"
-                                htmlFor="username"
-                                type="small"
-                                color="primary"
-                                className="font-semibold"
-                            >
-                                Nome
-                            </Typography>
+        <Dialog open={modals.host} onOpenChange={handleOpenChange}>
+            <DialogContent className="sm:max-w-[600px]">
+                <DialogHeader>
+                    <DialogTitle>Host</DialogTitle>
+                    <DialogDescription>
+                        Digite as informações do host para conexão SSH.
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="grid gap-4 py-4">
+                    <div className="flex gap-4">
+                        <div className="grid gap-2 flex-grow">
+                            <Label htmlFor="nome">Nome</Label>
                             <Input
                                 id="nome"
-                                type="text"
                                 placeholder="Meu servidor"
-                                isFullWidth
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                             />
                         </div>
-                        <div className="mb-2 mt-2 space-y-1.5 flex-1">
-                            <Typography
-                                as="label"
-                                htmlFor="username"
-                                type="small"
-                                color="primary"
-                                className="font-semibold"
-                            >
-                                Grupo
-                            </Typography>
-                            <Select>
-                                <Select.Trigger className="" placeholder="Select Version" />
-                                <Select.List>
+                        <div className="grid gap-2 w-1/3">
+                            <Label htmlFor="group">Grupo</Label>
+                            <Select value={group} onValueChange={setGroup}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione..." />
+                                </SelectTrigger>
+                                <SelectContent>
                                     {groups.map((group) => (
-                                        <Select.Option key={group.id}>{group.name}</Select.Option>
+                                        <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>
                                     ))}
-                                </Select.List>
+                                </SelectContent>
                             </Select>
                         </div>
                     </div>
-                    <div className="mb-2 mt-2 space-y-1.5 flex-1">
-                        <Typography
-                            as="label"
-                            htmlFor="host"
-                            type="small"
-                            color="primary"
-                            className="font-semibold"
-                        >
-                            Host
-                        </Typography>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor="host">Host</Label>
                         <Input
-                            id="username"
-                            type="text"
+                            id="host"
                             placeholder="127.0.0.1"
-                            isFullWidth
                             value={host}
                             onChange={(e) => setHost(e.target.value)}
                         />
                     </div>
-                    <div className="flex w-full gap-3">
 
-                        <div className="mb-2 mt-2 space-y-1.5">
-                            <Typography
-                                as="label"
-                                htmlFor="password"
-                                type="small"
-                                color="primary"
-                                className="font-semibold"
-                            >
-                                Porta
-                            </Typography>
-
-                            <Input id="port" type="number" placeholder="22" value={port}
-                                onChange={(e) => setPort(e.target.value)} />
+                    <div className="flex gap-4">
+                        <div className="grid gap-2 w-20">
+                            <Label htmlFor="port">Porta</Label>
+                            <Input
+                                id="port"
+                                type="number"
+                                placeholder="22"
+                                value={port}
+                                onChange={(e) => setPort(e.target.value)}
+                            />
                         </div>
-                        <div className="mb-2 mt-2 space-y-1.5 flex-1">
-                            <Typography
-                                as="label"
-                                htmlFor="username"
-                                type="small"
-                                color="primary"
-                                className="font-semibold"
-                            >
-                                Usuário
-                            </Typography>
+                        <div className="grid gap-2 flex-grow">
+                            <Label htmlFor="username">Usuário</Label>
                             <Input
                                 id="username"
-                                type="text"
                                 placeholder="Admin"
-                                isFullWidth
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
                             />
                         </div>
-
                     </div>
-                    <div className="mb-2 mt-2 space-y-1.5 w-full">
-                        <Tabs defaultValue="senha">
-                            <Tabs.List className="w-full">
-                                <Tabs.Trigger className="w-full" value="senha">
-                                    Senha
-                                </Tabs.Trigger>
-                                <Tabs.Trigger className="w-full" value="chave">
-                                    Chave SSH
-                                </Tabs.Trigger>
-                                <Tabs.TriggerIndicator />
-                            </Tabs.List>
-                            <Tabs.Panel value="senha">
-                                <div className="mb-2 mt-2 space-y-1.5 w-full">
-                                    <Typography
-                                        as="label"
-                                        htmlFor="senha"
-                                        type="small"
-                                        color="primary"
-                                        className="font-semibold"
-                                    >
-                                        Senha
-                                    </Typography>
 
-                                    <Input id="password" type="password" placeholder="************"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                    />
-                                </div>
-                            </Tabs.Panel>
-                            <Tabs.Panel value="chave" className="text-center">
+                    <Tabs defaultValue="senha" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="senha">Senha</TabsTrigger>
+                            <TabsTrigger value="chave">Chave SSH</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="senha">
+                            <div className="grid gap-2">
+                                <Label htmlFor="password">Senha</Label>
+                                <Input
+                                    id="password"
+                                    type="password"
+                                    placeholder="************"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                />
+                            </div>
+                        </TabsContent>
+                        <TabsContent value="chave">
+                            <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
                                 Inativo por enquanto!
-                            </Tabs.Panel>
-                        </Tabs>
-                    </div>
+                            </div>
+                        </TabsContent>
+                    </Tabs>
 
-                    <div className="mt-4 flex justify-end gap-2 w-full">
-                        <Dialog.DismissTrigger as={Button} color="secondary" onClick={(state) => {
-                            if (!state) props.onClose();
-                        }} >
+                    <DialogFooter>
+                        <Button type="button" variant="secondary" onClick={() => closeModal('host')}>
                             Cancel
-                        </Dialog.DismissTrigger>
-                        <Button variant="solid" color="secondary" type="submit">Salvar</Button>
-                    </div>
+                        </Button>
+                        <Button type="submit">Salvar</Button>
+                    </DialogFooter>
                 </form>
-            </Dialog.Content>
+            </DialogContent>
         </Dialog>
     );
 }

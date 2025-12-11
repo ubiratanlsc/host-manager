@@ -1,79 +1,60 @@
 import React, { useState } from 'react';
 import { Terminal, Edit2, Server, Globe, Activity } from 'lucide-react';
-import { Badge, Button, ButtonGroup, IconButton } from "@material-tailwind/react";
-import DialogConection from '../Modal/DialogConection';
-import DialogHost from '../Modal/DialogHost';
-import { BrightStar, Terminal as TerminalIcon } from 'iconoir-react';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import useModalStore from '../../stores/useModalStore';
-
-
 
 const HostCard = ({ host, onEdit, onConnect }) => {
     const { openModal } = useModalStore();
-    const [dialogOpen, setDialogOpen] = useState({
-        conection: false,
-        host: false,
-    });
-    const handleToggleOpen = (dialog) => {
-        setDialogOpen(prev => ({
-            ...prev,
+    // Dialog state logic was here but seemingly unused or controlled externally/internally. 
+    // The original code commented out DialogHost at the bottom.
 
-            [dialog]: !prev[dialog] // ou !prev.open2 se quiser alternar
-        }));
-    };
+    // Mapping status to colors
     const statusColor =
         host.status === 'online'
-            ? 'bg-emerald-500'
+            ? 'bg-emerald-500 hover:bg-emerald-600'
             : host.status === 'offline'
-                ? 'bg-red-500'
-                : 'bg-amber-500';
-    const statusBadgeClass =
-        host.status === 'online' ? 'success' :
-            host.status === 'offline' ? 'error' :
-                'warning';
+                ? 'bg-red-500 hover:bg-red-600'
+                : 'bg-amber-500 hover:bg-amber-600';
 
     return (
-        <>
-            <div className="flex-1 max-h-24 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm transition-all hover:shadow-lg hover:-translate-y-1">
-                {/* Status Bar */}
-                {/* <div className={`absolute top-0 left-0 w-1 h-full ${statusColor}`} /> */}
-
-                <div className="p-1">
-                    <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-2">
-                            <div className="my-1">
-                                <Badge color={statusBadgeClass} placement="bottom-end">
-                                    <Badge.Content>
-                                        <IconButton color="secondary" size="sm">
-                                            <Server size={18} />
-                                        </IconButton>
-                                    </Badge.Content>
-                                    <Badge.Indicator />
-                                </Badge>
-                            </div>
-                            <div className="mx-1 my-1">
-                                <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight">{host.hostname}</h3>
-                                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{host.group}</span>
-                            </div>
+        <Card className="flex-1 max-h-24 transition-all hover:shadow-lg hover:-translate-y-1 overflow-hidden">
+            <CardContent className="p-2">
+                <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                        <div className="my-1 relative">
+                            <Badge className={cn("rounded-full px-1.5 py-0.5 pointer-events-none relative", statusColor)}>
+                                <span className="sr-only">{host.status}</span>
+                            </Badge>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 text-muted-foreground">
+                                <Server size={18} />
+                            </Button>
                         </div>
-                    </div>
-
-                    <div className="flex gap-2 text-xs text-slate-600 dark:text-slate-400 ml-2 mr-2 mt-1">
-                        <div className="flex flex-1 items-center space-x-2">
-                            <Globe size={14} className="text-slate-400 dark:text-slate-500" />
-                            <span className="text-center rounded flex-1 py-1 px-2 shadow-sm hover:shadow-lg bg-slate-800 border-slate-800 hover:bg-slate-700 hover:border-slate-700 text-slate-700 dark:text-slate-300">{host.ip}</span>
+                        <div className="mx-1 my-1">
+                            <h3 className="font-bold text-sm leading-tight">{host.hostname}</h3>
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{host.group}</span>
                         </div>
-                        <button className="rounded py-1 px-2 shadow-sm hover:shadow-lg bg-slate-800 border-slate-800 text-slate-50 hover:bg-slate-700 hover:border-slate-700">
-                            <Terminal size={14} />
-                        </button>
-                        <button className="rounded  py-1 px-2 shadow-sm hover:shadow-lg bg-slate-800 border-slate-800 text-slate-50 hover:bg-slate-700 hover:border-slate-700">
-                            <Edit2 size={14} />
-                        </button>
                     </div>
                 </div>
-            </div>
-            {/* <DialogHost open={dialogOpen.host} onClose={() => handleToggleOpen('host')} /> */}
-        </>
+
+                <div className="flex gap-2 text-xs text-muted-foreground ml-2 mr-2 mt-1">
+                    <div className="flex flex-1 items-center space-x-2">
+                        <Globe size={14} className="text-muted-foreground" />
+                        <span className="text-center rounded flex-1 py-1 px-2 shadow-sm bg-muted text-muted-foreground font-mono">
+                            {host.ip}
+                        </span>
+                    </div>
+                    <Button variant="secondary" size="icon" className="h-6 w-8 rounded">
+                        <Terminal size={14} />
+                    </Button>
+                    <Button variant="secondary" size="icon" className="h-6 w-8 rounded">
+                        <Edit2 size={14} />
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
     );
 };
 

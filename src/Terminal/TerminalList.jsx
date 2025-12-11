@@ -17,7 +17,8 @@ const TerminalList = () => {
     const terminals = useMemo(() => Array.from(terminalsMap.values()), [terminalsMap]);
     const sessions = useMemo(() => Array.from(sessionsMap.values()), [sessionsMap]);
 
-    console.log('[TerminalList] Terminals:', terminals.length, 'Sessions:', sessions.length);
+    console.log('[TerminalList] Render. Terminals count:', terminals.length, 'IDs:', terminals.map(t => t.id));
+    console.log('[TerminalList] Sessions count:', sessions.length);
 
     return (
         <>

@@ -91,9 +91,9 @@ const useTerminalStore = create(
                             cols: 40,
                         });
 
-                        // Configurar handlers do xterm
-                        xterm.onData((data) => get().writePty(id, data));
-                        xterm.onResize((size) => {
+                        // Armazenar disposables para cleanup posterior
+                        const onDataDisposable = xterm.onData((data) => get().writePty(id, data));
+                        const onResizeDisposable = xterm.onResize((size) => {
                             get().resizePty(id, {
                                 ...size,
                                 pixel_width: size.cols,
@@ -109,6 +109,8 @@ const useTerminalStore = create(
                                 shell,
                                 title: shell.name,
                                 xterm,
+                                // Armazenar disposables para cleanup
+                                disposables: { onDataDisposable, onResizeDisposable },
                                 isOpen: true,
                                 createdAt: new Date().toISOString(),
                             });
@@ -142,6 +144,19 @@ const useTerminalStore = create(
 
                         set((state) => {
                             const newTerminals = new Map(state.terminals);
+                            const terminal = newTerminals.get(id);
+
+                            // Cleanup dos event listeners do xterm antes de remover
+                            if (terminal?.disposables) {
+                                try {
+                                    terminal.disposables.onDataDisposable?.dispose();
+                                    terminal.disposables.onResizeDisposable?.dispose();
+                                    console.log(`[TerminalStore] Disposed event listeners for terminal ${id}`);
+                                } catch (error) {
+                                    console.warn(`[TerminalStore] Error disposing listeners for terminal ${id}:`, error);
+                                }
+                            }
+
                             const terminalArray = Array.from(newTerminals.keys());
                             const currentIndex = terminalArray.indexOf(id);
 
@@ -205,9 +220,9 @@ const useTerminalStore = create(
             /**
              * Spawna novo terminal PTY
              */
-            spawnPty: async (shell) => {
+            spawnPty: async (shell, cols = 80, rows = 24) => {
                 try {
-                    await invoke(PTY_SPAWN_COMMAND, { shell });
+                    await invoke(PTY_SPAWN_COMMAND, { shell, cols, rows });
                 } catch (error) {
                     console.error('[TerminalStore] Failed to spawn PTY:', error);
                     throw error;
@@ -264,8 +279,19 @@ const useTerminalStore = create(
             clear: () => {
                 const state = get();
 
-                // Matar todos os terminais
+                // Limpar event listeners e matar todos os terminais
                 state.terminals.forEach((terminal) => {
+                    // Cleanup dos event listeners
+                    if (terminal.disposables) {
+                        try {
+                            terminal.disposables.onDataDisposable?.dispose();
+                            terminal.disposables.onResizeDisposable?.dispose();
+                        } catch (error) {
+                            console.warn(`[TerminalStore] Error disposing listeners for terminal ${terminal.id}:`, error);
+                        }
+                    }
+
+                    // Matar o PTY
                     state.killPty(terminal.id).catch(console.error);
                 });
 

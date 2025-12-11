@@ -53,7 +53,7 @@ fn get_stock(mut shells: Vec<SystemShell>) -> Vec<SystemShell> {
     shells.push(SystemShell {
         id: "powershell".to_string(),
         name: "PowerShell".to_string(),
-        command: "powershell.exe".to_string(),
+        command: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe".to_string(),
         args: Vec::from(["-NoLogo".to_string()]),
         env: HashMap::from([("TERM".to_string(), "cygwin".to_string())]),
         cwd: None,

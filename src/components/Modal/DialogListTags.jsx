@@ -1,69 +1,95 @@
 import {
     Dialog,
-    Button,
-    Input,
-    Typography,
-    IconButton,
-    Accordion,
-    List,
-} from "@material-tailwind/react";
-import { Bin, Mail, NavArrowDown, Settings, Xmark } from "iconoir-react";
-import { use, useEffect, useState } from "react";
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+import { useState } from "react";
+import { v4 as uuidv4 } from 'uuid';
 import useConfigStore from "../../stores/ConfigData";
-import GroupCard from "../Cards/Groupscard";
-import { Tabs } from "@material-tailwind/react";
-import { Spinner, Badge } from "@material-tailwind/react";
 import useModalStore from "../../stores/useModalStore";
-export default function DialogListTags(props) {
-    const [host, setHost] = useState("");
-    const [defaultTab, setDefaultTab] = useState(null);
-    const [username, setUsername] = useState("");
-    const [password, setPassword] = useState("");
-    const { tags, addTag } = useConfigStore();
-    const { modals, closeModal } = useModalStore();
-    useEffect(() => {
-        if (tags.length > 0) {
-            setDefaultTab(tags[0].name)
-        }
-    }, [tags])
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        addTag(host, username, password);
-    };
-    console.log(modals);
+import { TagCard } from "../Tag/TagCard";
+import { TagModal } from "../Tag/TagModal";
 
-    if (defaultTab === null) {
-        // enquanto não carrega, evita erro e pode mostrar loading
-        return <Spinner color="info" />
-    }
+export default function DialogListTags() {
+    const { tags, addTag, editTag, removeTag } = useConfigStore();
+    const { modals, closeModal } = useModalStore();
+    const [isTagModalOpen, setIsTagModalOpen] = useState(false);
+    const [editingTag, setEditingTag] = useState(null);
+
+    const handleOpenChange = (open) => {
+        if (!open) closeModal('tagList');
+    };
+
+    const handleCreateTag = () => {
+        setEditingTag(null);
+        setIsTagModalOpen(true);
+    };
+
+    const handleEditTag = (tag) => {
+        setEditingTag(tag);
+        setIsTagModalOpen(true);
+    };
+
+    const handleDeleteTag = (id) => {
+        if (confirm("Tem certeza que deseja excluir esta tag?")) {
+            removeTag(id);
+        }
+    };
+
+    const handleSaveTag = (tagData) => {
+        if (tagData.id) {
+            editTag(tagData.id, tagData);
+        } else {
+            addTag(uuidv4(), tagData.name, tagData.description, tagData.color);
+        }
+        setIsTagModalOpen(false);
+    };
+
     return (
-        <Dialog size="xl" className="" open={modals.tagList} onOpenChange={(state) => {
-            if (!state) props.onClose(); // Fecha quando clicar fora ou apertar ESC
-        }}>
-            <Dialog.Content className="overflow-auto max-h-[88vh]">
-                <Dialog.DismissTrigger
-                    as={IconButton}
-                    size="sm"
-                    variant="ghost"
-                    isCircular
-                    color="secondary"
-                    className="absolute right-2 top-2"
-                    onClick={() => closeModal('connections')}
-                >
-                    <Xmark className="h-5 w-5" />
-                </Dialog.DismissTrigger>
-                <List className="flex flex-row gap-2">
-                    {tags.map(({ id, name }, index) => (
-                        <GroupCard
-                            key={index}
-                            group={{
-                                name: name,
-                                length: '0'
-                            }}
-                        />
-                    ))}
-                </List>
-            </Dialog.Content>
-        </Dialog >
+        <>
+            <Dialog open={modals.tagList} onOpenChange={handleOpenChange}>
+                <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-6">
+                    <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b">
+                        <DialogTitle className="text-2xl font-bold">Galeria de Tags</DialogTitle>
+                        <Button onClick={handleCreateTag} className="gap-2">
+                            <Plus className="w-4 h-4" />
+                            Nova Tag
+                        </Button>
+                    </DialogHeader>
+
+                    <div className="flex-1 overflow-y-auto py-6 pr-2">
+                        {tags.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed rounded-xl">
+                                <p>Nenhuma tag criada ainda.</p>
+                                <Button variant="link" onClick={handleCreateTag}>
+                                    Criar sua primeira tag
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {tags.map((tag) => (
+                                    <TagCard
+                                        key={tag.id}
+                                        tag={tag}
+                                        onEdit={handleEditTag}
+                                        onDelete={handleDeleteTag}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <TagModal
+                isOpen={isTagModalOpen}
+                onClose={() => setIsTagModalOpen(false)}
+                onSave={handleSaveTag}
+                tag={editingTag}
+            />
+        </>
     );
 }

@@ -1,172 +1,102 @@
-import { mtConfig } from "@material-tailwind/react";
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 
-module.exports = {
-    content: ["./index.html",
-        "./src/**/*.{js,ts,jsx,tsx}",
-        "./node_modules/@material-tailwind/react/**/*.{js,ts,jsx,tsx}"
-
+/** @type {import('tailwindcss').Config} */
+export default {
+    darkMode: ["class"],
+    content: [
+        './pages/**/*.{js,jsx}',
+        './components/**/*.{js,jsx}',
+        './app/**/*.{js,jsx}',
+        './src/**/*.{js,jsx}',
     ],
+    prefix: "",
     theme: {
+        container: {
+            center: true,
+            padding: "2rem",
+            screens: {
+                "2xl": "1400px",
+            },
+        },
         extend: {
             fontFamily: {
-                // CORREÇÃO: Movido para dentro da chave fontFamily
-                sans: ['Tim Sans', 'JetBrainsMono Nerd Font', 'sans-serif', "IBM Plex Sans", "Inter"],
-                mono: ['JetBrainsMono Nerd Font', 'monospace'],
-                system: ['Tim Sans', 'JetBrainsMono Nerd Font', 'sans-serif', 'Inter', "IBM Plex Sans"],
+                sans: [
+                    'Tim Sans',
+                    'JetBrainsMono Nerd Font',
+                    'sans-serif',
+                    'IBM Plex Sans',
+                    'Inter'
+                ],
+                mono: [
+                    'JetBrainsMono Nerd Font',
+                    'monospace'
+                ],
+                system: [
+                    'Tim Sans',
+                    'JetBrainsMono Nerd Font',
+                    'sans-serif',
+                    'Inter',
+                    'IBM Plex Sans'
+                ]
+            },
+            colors: {
+                border: "hsl(var(--border))",
+                input: "hsl(var(--input))",
+                ring: "hsl(var(--ring))",
+                background: "hsl(var(--background))",
+                foreground: "hsl(var(--foreground))",
+                primary: {
+                    DEFAULT: "hsl(var(--primary))",
+                    foreground: "hsl(var(--primary-foreground))",
+                },
+                secondary: {
+                    DEFAULT: "hsl(var(--secondary))",
+                    foreground: "hsl(var(--secondary-foreground))",
+                },
+                destructive: {
+                    DEFAULT: "hsl(var(--destructive))",
+                    foreground: "hsl(var(--destructive-foreground))",
+                },
+                muted: {
+                    DEFAULT: "hsl(var(--muted))",
+                    foreground: "hsl(var(--muted-foreground))",
+                },
+                accent: {
+                    DEFAULT: "hsl(var(--accent))",
+                    foreground: "hsl(var(--accent-foreground))",
+                },
+                popover: {
+                    DEFAULT: "hsl(var(--popover))",
+                    foreground: "hsl(var(--popover-foreground))",
+                },
+                card: {
+                    DEFAULT: "hsl(var(--card))",
+                    foreground: "hsl(var(--card-foreground))",
+                },
+            },
+            borderRadius: {
+                lg: "var(--radius)",
+                md: "calc(var(--radius) - 2px)",
+                sm: "calc(var(--radius) - 4px)",
+            },
+            keyframes: {
+                "accordion-down": {
+                    from: { height: "0" },
+                    to: { height: "var(--radix-accordion-content-height)" },
+                },
+                "accordion-up": {
+                    from: { height: "var(--radix-accordion-content-height)" },
+                    to: { height: "0" },
+                },
+            },
+            animation: {
+                "accordion-down": "accordion-down 0.2s ease-out",
+                "accordion-up": "accordion-up 0.2s ease-out",
             },
         },
     },
-    darkMode: "class",
-    plugins: [mtConfig({
-        fontFamily: {
-            sans: ['Tim Sans', 'JetBrainsMono Nerd Font', 'sans-serif', "IBM Plex Sans"],
-            body: ['Tim Sans', 'JetBrainsMono Nerd Font', 'sans-serif', "IBM Plex Sans"],
-        },
-        colors: {
-            black: "#030712",
-            inherit: "#9CA3AF",
-            background: "#030712",
-            foreground: "#bac2d1",
-            default: {
-                default: "#9CA3AF",
-                dark: "#F9FAFB",
-                light: "#111827",
-                foreground: "#E5E7EB"
-            },
-            surface: {
-                default: "#1F2937",
-                dark: "#F9FAFB",
-                light: "#111827",
-                foreground: "#E5E7EB"
-            },
-            primary: {
-                default: "#F3F4F6",
-                dark: "#E5E7EB",
-                light: "#F9FAFB",
-                foreground: "#030712"
-            },
-            secondary: {
-                default: "#1F2937",
-                dark: "#111827",
-                light: "#374151",
-                foreground: "#F9FAFB"
-            },
-            info: {
-                default: "#3B82F6",
-                dark: "#60A5FA",
-                light: "#2563EB",
-                foreground: "#030712"
-            },
-            success: {
-                default: "#22C55E",
-                dark: "#16A34A",
-                light: "#4ADE80",
-                foreground: "#030712"
-            },
-            warning: {
-                default: "#FACC15",
-                dark: "#EABC08",
-                light: "#FDE047",
-                foreground: "#030712"
-            },
-            error: {
-                default: "#EF4444",
-                dark: "#DC2626",
-                light: "#F87171",
-                foreground: "#030712"
-            }
-
-        },
-        darkColors: {
-
-            background: "#030712",
-
-            foreground: "#9CA3AF",
-
-            surface: {
-
-                default: "#1F2937",
-
-                dark: "#F9FAFB",
-
-                light: "#111827",
-
-                foreground: "#E5E7EB"
-
-            },
-
-            primary: {
-
-                default: "#F3F4F6",
-
-                dark: "#E5E7EB",
-
-                light: "#F9FAFB",
-
-                foreground: "#030712"
-
-            },
-
-            secondary: {
-
-                default: "#1F2937",
-
-                dark: "#111827",
-
-                light: "#374151",
-
-                foreground: "#F9FAFB"
-
-            },
-
-            info: {
-
-                default: "#3B82F6",
-
-                dark: "#60A5FA",
-
-                light: "#2563EB",
-
-                foreground: "#030712"
-
-            },
-
-            success: {
-
-                default: "#22C55E",
-
-                dark: "#16A34A",
-
-                light: "#4ADE80",
-
-                foreground: "#030712"
-
-            },
-
-            warning: {
-
-                default: "#FACC15",
-
-                dark: "#EABC08",
-
-                light: "#FDE047",
-
-                foreground: "#030712"
-
-            },
-
-            error: {
-
-                default: "#EF4444",
-
-                dark: "#DC2626",
-
-                light: "#F87171",
-
-                foreground: "#030712"
-
-            },
-
-        }
-    })],
+    plugins: [
+        require("tailwindcss-animate")
+    ],
 }
