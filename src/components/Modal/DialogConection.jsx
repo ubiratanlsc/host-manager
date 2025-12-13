@@ -10,8 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 import useConfigStore from "../../stores/ConfigData";
 import useModalStore from "../../stores/useModalStore";
+import useTabStore from "../../stores/useTabStore";
 
 export default function DialogConection() {
     const [host, setHost] = useState("");
@@ -20,9 +22,16 @@ export default function DialogConection() {
     const [port, setPort] = useState(22);
     const { addCustomer } = useConfigStore();
     const { modals, closeModal } = useModalStore();
+    const { setObjectAndAddToGroup } = useTabStore();
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        const object = {
+            id: uuidv4(),
+            name: host,
+            group: "Comum"
+        };
+        setObjectAndAddToGroup(object);
         addCustomer(host, username, password);
         closeModal('connect');
     };
