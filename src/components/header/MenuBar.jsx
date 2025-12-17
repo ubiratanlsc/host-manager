@@ -93,8 +93,9 @@ export function MenuBar({ className, disabled = false }) {
 
     return (
         <header
+            // aqui tinha um fixed
             className={cn(
-                "fixed top-0 left-0 right-0 z-50 h-14 bg-background border-b border-border shadow-sm flex items-center justify-between px-4 select-none transition-colors duration-300 [app-region:drag]",
+                " top-0 left-0 right-0 z-50 h-14 bg-background border-b border-border shadow-sm flex items-center justify-between px-4 select-none transition-colors duration-300 [app-region:drag]",
                 className
             )}
         >

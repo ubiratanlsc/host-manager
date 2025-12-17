@@ -14,8 +14,7 @@ import DialogTag from './components/Modal/DialogTag';
 import DialogListConections from './components/Modal/DialogListConections';
 import DialogListGroups from './components/Modal/DialogListGroups';
 import DialogListTags from './components/Modal/DialogListTags';
-import TabTerms from './components/Tab/Tab';
-import useTabStore from './stores/useTabStore';
+import MainTerminalView from './Terminal/MainTerminalView';
 
 
 const App = () => {
@@ -28,7 +27,6 @@ const App = () => {
   const initLoadData = useLoadData(state => state.initLoadData);
   const { openModal, closeModal } = useModalStore();
   const { configs, addConfig } = useConfigStore();
-  const { tabs } = useTabStore();
 
   useEffect(() => {
     // Inicializar listeners e carregar configurações
@@ -68,19 +66,18 @@ const App = () => {
   return (
     <div className="h-screen flex flex-col overflow-hidden text-gray-900 dark:text-gray-100 font-[IBM Plex Sans]">
       <MenuBar />
-      <div className="pt-14 bg-background">
-        {tabs.length > 0 ? <TabTerms /> : <></>}
+      <Home />
+      <div className="flex-1 flex flex-col overflow-hidden bg-background transition-colors duration-300">
+        <MainTerminalView />
       </div>
-      <div className="flex-1 overflow-auto pt-14 bg-background transition-colors duration-300">
-        <DialogListConections onClose={() => closeModal('connections')} />
-        <DialogListGroups onClose={() => closeModal('groupsList')} />
-        <DialogListTags onClose={() => closeModal('tagList')} />
-        <DialogConection onClose={() => closeModal('connect')} />
-        <DialogHost onClose={() => closeModal('host')} />
-        <DialogGroup onClose={() => closeModal('group')} />
-        <DialogSettings onClose={() => closeModal('settings')} />
-        <DialogTag onClose={() => closeModal('tag')} />
-      </div>
+      <DialogListConections onClose={() => closeModal('connections')} />
+      <DialogListGroups onClose={() => closeModal('groupsList')} />
+      <DialogListTags onClose={() => closeModal('tagList')} />
+      <DialogConection onClose={() => closeModal('connect')} />
+      <DialogHost onClose={() => closeModal('host')} />
+      <DialogGroup onClose={() => closeModal('group')} />
+      <DialogSettings onClose={() => closeModal('settings')} />
+      <DialogTag onClose={() => closeModal('tag')} />
     </div>
   );
 };

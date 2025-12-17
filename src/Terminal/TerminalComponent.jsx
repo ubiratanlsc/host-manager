@@ -186,7 +186,7 @@ const TerminalComponent = ({ terminalId }) => {
     // LOADING STATE - Enquanto aguarda o terminal chegar do backend
     if (isWaiting && !terminal) {
         return (
-            <div className="flex items-center justify-center w-full h-screen bg-[#1A1B1E] text-gray-400">
+            <div className="flex items-center justify-center w-full h-full bg-[#1A1B1E] text-gray-400">
                 <div className="flex flex-col items-center gap-3">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
                     <p className="text-sm">Iniciando terminal...</p>
@@ -198,7 +198,7 @@ const TerminalComponent = ({ terminalId }) => {
     // Terminal não encontrado após espera
     if (!terminal) {
         return (
-            <div className="flex items-center justify-center w-full h-screen bg-[#1A1B1E] text-red-400">
+            <div className="flex items-center justify-center w-full h-full bg-[#1A1B1E] text-red-400">
                 <div className="flex flex-col items-center gap-2">
                     <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -213,7 +213,7 @@ const TerminalComponent = ({ terminalId }) => {
     return (
         <div
             ref={containerRef}
-            className="w-full h-screen overflow-hidden flex flex-col relative bg-[#1A1B1E]"
+            className="w-full h-full overflow-hidden flex flex-col relative bg-[#1A1B1E]"
         >
             <div
                 ref={terminalRef}

@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import useModalStore from '../../stores/useModalStore';
+import useSSHStore from '../../stores/useSSHStore';
+import useConfigStore from '../../stores/ConfigData';
 
 const HostCard = ({ host, onEdit, onConnect }) => {
-    const { openModal } = useModalStore();
-    // Dialog state logic was here but seemingly unused or controlled externally/internally. 
-    // The original code commented out DialogHost at the bottom.
+    const { openModal, closeModal } = useModalStore();
+    const spawnSSH = useSSHStore((state) => state.spawnSSH);
+    const { customers } = useConfigStore();
 
     // Mapping status to colors
     const statusColor =
@@ -18,6 +20,35 @@ const HostCard = ({ host, onEdit, onConnect }) => {
             : host.status === 'offline'
                 ? 'bg-red-500 hover:bg-red-600'
                 : 'bg-amber-500 hover:bg-amber-600';
+
+    const handleConnect = async () => {
+        try {
+            // Buscar credenciais salvas do customer
+            const customer = customers.find(c => c.host === host.ip);
+
+            if (!customer) {
+                console.error('[HostCard] Customer credentials not found');
+                alert('Credenciais não encontradas. Por favor, configure a conexão novamente.');
+                return;
+            }
+
+            // Fechar modal de conexões
+            closeModal('connections');
+
+            // Spawn SSH session
+            await spawnSSH({
+                host: customer.host,
+                port: customer.port || 22,
+                username: customer.username,
+                password: customer.password,
+            });
+
+            console.log('[HostCard] SSH session spawned successfully');
+        } catch (error) {
+            console.error('[HostCard] Error spawning SSH:', error);
+            alert(`Failed to connect: ${error.message || error}`);
+        }
+    };
 
     return (
         <Card className="flex-1 max-h-24 transition-all hover:shadow-lg hover:-translate-y-1 overflow-hidden">
@@ -46,10 +77,22 @@ const HostCard = ({ host, onEdit, onConnect }) => {
                             {host.ip}
                         </span>
                     </div>
-                    <Button variant="secondary" size="icon" className="h-6 w-8 rounded">
+                    <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-6 w-8 rounded"
+                        onClick={handleConnect}
+                        title="Connect SSH"
+                    >
                         <Terminal size={14} />
                     </Button>
-                    <Button variant="secondary" size="icon" className="h-6 w-8 rounded">
+                    <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-6 w-8 rounded"
+                        onClick={onEdit}
+                        title="Edit Host"
+                    >
                         <Edit2 size={14} />
                     </Button>
                 </div>

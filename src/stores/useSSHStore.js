@@ -55,7 +55,7 @@ const useSSHStore = create(
                 try {
                     // Listener para spawn de sessão SSH
                     const spawnListener = await listen(SSH_SPAWN_EVENT, ({ payload }) => {
-                        const { id } = payload;
+                        const { id, host, port, username } = payload;
 
                         // Criar instância xterm para SSH
                         const xterm = new Terminal({
@@ -90,13 +90,16 @@ const useSSHStore = create(
                             // TODO: Implementar resize no backend se necessário
                         });
 
+                        const config = { host, port, username };
+
                         // Adicionar sessão ao estado
                         set((state) => {
                             const newSessions = new Map(state.sessions);
                             newSessions.set(id, {
                                 id,
                                 shell: { name: 'SSH' },
-                                title: 'SSH',
+                                title: `${username}@${host}`,
+                                config,
                                 xterm,
                                 isOpen: true,
                                 createdAt: new Date().toISOString(),

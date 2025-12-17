@@ -1,18 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import useTerminalStore from './stores/useTerminalStore';
 import useSSHStore from './stores/useSSHStore';
 import useHostStore from './stores/useHostStore';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import MainTerminalView from './Terminal/MainTerminalView';
+import useModalStore from './stores/useModalStore';
 
 /**
  * Home - Dashboard principal da aplicação
- * Mostra terminais ativos e permite criar novos
+ * Mostra terminais ativos e permite criar novos com split view
  */
 const Home = () => {
-    const [showList, setShowList] = useState(false);
-
     // Terminal Store
     const shells = useTerminalStore((state) => state.shells);
     const spawnPty = useTerminalStore((state) => state.spawnPty);
@@ -21,18 +19,18 @@ const Home = () => {
     const terminalsCount = useTerminalStore((state) => state.terminals.size);
 
     // SSH Store
-    const spawnSSH = useSSHStore((state) => state.spawnSSH);
     const sessionsCount = useSSHStore((state) => state.sessions.size);
 
     // Host Store
     const hostsCount = useHostStore((state) => state.hosts.length);
+
+    const openModal = useModalStore((state) => state.openModal);
 
     /**
      * Inicialização na montagem do componente
      */
     useEffect(() => {
         const initialize = async () => {
-            // Carregar shells do sistema (listeners já inicializados no App.jsx)
             if (shells.length === 0) {
                 console.log('[Home] Loading system shells...');
                 await loadSystemShells();
@@ -50,7 +48,6 @@ const Home = () => {
         console.log('[Home] Available shells:', shells);
         console.log('[Home] Is initialized:', isInitialized);
 
-        // Verificar se está inicializado
         if (!isInitialized) {
             console.warn('[Home] Listeners not initialized yet');
             alert('Terminal system is still initializing. Please wait a moment.');
@@ -58,17 +55,12 @@ const Home = () => {
         }
 
         try {
-            // Mostrar a view primeiro para exibir o loading state
-            setShowList(true);
-
             if (shells.length > 0) {
-                // Usar o shell preferido (índice 1 se existir, senão 0)
                 const selectedShell = shells[1] || shells[0];
                 console.log('[Home] Spawning with shell:', selectedShell);
                 await spawnPty(selectedShell);
             } else {
                 console.warn('[Home] No shells detected. Attempting fallback spawn...');
-                // Fallback para Windows
                 await spawnPty({
                     name: 'PowerShell',
                     command: 'powershell.exe',
@@ -80,57 +72,14 @@ const Home = () => {
         } catch (error) {
             console.error('[Home] Error spawning terminal:', error);
             alert(`Failed to spawn terminal: ${error.message || error}`);
-            // Se falhar, pode esconder a lista se não houver outros terminais
-            if (terminalsCount === 0) {
-                setShowList(false);
-            }
         }
     };
 
     /**
      * Spawn de sessão SSH
      */
-    const handleSpawnSSH = async () => {
-        console.log('[Home] Attempting to spawn SSH...');
-
-        try {
-            // Mostrar a view primeiro
-            setShowList(true);
-
-            await spawnSSH({
-                host: '192.168.7.5',
-                port: 22,
-                username: 'root',
-                password: '19114290031!bira',
-            });
-
-            console.log('[Home] SSH spawn command sent successfully');
-        } catch (error) {
-            console.error('[Home] Error spawning SSH:', error);
-            alert(`Failed to connect SSH: ${error.message || error}`);
-            // Se falhar, pode esconder a lista se não houver outras sessões
-            if (sessionsCount === 0) {
-                setShowList(false);
-            }
-        }
-    };
-
-    /**
-     * Esconder a lista se não houver terminais nem sessões
-     */
-    useEffect(() => {
-        if (showList && terminalsCount === 0 && sessionsCount === 0) {
-            console.log('[Home] No terminals or sessions, hiding view');
-            // Usar timeout para evitar loop de re-render
-            const timer = setTimeout(() => {
-                setShowList(false);
-            }, 100);
-            return () => clearTimeout(timer);
-        }
-    }, [terminalsCount, sessionsCount, showList]);
-
     return (
-        <div className="h-screen flex flex-col p-4 bg-background text-foreground">
+        <div className="flex flex-col p-4 pb-0 bg-background text-foreground">
             {/* Card com botões */}
             <Card className="mb-4">
                 <CardContent className="flex gap-4 p-4 items-center">
@@ -148,7 +97,7 @@ const Home = () => {
                     </Button>
 
                     <Button
-                        onClick={handleSpawnSSH}
+                        onClick={() => openModal('connect')}
                         variant="secondary"
                     >
                         New SSH Connection
@@ -179,9 +128,6 @@ const Home = () => {
                     <span>Hosts: {hostsCount}</span>
                 </div>
             </div>
-
-            {/* View principal dos terminais/SSH */}
-            {showList && <MainTerminalView />}
         </div>
     );
 };

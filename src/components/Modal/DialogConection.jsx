@@ -13,7 +13,7 @@ import { useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import useConfigStore from "../../stores/ConfigData";
 import useModalStore from "../../stores/useModalStore";
-import useTabStore from "../../stores/useTabStore";
+import useSSHStore from "../../stores/useSSHStore";
 
 export default function DialogConection() {
     const [host, setHost] = useState("");
@@ -22,18 +22,48 @@ export default function DialogConection() {
     const [port, setPort] = useState(22);
     const { addCustomer } = useConfigStore();
     const { modals, closeModal } = useModalStore();
-    const { setObjectAndAddToGroup } = useTabStore();
+    const spawnSSH = useSSHStore((state) => state.spawnSSH);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        const object = {
-            id: uuidv4(),
-            name: host,
-            group: "Comum"
-        };
-        setObjectAndAddToGroup(object);
-        addCustomer(host, username, password);
-        closeModal('connect');
+
+        // Gerar ID para o customer
+        const customerId = uuidv4();
+
+        // Salvar customer na config
+        // addCustomer(id, name, host, port, username, password, group, tagId)
+        addCustomer(
+            customerId,
+            host,           // name
+            host,           // host (IP)
+            parseInt(port),
+            username,
+            password,
+            'default',      // group padrão
+            null            // sem tag
+        );
+
+        // Spawn SSH session
+        try {
+            await spawnSSH({
+                host,
+                port: parseInt(port),
+                username,
+                password,
+            });
+
+            console.log('[DialogConection] SSH session spawned successfully');
+            closeModal('connect');
+
+            // Limpar form
+            setHost("");
+            setUsername("");
+            setPassword("");
+            setPort(22);
+        } catch (error) {
+            console.error('[DialogConection] Error spawning SSH:', error);
+            alert(`Failed to connect: ${error.message || error}`);
+        }
     };
 
     const handleOpenChange = (open) => {
