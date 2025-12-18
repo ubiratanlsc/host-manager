@@ -131,31 +131,58 @@ const Pane = ({ paneId }) => {
         closePane(paneId);
     };
 
-    // Renderizar conteúdo do terminal ativo
-    const renderActiveContent = () => {
-        if (!activeTerminalId) {
+    // Renderizar todos os terminais, mas mostrar apenas o ativo
+    const renderTerminals = () => {
+        if (terminalIds.length === 0) {
             return (
                 <div className="flex-1 flex items-center justify-center text-gray-500">
-                    <p>No active terminal</p>
+                    <p>No terminals</p>
                 </div>
             );
         }
 
-        const terminal = terminals.get(activeTerminalId);
-        const session = sessions.get(activeTerminalId);
-
-        if (terminal) {
-            return <TerminalComponent key={activeTerminalId} terminalId={activeTerminalId} />;
-        }
-
-        if (session) {
-            return <SSHComponent key={activeTerminalId} sessionId={activeTerminalId} />;
-        }
-
         return (
-            <div className="flex-1 flex items-center justify-center text-gray-500">
-                <p>Terminal not found</p>
-            </div>
+            <>
+                {terminalIds.map((terminalId) => {
+                    const terminal = terminals.get(terminalId);
+                    const session = sessions.get(terminalId);
+                    const isActive = terminalId === activeTerminalId;
+
+                    // Renderizar terminal, mas ocultar se não estiver ativo
+                    // IMPORTANTE: Usar visibility ao invés de display para preservar xterm.js
+                    if (terminal) {
+                        return (
+                            <div
+                                key={terminalId}
+                                className="absolute inset-0"
+                                style={{
+                                    visibility: isActive ? 'visible' : 'hidden',
+                                    pointerEvents: isActive ? 'auto' : 'none'
+                                }}
+                            >
+                                <TerminalComponent terminalId={terminalId} />
+                            </div>
+                        );
+                    }
+
+                    if (session) {
+                        return (
+                            <div
+                                key={terminalId}
+                                className="absolute inset-0"
+                                style={{
+                                    visibility: isActive ? 'visible' : 'hidden',
+                                    pointerEvents: isActive ? 'auto' : 'none'
+                                }}
+                            >
+                                <SSHComponent sessionId={terminalId} />
+                            </div>
+                        );
+                    }
+
+                    return null;
+                })}
+            </>
         );
     };
 
@@ -239,7 +266,7 @@ const Pane = ({ paneId }) => {
                 {/* Conteúdo do terminal ativo */}
                 <div className="flex-1 flex flex-col overflow-hidden">
                     <div className="flex-1 relative">
-                        {renderActiveContent()}
+                        {renderTerminals()}
 
                         {/* Drop Zones - aparecem durante drag */}
                         {showDropZones && (
