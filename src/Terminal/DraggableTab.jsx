@@ -61,17 +61,16 @@ const DraggableTab = ({
                 <span className="text-xs font-medium select-none truncate max-w-[160px]">{label}</span>
             </div>
 
-            <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 ml-auto opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive p-0"
+            <div
+                role="button"
+                className="h-5 w-5 ml-auto opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive p-0 flex items-center justify-center"
                 onClick={(e) => {
                     e.stopPropagation();
                     onClose?.();
                 }}
             >
                 <X className="h-3 w-3" />
-            </Button>
+            </div>
         </TabsTrigger>
     );
 };

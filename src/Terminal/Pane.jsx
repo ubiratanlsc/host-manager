@@ -95,7 +95,9 @@ const Pane = ({ paneId }) => {
         );
     }
 
-    const { terminalIds, activeTerminalId } = pane;
+    // Desestruturar com fallback seguro para evitar undefined
+    const terminalIds = pane.terminalIds || [];
+    const activeTerminalId = pane.activeTerminalId || terminalIds[0] || null;
 
     const handleActivateTerminal = (terminalId) => {
         setActiveTerminal(paneId, terminalId);
@@ -143,11 +145,11 @@ const Pane = ({ paneId }) => {
         const session = sessions.get(activeTerminalId);
 
         if (terminal) {
-            return <TerminalComponent terminalId={activeTerminalId} />;
+            return <TerminalComponent key={activeTerminalId} terminalId={activeTerminalId} />;
         }
 
         if (session) {
-            return <SSHComponent sessionId={activeTerminalId} />;
+            return <SSHComponent key={activeTerminalId} sessionId={activeTerminalId} />;
         }
 
         return (
@@ -189,9 +191,9 @@ const Pane = ({ paneId }) => {
 
                     <div
                         ref={setTabListDropRef}
-                        className={`flex-1 overflow-x-auto ${isOverTabList ? 'bg-blue-500/10 rounded' : ''}`}
+                        className={`flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent ${isOverTabList ? 'bg-blue-500/10 rounded' : ''}`}
                     >
-                        <TabsList className="h-8 w-max max-w-full justify-start rounded-md bg-transparent p-0 gap-1">
+                        <TabsList className="inline-flex flex-nowrap h-8 items-center justify-start rounded-md bg-transparent p-0 gap-1 w-auto">
                             <SortableContext items={terminalIds} strategy={horizontalListSortingStrategy}>
                                 {terminalIds.map((terminalId) => {
                                     const terminal = terminals.get(terminalId);
@@ -234,120 +236,122 @@ const Pane = ({ paneId }) => {
                     </div>
                 </div>
 
-            {/* Conteúdo do terminal ativo */}
-            <div className="flex-1 overflow-hidden relative">
-                {renderActiveContent()}
+                {/* Conteúdo do terminal ativo */}
+                <div className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex-1 relative">
+                        {renderActiveContent()}
 
-                {/* Drop Zones - aparecem durante drag */}
-                {showDropZones && (
-                    <>
-                        {/* Centro - Merge */}
-                        <div
-                            ref={setDropCenterRef}
-                            className={`
+                        {/* Drop Zones - aparecem durante drag */}
+                        {showDropZones && (
+                            <>
+                                {/* Centro - Merge */}
+                                <div
+                                    ref={setDropCenterRef}
+                                    className={`
                                 absolute inset-[20%] 
                                 border-2 border-dashed rounded-lg
                                 flex items-center justify-center
                                 transition-all pointer-events-auto
                                 ${isOverCenter
-                                    ? 'bg-blue-500/20 border-blue-500'
-                                    : 'bg-transparent border-gray-600/50'
-                                }
+                                            ? 'bg-blue-500/20 border-blue-500'
+                                            : 'bg-transparent border-gray-600/50'
+                                        }
                             `}
-                        >
-                            {isOverCenter && (
-                                <span className="text-sm text-blue-400 font-medium">
-                                    Merge aqui
-                                </span>
-                            )}
-                        </div>
+                                >
+                                    {isOverCenter && (
+                                        <span className="text-sm text-blue-400 font-medium">
+                                            Merge aqui
+                                        </span>
+                                    )}
+                                </div>
 
-                        {/* Top - Split Vertical */}
-                        <div
-                            ref={setDropTopRef}
-                            className={`
+                                {/* Top - Split Vertical */}
+                                <div
+                                    ref={setDropTopRef}
+                                    className={`
                                 absolute top-0 left-0 right-0 h-[20%]
                                 border-2 border-dashed
                                 flex items-center justify-center
                                 transition-all pointer-events-auto
                                 ${isOverTop
-                                    ? 'bg-green-500/20 border-green-500'
-                                    : 'bg-transparent border-gray-600/50'
-                                }
+                                            ? 'bg-green-500/20 border-green-500'
+                                            : 'bg-transparent border-gray-600/50'
+                                        }
                             `}
-                        >
-                            {isOverTop && (
-                                <span className="text-sm text-green-400 font-medium">
-                                    Split acima
-                                </span>
-                            )}
-                        </div>
+                                >
+                                    {isOverTop && (
+                                        <span className="text-sm text-green-400 font-medium">
+                                            Split acima
+                                        </span>
+                                    )}
+                                </div>
 
-                        {/* Bottom - Split Vertical */}
-                        <div
-                            ref={setDropBottomRef}
-                            className={`
+                                {/* Bottom - Split Vertical */}
+                                <div
+                                    ref={setDropBottomRef}
+                                    className={`
                                 absolute bottom-0 left-0 right-0 h-[20%]
                                 border-2 border-dashed
                                 flex items-center justify-center
                                 transition-all pointer-events-auto
                                 ${isOverBottom
-                                    ? 'bg-green-500/20 border-green-500'
-                                    : 'bg-transparent border-gray-600/50'
-                                }
+                                            ? 'bg-green-500/20 border-green-500'
+                                            : 'bg-transparent border-gray-600/50'
+                                        }
                             `}
-                        >
-                            {isOverBottom && (
-                                <span className="text-sm text-green-400 font-medium">
-                                    Split abaixo
-                                </span>
-                            )}
-                        </div>
+                                >
+                                    {isOverBottom && (
+                                        <span className="text-sm text-green-400 font-medium">
+                                            Split abaixo
+                                        </span>
+                                    )}
+                                </div>
 
-                        {/* Left - Split Horizontal */}
-                        <div
-                            ref={setDropLeftRef}
-                            className={`
+                                {/* Left - Split Horizontal */}
+                                <div
+                                    ref={setDropLeftRef}
+                                    className={`
                                 absolute top-0 left-0 bottom-0 w-[20%]
                                 border-2 border-dashed
                                 flex items-center justify-center
                                 transition-all pointer-events-auto
                                 ${isOverLeft
-                                    ? 'bg-green-500/20 border-green-500'
-                                    : 'bg-transparent border-gray-600/50'
-                                }
+                                            ? 'bg-green-500/20 border-green-500'
+                                            : 'bg-transparent border-gray-600/50'
+                                        }
                             `}
-                        >
-                            {isOverLeft && (
-                                <span className="text-sm text-green-400 font-medium rotate-[-90deg]">
-                                    Split esquerda
-                                </span>
-                            )}
-                        </div>
+                                >
+                                    {isOverLeft && (
+                                        <span className="text-sm text-green-400 font-medium rotate-[-90deg]">
+                                            Split esquerda
+                                        </span>
+                                    )}
+                                </div>
 
-                        {/* Right - Split Horizontal */}
-                        <div
-                            ref={setDropRightRef}
-                            className={`
+                                {/* Right - Split Horizontal */}
+                                <div
+                                    ref={setDropRightRef}
+                                    className={`
                                 absolute top-0 right-0 bottom-0 w-[20%]
                                 border-2 border-dashed
                                 flex items-center justify-center
                                 transition-all pointer-events-auto
                                 ${isOverRight
-                                    ? 'bg-green-500/20 border-green-500'
-                                    : 'bg-transparent border-gray-600/50'
-                                }
+                                            ? 'bg-green-500/20 border-green-500'
+                                            : 'bg-transparent border-gray-600/50'
+                                        }
                             `}
-                        >
-                            {isOverRight && (
-                                <span className="text-sm text-green-400 font-medium rotate-90">
-                                    Split direita
-                                </span>
-                            )}
-                        </div>
-                    </>
-                )}
-            </div>
+                                >
+                                    {isOverRight && (
+                                        <span className="text-sm text-green-400 font-medium rotate-90">
+                                            Split direita
+                                        </span>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
             </Tabs>
         </div>
     );

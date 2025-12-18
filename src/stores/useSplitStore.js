@@ -41,12 +41,27 @@ const useSplitStore = create(
                 const state = get();
                 const activeSplitId = state.activePaneId;
 
+                // Se não houver split ativo ou inválido
                 if (!activeSplitId || !state.splits.has(activeSplitId)) {
+                    // Tenta encontrar o primeiro split 'single' disponível
+                    const firstLeafId = Array.from(state.splits.values()).find(s => s.type === 'single')?.id;
+                    if (firstLeafId) {
+                        get().setActivePane(firstLeafId);
+                        // Chama recursivamente com o novo ID ativo
+                        return get().addTerminalToActivePane(terminalId);
+                    }
+                    // Se não houver nenhum, inicializa
                     return get().initializeWithTerminal(terminalId);
                 }
 
                 const activeSplit = state.splits.get(activeSplitId);
                 if (!activeSplit || activeSplit.type !== 'single') {
+                     // Se o ativo não for single, tenta encontrar um single
+                    const firstLeafId = Array.from(state.splits.values()).find(s => s.type === 'single')?.id;
+                    if (firstLeafId) {
+                        get().setActivePane(firstLeafId);
+                        return get().addTerminalToActivePane(terminalId);
+                    }
                     return get().initializeWithTerminal(terminalId);
                 }
 

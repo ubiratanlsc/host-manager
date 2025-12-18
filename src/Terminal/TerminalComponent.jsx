@@ -66,12 +66,12 @@ const TerminalComponent = ({ terminalId }) => {
 
             if (dims) {
                 // Prevenir redimensionamentos redundantes que causam repetição do prompt
-                if (terminal.xterm.cols === dims.cols && terminal.xterm.rows === dims.rows) {
+                if (terminal.xterm.cols === Math.floor(dims.cols) && terminal.xterm.rows === Math.floor(dims.rows)) {
                     return;
                 }
 
-                console.log(`[Terminal ${terminalId}] Resizing to: ${dims.cols}x${dims.rows}`);
-                terminal.xterm.resize(dims.cols, dims.rows);
+                console.log(`[Terminal ${terminalId}] Resizing to: ${Math.floor(dims.cols)}x${Math.floor(dims.rows)}`);
+                terminal.xterm.resize(Math.floor(dims.cols), Math.floor(dims.rows));
             }
         } catch (error) {
             console.error(`[Terminal ${terminalId}] Resize error:`, error);

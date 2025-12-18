@@ -56,13 +56,13 @@ const SplitPaneRenderer = ({ splitId }) => {
             onLayout={(sizes) => updateSplitSizes(splitId, sizes)}
             className="w-full h-full"
         >
-            <ResizablePanel defaultSize={defaultSizes[0]} minSize={10}>
+            <ResizablePanel className="z-[10000] overflow-hidden" defaultSize={defaultSizes[0]} minSize={10}>
                 <SplitPaneRenderer splitId={split.children[0]} />
             </ResizablePanel>
 
             <CustomResizeHandle direction={split.type} />
 
-            <ResizablePanel defaultSize={defaultSizes[1]} minSize={10}>
+            <ResizablePanel className="z-[10002] overflow-hidden" defaultSize={defaultSizes[1]} minSize={10}>
                 <SplitPaneRenderer splitId={split.children[1]} />
             </ResizablePanel>
         </ResizablePanelGroup>
@@ -91,23 +91,8 @@ const SplitPane = () => {
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
     );
 
-    // Inicializar com o primeiro terminal disponível
-    useEffect(() => {
-        if (!rootSplitId && terminals.size > 0) {
-            const firstTerminalId = Array.from(terminals.keys())[0];
-            initializeWithTerminal(firstTerminalId);
-        } else if (!rootSplitId && sessions.size > 0) {
-            const firstSessionId = Array.from(sessions.keys())[0];
-            useSplitStore.getState().initializeWithTerminal(firstSessionId);
-            // Atualizar para SSH
-            const split = useSplitStore.getState().splits.get(
-                useSplitStore.getState().rootSplitId
-            );
-            if (split) {
-                split.sessionType = 'ssh';
-            }
-        }
-    }, [rootSplitId, terminals.size, sessions.size, initializeWithTerminal]);
+    // NOTA: Inicialização de terminais é feita pelo MainTerminalView.jsx
+    // Não duplicar aqui para evitar race conditions
 
     if (!rootSplitId) {
         return (
