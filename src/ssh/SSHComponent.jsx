@@ -1,10 +1,34 @@
-import { useEffect, useRef, useState } from 'react';
-import { FitAddon } from '@xterm/addon-fit';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSize } from 'ahooks';
-import { WebglAddon } from '@xterm/addon-webgl';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { SerializeAddon } from '@xterm/addon-serialize';
+import { WebglAddon } from '@xterm/addon-webgl';
+import { isTauri } from '@tauri-apps/api/core';
 import useSSHStore from '../stores/useSSHStore';
 import '@xterm/xterm/css/xterm.css';
+
+const canUseWebgl = () => {
+    try {
+        const key = '__xterm_webgl_context_count__';
+        const current = Number(window[key] || 0);
+        if (current >= 4) return false;
+        window[key] = current + 1;
+        return true;
+    } catch (_) {
+        return false;
+    }
+};
+
+const releaseWebgl = () => {
+    try {
+        const key = '__xterm_webgl_context_count__';
+        const current = Number(window[key] || 0);
+        window[key] = Math.max(0, current - 1);
+    } catch (_) {
+    }
+};
 
 /**
  * SSHComponent - Renderiza um terminal SSH individual usando xterm.js
@@ -13,103 +37,260 @@ import '@xterm/xterm/css/xterm.css';
 const SSHComponent = ({ sessionId }) => {
     const containerRef = useRef(null);
     const terminalRef = useRef(null);
-    const fitAddonRef = useRef(null);
-    const webLinksAddonRef = useRef(null);
-    const [isInitialized, setIsInitialized] = useState(false);
+    const resizeTimeoutRef = useRef(null);
 
     const containerSize = useSize(containerRef);
 
-    // Buscar sessão da store usando selector otimizado
-    const session = useSSHStore((state) => state.getSession(sessionId));
-    const focusedSession = useSSHStore((state) => state.focusedSession);
+    const xtermRef = useRef(null);
+    const fitAddonRef = useRef(null);
+    const serializeAddonRef = useRef(null);
+    const webglAddonRef = useRef(null);
+    const openedRef = useRef(false);
+    const isWebModeRef = useRef(false);
 
+    const session = useSSHStore((state) => state.sessions.get(sessionId));
+    const focusedSession = useSSHStore((state) => state.focusedSession);
     const isFocused = focusedSession === sessionId;
 
-    const resizeTerminal = () => {
-        if (!session?.xterm || !fitAddonRef.current) return;
-        try {
-            fitAddonRef.current.fit();
-            const dims = fitAddonRef.current.proposeDimensions();
-            if (!dims) return;
+    const [isInitialized, setIsInitialized] = useState(false);
 
-            if (session.xterm.cols === dims.cols && session.xterm.rows === dims.rows) return;
-            session.xterm.resize(dims.cols, dims.rows);
-        } catch (error) {
-            console.error('[SSH] Resize error:', error);
+    const initOk = useMemo(() => {
+        const width = containerSize?.width ?? 0;
+        const height = containerSize?.height ?? 0;
+        return width > 0 && height > 0;
+    }, [containerSize?.width, containerSize?.height]);
+
+    const resizeTerminal = useCallback(() => {
+        const xterm = xtermRef.current;
+        const fitAddon = fitAddonRef.current;
+        if (!xterm || !fitAddon) return;
+
+        try {
+            const dims = fitAddon.proposeDimensions();
+            if (!dims) return;
+            if (!Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return;
+
+            const cols = Math.max(2, Math.floor(dims.cols));
+            const rows = Math.max(1, Math.floor(dims.rows));
+            if (!Number.isFinite(cols) || !Number.isFinite(rows)) return;
+            if (xterm.cols === cols && xterm.rows === rows) return;
+
+            xterm.resize(cols, rows);
+        } catch (_) {
         }
-    };
+    }, []);
+
+    const scheduleResize = useCallback(() => {
+        if (resizeTimeoutRef.current) {
+            clearTimeout(resizeTimeoutRef.current);
+        }
+        resizeTimeoutRef.current = setTimeout(() => {
+            resizeTimeoutRef.current = null;
+            resizeTerminal();
+        }, 50);
+    }, [resizeTerminal]);
 
     /**
      * Configuração inicial do terminal SSH
      */
     useEffect(() => {
-        if (!session?.xterm || !terminalRef.current || isInitialized) return;
+        isWebModeRef.current = session?.mode === 'web';
+    }, [session?.mode]);
 
-        const xterm = session.xterm;
+    useEffect(() => {
+        if (!session || xtermRef.current) return;
 
-        try {
-            if (!fitAddonRef.current) {
-                fitAddonRef.current = new FitAddon();
+        const xterm = new Terminal({
+            theme: {
+                cursor: '#10B981',
+                selectionForeground: 'transparent'
+            },
+            fontFamily: 'Cascadia Mono, Consolas, "DejaVu Sans Mono", monospace',
+            fontSize: 14,
+            lineHeight: 1.2,
+            cursorBlink: true,
+            allowTransparency: false,
+            allowProposedApi: true,
+            overviewRulerWidth: 8,
+        });
+
+        const fitAddon = new FitAddon();
+        const webLinksAddon = new WebLinksAddon();
+        const serializeAddon = new SerializeAddon();
+
+        xterm.loadAddon(fitAddon);
+        xterm.loadAddon(webLinksAddon);
+        xterm.loadAddon(serializeAddon);
+
+        if (canUseWebgl()) {
+            try {
+                const webglAddon = new WebglAddon();
+                xterm.loadAddon(webglAddon);
+                webglAddonRef.current = webglAddon;
+            } catch (_) {
+                releaseWebgl();
             }
-            if (!webLinksAddonRef.current) {
-                webLinksAddonRef.current = new WebLinksAddon();
+        }
+
+        xterm.onData((data) => {
+            if (!isTauri() || isWebModeRef.current) {
+                if (data === '\r') {
+                    xterm.writeln('');
+                } else {
+                    xterm.write(data);
+                }
+                return;
             }
 
-            xterm.loadAddon(fitAddonRef.current);
-            xterm.loadAddon(webLinksAddonRef.current);
-            xterm.open(terminalRef.current);
-            setIsInitialized(true);
+            if (data === '\r') {
+                xterm.writeln('');
+            } else {
+                xterm.write(data);
+            }
+            useSSHStore.getState().writeSSH(sessionId, data);
+        });
+
+        xterm.onResize((size) => {
+            if (!isTauri() || isWebModeRef.current) return;
+            useSSHStore.getState().resizeSSH(sessionId, {
+                ...size,
+                pixel_width: 0,
+                pixel_height: 0,
+            });
+        });
+
+        xtermRef.current = xterm;
+        fitAddonRef.current = fitAddon;
+        serializeAddonRef.current = serializeAddon;
+
+        useSSHStore.getState().attachSession(sessionId);
+
+        const onStdout = (event) => {
+            const detail = event?.detail;
+            if (!detail || detail.id !== sessionId) return;
+            const text = String.fromCharCode(...detail.bytes);
+            const fixedData = text.replace(/\r?\n/g, "\r\n");
+            xterm.write(fixedData);
+        };
+
+        const onSnapshot = (event) => {
+            const detail = event?.detail;
+            if (!detail || detail.kind !== 'ssh' || detail.id !== sessionId) return;
+            const addon = serializeAddonRef.current;
+            if (!addon) return;
+            try {
+                const content = addon.serialize({
+                    scrollback: 2000,
+                    excludeModes: false,
+                    excludeAltBuffer: false,
+                });
+                useSSHStore.getState().setSerializedContent(sessionId, content);
+            } catch (_) {
+            }
+        };
+
+        window.addEventListener('ssh:stdout', onStdout);
+        window.addEventListener('terminal:snapshot', onSnapshot);
+
+        return () => {
+            window.removeEventListener('ssh:stdout', onStdout);
+            window.removeEventListener('terminal:snapshot', onSnapshot);
 
             try {
-                xterm.loadAddon(new WebglAddon());
+                const addon = serializeAddonRef.current;
+                if (addon) {
+                    const content = addon.serialize({
+                        scrollback: 2000,
+                        excludeModes: false,
+                        excludeAltBuffer: false,
+                    });
+                    useSSHStore.getState().setSerializedContent(sessionId, content);
+                }
             } catch (_) {
             }
 
-            setTimeout(resizeTerminal, 100);
-        } catch (e) {
-            console.error('[SSH] Initialization error:', e);
-        }
+            useSSHStore.getState().detachSession(sessionId);
 
-        // Cleanup
-        return () => {
-            setIsInitialized(false);
-
-            if (fitAddonRef.current) {
-                try {
-                    fitAddonRef.current.dispose();
-                } catch (_) {
-                }
-                fitAddonRef.current = null;
+            try {
+                xterm.dispose();
+            } catch (_) {
             }
 
-            if (webLinksAddonRef.current) {
-                try {
-                    webLinksAddonRef.current.dispose();
-                } catch (_) {
-                }
-                webLinksAddonRef.current = null;
+            try {
+                webglAddonRef.current?.dispose?.();
+            } catch (_) {
+            }
+            if (webglAddonRef.current) {
+                releaseWebgl();
+            }
+
+            xtermRef.current = null;
+            fitAddonRef.current = null;
+            serializeAddonRef.current = null;
+            webglAddonRef.current = null;
+            openedRef.current = false;
+
+            if (resizeTimeoutRef.current) {
+                clearTimeout(resizeTimeoutRef.current);
+                resizeTimeoutRef.current = null;
             }
         };
-    }, [session?.xterm, sessionId]);
+    }, [session, sessionId]);
 
     useEffect(() => {
-        if (containerSize && isInitialized && session?.xterm) {
-            resizeTerminal();
+        if (!session || !initOk || openedRef.current) return;
+        const xterm = xtermRef.current;
+        if (!xterm || !terminalRef.current) return;
+
+        terminalRef.current.innerHTML = '';
+        xterm.open(terminalRef.current);
+        openedRef.current = true;
+        setIsInitialized(true);
+
+        const serialized = useSSHStore.getState().consumeSerializedContent(sessionId);
+        if (serialized) {
+            xterm.write(serialized);
         }
-    }, [containerSize, isInitialized, session]);
+
+        const pending = useSSHStore.getState().drainPendingStdout(sessionId);
+        if (pending?.length) {
+            for (const bytes of pending) {
+                const text = String.fromCharCode(...bytes);
+                const fixedData = text.replace(/\r?\n/g, "\r\n");
+                xterm.write(fixedData);
+            }
+        }
+
+        setTimeout(() => {
+            scheduleResize();
+        }, 50);
+    }, [session, initOk, scheduleResize, sessionId]);
 
     /**
      * Controlar foco da sessão SSH
      */
     useEffect(() => {
-        if (!session?.xterm) return;
-
+        const xterm = xtermRef.current;
+        if (!xterm || !isInitialized) return;
         if (isFocused) {
-            session.xterm.focus();
+            xterm.focus();
+            scheduleResize();
         } else {
-            session.xterm.blur();
+            xterm.blur();
         }
-    }, [isFocused, session]);
+    }, [isFocused, isInitialized, scheduleResize]);
+
+    useEffect(() => {
+        if (!isInitialized) return;
+        scheduleResize();
+    }, [containerSize?.width, containerSize?.height, isInitialized, scheduleResize]);
+
+    useEffect(() => {
+        if (!isInitialized) return;
+        const handler = () => scheduleResize();
+        window.addEventListener('terminal:relayout', handler);
+        return () => window.removeEventListener('terminal:relayout', handler);
+    }, [isInitialized, scheduleResize]);
 
     // Se sessão não existe, não renderizar nada
     if (!session) {

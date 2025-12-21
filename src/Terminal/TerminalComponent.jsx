@@ -1,190 +1,280 @@
-import { useEffect, useRef, useState } from 'react';
-import { FitAddon } from '@xterm/addon-fit';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSize } from 'ahooks';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { SerializeAddon } from '@xterm/addon-serialize';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { isTauri } from '@tauri-apps/api/core';
 import useTerminalStore from '../stores/useTerminalStore';
 
-/**
- * TerminalComponent - Renderiza um terminal individual usando xterm.js
- */
+const canUseWebgl = () => {
+    try {
+        const key = '__xterm_webgl_context_count__';
+        const current = Number(window[key] || 0);
+        if (current >= 4) return false;
+        window[key] = current + 1;
+        return true;
+    } catch (_) {
+        return false;
+    }
+};
+
+const releaseWebgl = () => {
+    try {
+        const key = '__xterm_webgl_context_count__';
+        const current = Number(window[key] || 0);
+        window[key] = Math.max(0, current - 1);
+    } catch (_) {
+    }
+};
+
 const TerminalComponent = ({ terminalId }) => {
     const containerRef = useRef(null);
     const terminalRef = useRef(null);
+    const resizeTimeoutRef = useRef(null);
+
+    const xtermRef = useRef(null);
     const fitAddonRef = useRef(null);
-    const webLinksAddonRef = useRef(null);
-    const [isInitialized, setIsInitialized] = useState(false);
-    const [isWaiting, setIsWaiting] = useState(true);
+    const serializeAddonRef = useRef(null);
+    const webglAddonRef = useRef(null);
+    const openedRef = useRef(false);
+    const isWebModeRef = useRef(false);
 
     const containerSize = useSize(containerRef);
 
-    // Buscar terminal da store - FORÇAR RE-RENDER quando terminal chegar
-    const terminal = useTerminalStore((state) => state.terminals.get(terminalId));
+    const terminalMeta = useTerminalStore((state) => state.terminals.get(terminalId));
     const focusedTerminal = useTerminalStore((state) => state.focusedTerminal);
 
     const isFocused = focusedTerminal === terminalId;
+    const isReady = !!terminalMeta;
 
-    /**
-     * Monitora quando o terminal finalmente chega na store
-     */
-    useEffect(() => {
-        if (terminal) {
-            console.log(`[Terminal ${terminalId}] Found in store!`);
-            setIsWaiting(false);
-        } else {
-            console.log(`[Terminal ${terminalId}] Waiting for terminal to spawn...`);
-        }
-    }, [terminal, terminalId]);
+    const [isInitialized, setIsInitialized] = useState(false);
 
-    /**
-     * Debounce utility
-     */
-    function debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    }
+    const initOk = useMemo(() => {
+        const width = containerSize?.width ?? 0;
+        const height = containerSize?.height ?? 0;
+        return width > 0 && height > 0;
+    }, [containerSize?.width, containerSize?.height]);
 
-    /**
-     * Função de resize otimizada
-     */
-    /**
-     * Função de resize otimizada
-     */
-    const resizeTerminal = () => {
-        if (!terminal?.xterm || !fitAddonRef.current) return;
+    const resizeTerminal = useCallback(() => {
+        const xterm = xtermRef.current;
+        const fitAddon = fitAddonRef.current;
+        if (!xterm || !fitAddon) return;
 
         try {
-            fitAddonRef.current.fit();
-            const dims = fitAddonRef.current.proposeDimensions();
+            const dims = fitAddon.proposeDimensions();
+            if (!dims) return;
+            if (!Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return;
 
-            if (dims) {
-                // Prevenir redimensionamentos redundantes que causam repetição do prompt
-                if (terminal.xterm.cols === Math.floor(dims.cols) && terminal.xterm.rows === Math.floor(dims.rows)) {
-                    return;
-                }
+            const cols = Math.max(2, Math.floor(dims.cols));
+            const rows = Math.max(1, Math.floor(dims.rows));
+            if (!Number.isFinite(cols) || !Number.isFinite(rows)) return;
+            if (xterm.cols === cols && xterm.rows === rows) return;
 
-                console.log(`[Terminal ${terminalId}] Resizing to: ${Math.floor(dims.cols)}x${Math.floor(dims.rows)}`);
-                terminal.xterm.resize(Math.floor(dims.cols), Math.floor(dims.rows));
-            }
-        } catch (error) {
-            console.error(`[Terminal ${terminalId}] Resize error:`, error);
+            xterm.resize(cols, rows);
+        } catch (_) {
         }
-    };
+    }, []);
 
-    const debouncedResize = debounce(resizeTerminal, 150);
+    const scheduleResize = useCallback(() => {
+        if (resizeTimeoutRef.current) {
+            clearTimeout(resizeTimeoutRef.current);
+        }
+        resizeTimeoutRef.current = setTimeout(() => {
+            resizeTimeoutRef.current = null;
+            resizeTerminal();
+        }, 50);
+    }, [resizeTerminal]);
 
-    /**
-     * INICIALIZAÇÃO DO TERMINAL
-     */
     useEffect(() => {
-        // Aguardar terminal chegar na store
-        if (!terminal?.xterm || !terminalRef.current || isInitialized) {
-            return;
-        }
+        isWebModeRef.current = terminalMeta?.mode === 'web';
+    }, [terminalMeta?.mode]);
 
-        console.log(`[Terminal ${terminalId}] Starting initialization...`);
+    useEffect(() => {
+        if (!isReady || xtermRef.current) return;
 
-        const xterm = terminal.xterm;
+        const xterm = new Terminal({
+            theme: {
+                background: '#1A1B1E',
+                cursor: '#10B981',
+                cursorAccent: '#10B98100',
+            },
+            fontFamily: 'JetBrainsMono Nerd Font, monospace',
+            cursorBlink: true,
+            allowTransparency: true,
+            allowProposedApi: true,
+            overviewRulerWidth: 8,
+            rows: 20,
+            cols: 40,
+        });
 
-        try {
-            // Criar addons apenas uma vez
-            if (!fitAddonRef.current) {
-                fitAddonRef.current = new FitAddon();
-            }
-            if (!webLinksAddonRef.current) {
-                webLinksAddonRef.current = new WebLinksAddon();
-            }
+        const fitAddon = new FitAddon();
+        const webLinksAddon = new WebLinksAddon();
+        const serializeAddon = new SerializeAddon();
 
-            // Carregar addons
-            xterm.loadAddon(fitAddonRef.current);
-            xterm.loadAddon(webLinksAddonRef.current);
+        xterm.loadAddon(fitAddon);
+        xterm.loadAddon(webLinksAddon);
+        xterm.loadAddon(serializeAddon);
 
-            // Tentar carregar WebGL
+        if (canUseWebgl()) {
             try {
                 const webglAddon = new WebglAddon();
                 xterm.loadAddon(webglAddon);
-                console.log(`[Terminal ${terminalId}] WebGL loaded`);
-            } catch (e) {
-                console.warn(`[Terminal ${terminalId}] WebGL not supported`);
+                webglAddonRef.current = webglAddon;
+            } catch (_) {
+                releaseWebgl();
             }
-
-            // Abrir terminal no DOM
-            xterm.open(terminalRef.current);
-            console.log(`[Terminal ${terminalId}] Terminal opened in DOM`);
-
-            // Marcar como inicializado
-            setIsInitialized(true);
-
-            // Resize inicial e foco
-            setTimeout(() => {
-                // resizeTerminal(); // Removido para evitar duplo resize (já tratado pelo useEffect do containerSize)
-                debouncedResize(); // Usar debounced para garantir
-                if (isFocused) {
-                    xterm.focus();
-                }
-            }, 100);
-
-        } catch (error) {
-            console.error(`[Terminal ${terminalId}] Initialization error:`, error);
         }
 
-        // Cleanup ao desmontar
-        return () => {
-            console.log(`[Terminal ${terminalId}] Cleaning up...`);
-            setIsInitialized(false);
-
-            if (fitAddonRef.current) {
-                try {
-                    fitAddonRef.current.dispose();
-                } catch (e) {
-                    console.warn('FitAddon dispose error:', e);
+        xterm.onData((data) => {
+            if (!isTauri() || isWebModeRef.current) {
+                if (data === '\r') {
+                    xterm.writeln('');
+                } else {
+                    xterm.write(data);
                 }
-                fitAddonRef.current = null;
+                return;
             }
+            useTerminalStore.getState().writePty(terminalId, data);
+        });
 
-            if (webLinksAddonRef.current) {
-                try {
-                    webLinksAddonRef.current.dispose();
-                } catch (e) {
-                    console.warn('WebLinksAddon dispose error:', e);
-                }
-                webLinksAddonRef.current = null;
+        xterm.onResize((size) => {
+            if (!isTauri() || isWebModeRef.current) return;
+            useTerminalStore.getState().resizePty(terminalId, {
+                ...size,
+                pixel_width: 0,
+                pixel_height: 0,
+            });
+        });
+
+        xtermRef.current = xterm;
+        fitAddonRef.current = fitAddon;
+        serializeAddonRef.current = serializeAddon;
+
+        useTerminalStore.getState().attachTerminal(terminalId);
+
+        const onStdout = (event) => {
+            const detail = event?.detail;
+            if (!detail || detail.id !== terminalId) return;
+            xterm.write(detail.bytes);
+        };
+
+        const onSnapshot = (event) => {
+            const detail = event?.detail;
+            if (!detail || detail.kind !== 'pty' || detail.id !== terminalId) return;
+            const addon = serializeAddonRef.current;
+            if (!addon) return;
+            try {
+                const content = addon.serialize({
+                    scrollback: 2000,
+                    excludeModes: false,
+                    excludeAltBuffer: false,
+                });
+                useTerminalStore.getState().setSerializedContent(terminalId, content);
+            } catch (_) {
             }
         };
-    }, [terminal?.xterm, terminalId]);
 
-    /**
-     * Controlar foco do terminal
-     */
+        window.addEventListener('pty:stdout', onStdout);
+        window.addEventListener('terminal:snapshot', onSnapshot);
+
+        return () => {
+            window.removeEventListener('pty:stdout', onStdout);
+            window.removeEventListener('terminal:snapshot', onSnapshot);
+
+            try {
+                const addon = serializeAddonRef.current;
+                if (addon) {
+                    const content = addon.serialize({
+                        scrollback: 2000,
+                        excludeModes: false,
+                        excludeAltBuffer: false,
+                    });
+                    useTerminalStore.getState().setSerializedContent(terminalId, content);
+                }
+            } catch (_) {
+            }
+
+            useTerminalStore.getState().detachTerminal(terminalId);
+
+            try {
+                xterm.dispose();
+            } catch (_) {
+            }
+
+            try {
+                webglAddonRef.current?.dispose?.();
+            } catch (_) {
+            }
+            if (webglAddonRef.current) {
+                releaseWebgl();
+            }
+
+            xtermRef.current = null;
+            fitAddonRef.current = null;
+            serializeAddonRef.current = null;
+            webglAddonRef.current = null;
+            openedRef.current = false;
+
+            if (resizeTimeoutRef.current) {
+                clearTimeout(resizeTimeoutRef.current);
+                resizeTimeoutRef.current = null;
+            }
+        };
+    }, [isReady, terminalId]);
+
     useEffect(() => {
-        if (!terminal?.xterm || !isInitialized) return;
+        if (!isReady || !initOk || openedRef.current) return;
+        const xterm = xtermRef.current;
+        if (!xterm || !terminalRef.current) return;
 
+        terminalRef.current.innerHTML = '';
+        xterm.open(terminalRef.current);
+        openedRef.current = true;
+        setIsInitialized(true);
+
+        const serialized = useTerminalStore.getState().consumeSerializedContent(terminalId);
+        if (serialized) {
+            xterm.write(serialized);
+        }
+
+        const pending = useTerminalStore.getState().drainPendingStdout(terminalId);
+        if (pending?.length) {
+            for (const chunk of pending) {
+                xterm.write(chunk);
+            }
+        }
+
+        setTimeout(() => {
+            scheduleResize();
+        }, 50);
+    }, [isReady, initOk, scheduleResize, terminalId]);
+
+    useEffect(() => {
+        const xterm = xtermRef.current;
+        if (!xterm || !isInitialized) return;
         if (isFocused) {
-            console.log(`[Terminal ${terminalId}] Focusing...`);
-            terminal.xterm.focus();
+            xterm.focus();
+            scheduleResize();
         } else {
-            terminal.xterm.blur();
+            xterm.blur();
         }
-    }, [isFocused, terminal, isInitialized, terminalId]);
+    }, [isFocused, isInitialized, scheduleResize]);
 
-    /**
-     * Reagir a mudanças de tamanho
-     */
     useEffect(() => {
-        if (containerSize && isInitialized && terminal?.xterm) {
-            debouncedResize();
-        }
-    }, [containerSize, isInitialized, terminal]);
+        if (!isInitialized) return;
+        scheduleResize();
+    }, [containerSize?.width, containerSize?.height, isInitialized, scheduleResize]);
 
-    // LOADING STATE - Enquanto aguarda o terminal chegar do backend
-    if (isWaiting && !terminal) {
+    useEffect(() => {
+        if (!isInitialized) return;
+        const handler = () => scheduleResize();
+        window.addEventListener('terminal:relayout', handler);
+        return () => window.removeEventListener('terminal:relayout', handler);
+    }, [isInitialized, scheduleResize]);
+
+    if (!terminalMeta) {
         return (
             <div className="flex items-center justify-center w-full h-full bg-[#1A1B1E] text-gray-400">
                 <div className="flex flex-col items-center gap-3">
@@ -195,30 +285,9 @@ const TerminalComponent = ({ terminalId }) => {
         );
     }
 
-    // Terminal não encontrado após espera
-    if (!terminal) {
-        return (
-            <div className="flex items-center justify-center w-full h-full bg-[#1A1B1E] text-red-400">
-                <div className="flex flex-col items-center gap-2">
-                    <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p className="text-sm">Terminal não encontrado</p>
-                    <p className="text-xs text-gray-500">ID: {terminalId}</p>
-                </div>
-            </div>
-        );
-    }
-
     return (
-        <div
-            ref={containerRef}
-            className="w-full h-full overflow-hidden flex flex-col relative bg-[#1A1B1E]"
-        >
-            <div
-                ref={terminalRef}
-                className="absolute inset-0 pl-2"
-            />
+        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative bg-[#1A1B1E]">
+            <div ref={terminalRef} className="absolute inset-0 pl-2" />
         </div>
     );
 };

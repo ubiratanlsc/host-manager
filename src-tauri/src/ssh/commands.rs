@@ -1,15 +1,15 @@
 use super::*;
 use crate::JexpeState;
 use cuid::cuid;
+use portable_pty::PtySize;
 use ssh2::KeyboardInteractivePrompt;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::thread;
 use std::{io::Read, path::Path};
 use tauri::Emitter;
 use tokio::sync::mpsc;
-use tokio::time::{timeout, Duration};
+use std::time::Duration;
 
 struct PasswordPrompt(String);
 
@@ -246,6 +246,7 @@ pub async fn spawn_ssh(
     let session = SshSession {
         id: id.clone(),
         window_id: window_id.clone(),
+        channel: Arc::clone(&channel),
         stdin_tx,
         stdin_task,
         stdout_task,
@@ -294,21 +295,27 @@ pub async fn write_ssh(
     id: String,
     data: String,
 ) -> Result<usize, String> {
-    let ssh_sessions = state.ssh_sessions.lock().await;
-    let session = ssh_sessions
-        .get(&id)
-        .ok_or_else(|| "SSH session not found".to_string())?
-        .clone();
+    let (stdin_tx, connected, last_activity) = {
+        let ssh_sessions = state.ssh_sessions.lock().await;
+        let session = ssh_sessions
+            .get(&id)
+            .ok_or_else(|| "SSH session not found".to_string())?;
+        (
+            session.stdin_tx.clone(),
+            Arc::clone(&session.connected),
+            Arc::clone(&session.last_activity),
+        )
+    };
 
     // Verificar se a sessão está conectada
-    if let Ok(connected) = session.connected.lock() {
+    if let Ok(connected) = connected.lock() {
         if !*connected {
             return Err("Sessão desconectada".to_string());
         }
     }
 
     // Atualizar timestamp de última atividade
-    if let Ok(mut last_activity) = session.last_activity.lock() {
+    if let Ok(mut last_activity) = last_activity.lock() {
         *last_activity = SystemTime::now();
     }
 
@@ -317,13 +324,50 @@ pub async fn write_ssh(
     let bytes = data_with_newline.into_bytes();
     let len = bytes.len();
 
-    session
-        .stdin_tx
+    stdin_tx
         .send(bytes)
         .await
         .map_err(|e| format!("Failed to send data: {}", e))?;
 
     Ok(len)
+}
+
+#[tauri::command]
+pub async fn resize_ssh(state: State<'_, JexpeState>, id: String, size: PtySize) -> Result<(), String> {
+    let channel = {
+        let ssh_sessions = state.ssh_sessions.lock().await;
+        let session = ssh_sessions
+            .get(&id)
+            .ok_or_else(|| "SSH session not found".to_string())?;
+        Arc::clone(&session.channel)
+    };
+
+    tokio::task::spawn_blocking(move || {
+        let mut channel_guard = channel
+            .lock()
+            .map_err(|_| "Failed to lock SSH channel".to_string())?;
+
+        let width_px = if size.pixel_width > 0 {
+            Some(size.pixel_width as u32)
+        } else {
+            None
+        };
+        let height_px = if size.pixel_height > 0 {
+            Some(size.pixel_height as u32)
+        } else {
+            None
+        };
+
+        channel_guard
+            .request_pty_size(size.cols as u32, size.rows as u32, width_px, height_px)
+            .map_err(|e| e.to_string())?;
+
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    Ok(())
 }
 
 #[tauri::command]

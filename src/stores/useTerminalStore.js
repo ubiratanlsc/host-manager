@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
+import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { Terminal } from '@xterm/xterm';
 
 // Constants
 const PTY_SPAWN_EVENT = 'EVENTS:PTY:SPAWN';
@@ -41,6 +41,10 @@ const useTerminalStore = create(
             focusedTerminal: null,
             listeners: null,
             isInitialized: false,
+            serializedContent: new Map(), // Armazena conteúdo serializado temporariamente
+            pendingStdout: new Map(),
+            recentlyClosed: new Map(),
+            attachedTerminals: new Map(),
 
             // ========== INICIALIZAÇÃO ==========
 
@@ -49,6 +53,14 @@ const useTerminalStore = create(
              */
             loadSystemShells: async () => {
                 try {
+                    if (!isTauri()) {
+                        const shells = [
+                            { name: 'Web', command: 'web', args: [] },
+                            { name: 'PowerShell', command: 'powershell.exe', args: [] },
+                        ];
+                        set({ shells });
+                        return shells;
+                    }
                     const shells = await invoke(GET_SYSTEM_SHELLS_COMMAND, {});
                     set({ shells });
                     return shells;
@@ -71,35 +83,16 @@ const useTerminalStore = create(
                 }
 
                 try {
+                    if (!isTauri()) {
+                        set({
+                            listeners: null,
+                            isInitialized: true,
+                        });
+                        return;
+                    }
                     // Listener para spawn de terminal
                     const spawnListener = await listen(PTY_SPAWN_EVENT, ({ payload }) => {
                         const { id, shell } = payload;
-
-                        // Criar instância xterm
-                        const xterm = new Terminal({
-                            theme: {
-                                background: '#1A1B1E',
-                                cursor: '#10B981',
-                                cursorAccent: '#10B98100',
-                            },
-                            fontFamily: 'JetBrainsMono Nerd Font, monospace',
-                            cursorBlink: true,
-                            allowTransparency: true,
-                            allowProposedApi: true,
-                            overviewRulerWidth: 8,
-                            rows: 20,
-                            cols: 40,
-                        });
-
-                        // Armazenar disposables para cleanup posterior
-                        const onDataDisposable = xterm.onData((data) => get().writePty(id, data));
-                        const onResizeDisposable = xterm.onResize((size) => {
-                            get().resizePty(id, {
-                                ...size,
-                                pixel_width: size.cols,
-                                pixel_height: size.rows,
-                            });
-                        });
 
                         // Adicionar terminal ao estado
                         set((state) => {
@@ -108,15 +101,17 @@ const useTerminalStore = create(
                                 id,
                                 shell,
                                 title: shell.name,
-                                xterm,
-                                // Armazenar disposables para cleanup
-                                disposables: { onDataDisposable, onResizeDisposable },
                                 isOpen: true,
                                 createdAt: new Date().toISOString(),
                             });
+
+                            const newRecentlyClosed = new Map(state.recentlyClosed);
+                            newRecentlyClosed.delete(id);
+
                             return {
                                 terminals: newTerminals,
                                 focusedTerminal: id,
+                                recentlyClosed: newRecentlyClosed,
                             };
                         });
                     });
@@ -125,15 +120,25 @@ const useTerminalStore = create(
                     const stdoutListener = await listen(PTY_STDOUT_EVENT, ({ payload }) => {
                         const { id, bytes } = payload;
                         const state = get();
-                        const terminal = state.terminals.get(id);
-
-                        if (!terminal) {
-                            console.error(`[TerminalStore] Terminal ${id} not found for STDOUT`);
+                        const closedAt = state.recentlyClosed.get(id);
+                        if (typeof closedAt === 'number' && Date.now() - closedAt < 5000) {
                             return;
                         }
 
-                        // Escrever bytes no xterm
-                        terminal.xterm.write(bytes);
+                        const attachedCount = state.attachedTerminals.get(id) || 0;
+                        if (attachedCount > 0) {
+                            window.dispatchEvent(new CustomEvent('pty:stdout', { detail: { id, bytes } }));
+                            return;
+                        }
+
+                        const pending = new Map(state.pendingStdout);
+                        const chunks = pending.get(id) || [];
+                        chunks.push(bytes);
+                        if (chunks.length > 200) {
+                            chunks.splice(0, chunks.length - 200);
+                        }
+                        pending.set(id, chunks);
+                        set({ pendingStdout: pending });
                     });
 
                     // Listener para exit do terminal
@@ -146,22 +151,23 @@ const useTerminalStore = create(
                             const newTerminals = new Map(state.terminals);
                             const terminal = newTerminals.get(id);
 
-                            // Cleanup dos event listeners do xterm antes de remover
-                            if (terminal?.disposables) {
-                                try {
-                                    terminal.disposables.onDataDisposable?.dispose();
-                                    terminal.disposables.onResizeDisposable?.dispose();
-                                    console.log(`[TerminalStore] Disposed event listeners for terminal ${id}`);
-                                } catch (error) {
-                                    console.warn(`[TerminalStore] Error disposing listeners for terminal ${id}:`, error);
-                                }
-                            }
-
                             const terminalArray = Array.from(newTerminals.keys());
                             const currentIndex = terminalArray.indexOf(id);
 
                             // Remover terminal
                             newTerminals.delete(id);
+
+                            const newSerialized = new Map(state.serializedContent);
+                            newSerialized.delete(id);
+
+                            const newPending = new Map(state.pendingStdout);
+                            newPending.delete(id);
+
+                            const newRecentlyClosed = new Map(state.recentlyClosed);
+                            newRecentlyClosed.set(id, Date.now());
+
+                            const newAttached = new Map(state.attachedTerminals);
+                            newAttached.delete(id);
 
                             // Determinar próximo foco
                             let newFocused = state.focusedTerminal;
@@ -179,6 +185,10 @@ const useTerminalStore = create(
                             return {
                                 terminals: newTerminals,
                                 focusedTerminal: newFocused,
+                                serializedContent: newSerialized,
+                                pendingStdout: newPending,
+                                recentlyClosed: newRecentlyClosed,
+                                attachedTerminals: newAttached,
                             };
                         });
                     });
@@ -210,6 +220,9 @@ const useTerminalStore = create(
                 set({
                     listeners: null,
                     isInitialized: false,
+                    pendingStdout: new Map(),
+                    recentlyClosed: new Map(),
+                    attachedTerminals: new Map(),
                 });
 
                 console.log('[TerminalStore] Cleanup completed');
@@ -222,6 +235,26 @@ const useTerminalStore = create(
              */
             spawnPty: async (shell, cols = 80, rows = 24) => {
                 try {
+                    if (!isTauri()) {
+                        const id = crypto.randomUUID();
+                        set((state) => {
+                            const newTerminals = new Map(state.terminals);
+                            newTerminals.set(id, {
+                                id,
+                                shell,
+                                title: shell?.name || 'Terminal',
+                                mode: 'web',
+                                isOpen: true,
+                                createdAt: new Date().toISOString(),
+                            });
+                            return {
+                                terminals: newTerminals,
+                                focusedTerminal: id,
+                            };
+                        });
+
+                        return;
+                    }
                     await invoke(PTY_SPAWN_COMMAND, { shell, cols, rows });
                 } catch (error) {
                     console.error('[TerminalStore] Failed to spawn PTY:', error);
@@ -234,6 +267,7 @@ const useTerminalStore = create(
              */
             writePty: async (id, data) => {
                 try {
+                    if (!isTauri()) return;
                     await invoke(PTY_STDIN_COMMAND, { id, data });
                 } catch (error) {
                     console.error(`[TerminalStore] Failed to write to PTY ${id}:`, error);
@@ -245,6 +279,7 @@ const useTerminalStore = create(
              */
             resizePty: async (id, size) => {
                 try {
+                    if (!isTauri()) return;
                     await invoke(PTY_RESIZE_COMMAND, { id, size });
                 } catch (error) {
                     console.error(`[TerminalStore] Failed to resize PTY ${id}:`, error);
@@ -256,6 +291,36 @@ const useTerminalStore = create(
              */
             killPty: async (id) => {
                 try {
+                    if (!isTauri()) {
+                        set((state) => {
+                            const newTerminals = new Map(state.terminals);
+                            newTerminals.delete(id);
+
+                            const newSerialized = new Map(state.serializedContent);
+                            newSerialized.delete(id);
+
+                            const newPending = new Map(state.pendingStdout);
+                            newPending.delete(id);
+
+                            const newRecentlyClosed = new Map(state.recentlyClosed);
+                            newRecentlyClosed.set(id, Date.now());
+
+                            const newAttached = new Map(state.attachedTerminals);
+                            newAttached.delete(id);
+
+                            const nextFocused = state.focusedTerminal === id ? null : state.focusedTerminal;
+
+                            return {
+                                terminals: newTerminals,
+                                focusedTerminal: nextFocused,
+                                serializedContent: newSerialized,
+                                pendingStdout: newPending,
+                                recentlyClosed: newRecentlyClosed,
+                                attachedTerminals: newAttached,
+                            };
+                        });
+                        return;
+                    }
                     await invoke(PTY_KILL_COMMAND, { id });
                 } catch (error) {
                     console.error(`[TerminalStore] Failed to kill PTY ${id}:`, error);
@@ -281,16 +346,6 @@ const useTerminalStore = create(
 
                 // Limpar event listeners e matar todos os terminais
                 state.terminals.forEach((terminal) => {
-                    // Cleanup dos event listeners
-                    if (terminal.disposables) {
-                        try {
-                            terminal.disposables.onDataDisposable?.dispose();
-                            terminal.disposables.onResizeDisposable?.dispose();
-                        } catch (error) {
-                            console.warn(`[TerminalStore] Error disposing listeners for terminal ${terminal.id}:`, error);
-                        }
-                    }
-
                     // Matar o PTY
                     state.killPty(terminal.id).catch(console.error);
                 });
@@ -298,7 +353,54 @@ const useTerminalStore = create(
                 set({
                     terminals: new Map(),
                     focusedTerminal: null,
+                    serializedContent: new Map(),
+                    pendingStdout: new Map(),
+                    recentlyClosed: new Map(),
+                    attachedTerminals: new Map(),
                 });
+            },
+
+            attachTerminal: (id) => {
+                set((state) => {
+                    const next = new Map(state.attachedTerminals);
+                    next.set(id, (next.get(id) || 0) + 1);
+                    return { attachedTerminals: next };
+                });
+            },
+
+            detachTerminal: (id) => {
+                set((state) => {
+                    const next = new Map(state.attachedTerminals);
+                    const current = next.get(id) || 0;
+                    if (current <= 1) {
+                        next.delete(id);
+                    } else {
+                        next.set(id, current - 1);
+                    }
+                    return { attachedTerminals: next };
+                });
+            },
+
+            drainPendingStdout: (id) => {
+                const pending = get().pendingStdout.get(id) || [];
+                const next = new Map(get().pendingStdout);
+                next.delete(id);
+                set({ pendingStdout: next });
+                return pending;
+            },
+
+            setSerializedContent: (id, content) => {
+                const next = new Map(get().serializedContent);
+                next.set(id, content);
+                set({ serializedContent: next });
+            },
+
+            consumeSerializedContent: (id) => {
+                const current = get().serializedContent.get(id);
+                const next = new Map(get().serializedContent);
+                next.delete(id);
+                set({ serializedContent: next });
+                return current ?? null;
             },
         }),
         { name: 'TerminalStore' }

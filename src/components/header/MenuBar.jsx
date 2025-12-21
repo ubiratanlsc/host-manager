@@ -1,4 +1,5 @@
 import * as React from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Server, FolderTree, Tags, Settings, Sun, Moon, Menu as MenuIcon, } from 'lucide-react'
 import {
@@ -29,7 +30,13 @@ export function MenuBar({ className, disabled = false }) {
     const [openMax, setOpenMax] = React.useState(true);
     const { openModal } = useModalStore();
     const { configs, addConfig } = useConfigStore();
-    const appWindow = getCurrentWindow();
+    const appWindow = React.useMemo(() => {
+        try {
+            return isTauri() ? getCurrentWindow() : null;
+        } catch (_) {
+            return null;
+        }
+    }, []);
 
     // Detect mobile
     React.useEffect(() => {
@@ -79,15 +86,18 @@ export function MenuBar({ className, disabled = false }) {
     };
 
     const minimizeWindow = async () => {
+        if (!appWindow) return;
         await appWindow.minimize();
     };
 
     const maximizeWindow = async () => {
+        if (!appWindow) return;
         await appWindow.toggleMaximize();
         setOpenMax(!openMax);
     };
 
     const closeWindow = async () => {
+        if (!appWindow) return;
         await appWindow.close();
     };
 

@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { Terminal } from '@xterm/xterm';
 
 // Constants
 const SSH_SPAWN_EVENT = 'EVENTS:SSH:SPAWN';
@@ -10,6 +9,7 @@ const SSH_STDOUT_EVENT = 'EVENTS:SSH:STDOUT';
 const SSH_EXIT_EVENT = 'EVENTS:SSH:EXIT';
 const SSH_SPAWN_COMMAND = 'spawn_ssh';
 const SSH_STDIN_COMMAND = 'write_ssh';
+const SSH_RESIZE_COMMAND = 'resize_ssh';
 const SSH_KILL_COMMAND = 'kill_ssh';
 
 /**
@@ -37,6 +37,10 @@ const useSSHStore = create(
             listeners: null,
             isInitialized: false,
             commandBuffers: new Map(), // Buffer de comandos por sessão
+            serializedContent: new Map(), // Armazena conteúdo serializado temporariamente
+            pendingStdout: new Map(),
+            recentlyClosed: new Map(),
+            attachedSessions: new Map(),
 
             // ========== INICIALIZAÇÃO ==========
 
@@ -53,42 +57,16 @@ const useSSHStore = create(
                 }
 
                 try {
+                    if (!isTauri()) {
+                        set({
+                            listeners: null,
+                            isInitialized: true,
+                        });
+                        return;
+                    }
                     // Listener para spawn de sessão SSH
                     const spawnListener = await listen(SSH_SPAWN_EVENT, ({ payload }) => {
                         const { id, host, port, username } = payload;
-
-                        // Criar instância xterm para SSH
-                        const xterm = new Terminal({
-                            theme: {
-                                cursor: '#10B981',
-                                selectionForeground: 'transparent'
-                            },
-                            fontFamily: 'Cascadia Mono, Consolas, "DejaVu Sans Mono", monospace',
-                            fontSize: 14,
-                            lineHeight: 1.2,
-                            cursorBlink: true,
-                            allowTransparency: false,
-                            allowProposedApi: true,
-                            overviewRulerWidth: 8,
-                        });
-
-                        // Configurar handler de dados
-                        xterm.onData((data) => {
-                            // Echo local do que foi digitado
-                            if (data === '\r') {
-                                xterm.writeln('');
-                            } else {
-                                xterm.write(data);
-                            }
-
-                            // Enviar para o backend
-                            get().writeSSH(id, data);
-                        });
-
-                        xterm.onResize((size) => {
-                            console.log('[SSHStore] Terminal resized:', size);
-                            // TODO: Implementar resize no backend se necessário
-                        });
 
                         const config = { host, port, username };
 
@@ -100,7 +78,6 @@ const useSSHStore = create(
                                 shell: { name: 'SSH' },
                                 title: `${username}@${host}`,
                                 config,
-                                xterm,
                                 isOpen: true,
                                 createdAt: new Date().toISOString(),
                             });
@@ -109,10 +86,14 @@ const useSSHStore = create(
                             const newBuffers = new Map(state.commandBuffers);
                             newBuffers.set(id, []);
 
+                            const newRecentlyClosed = new Map(state.recentlyClosed);
+                            newRecentlyClosed.delete(id);
+
                             return {
                                 sessions: newSessions,
                                 commandBuffers: newBuffers,
                                 focusedSession: id,
+                                recentlyClosed: newRecentlyClosed,
                             };
                         });
                     });
@@ -121,19 +102,25 @@ const useSSHStore = create(
                     const stdoutListener = await listen(SSH_STDOUT_EVENT, ({ payload }) => {
                         const { id, bytes } = payload;
                         const state = get();
-                        const session = state.sessions.get(id);
-
-                        if (!session) {
-                            console.error(`[SSHStore] Session ${id} not found for STDOUT`);
+                        const closedAt = state.recentlyClosed.get(id);
+                        if (typeof closedAt === 'number' && Date.now() - closedAt < 5000) {
                             return;
                         }
 
-                        // Converter bytes para texto e corrigir line endings
-                        const text = String.fromCharCode(...bytes);
-                        const fixedData = text.replace(/\r?\n/g, "\r\n");
+                        const attachedCount = state.attachedSessions.get(id) || 0;
+                        if (attachedCount > 0) {
+                            window.dispatchEvent(new CustomEvent('ssh:stdout', { detail: { id, bytes } }));
+                            return;
+                        }
 
-                        // Escrever no xterm
-                        session.xterm.write(fixedData);
+                        const pending = new Map(state.pendingStdout);
+                        const chunks = pending.get(id) || [];
+                        chunks.push(bytes);
+                        if (chunks.length > 200) {
+                            chunks.splice(0, chunks.length - 200);
+                        }
+                        pending.set(id, chunks);
+                        set({ pendingStdout: pending });
                     });
 
                     // Listener para exit do SSH
@@ -154,6 +141,18 @@ const useSSHStore = create(
                             const newBuffers = new Map(state.commandBuffers);
                             newBuffers.delete(id);
 
+                            const newSerialized = new Map(state.serializedContent);
+                            newSerialized.delete(id);
+
+                            const newPending = new Map(state.pendingStdout);
+                            newPending.delete(id);
+
+                            const newRecentlyClosed = new Map(state.recentlyClosed);
+                            newRecentlyClosed.set(id, Date.now());
+
+                            const newAttached = new Map(state.attachedSessions);
+                            newAttached.delete(id);
+
                             // Determinar próximo foco
                             let newFocused = state.focusedSession;
                             if (state.focusedSession === id) {
@@ -171,6 +170,10 @@ const useSSHStore = create(
                                 sessions: newSessions,
                                 commandBuffers: newBuffers,
                                 focusedSession: newFocused,
+                                serializedContent: newSerialized,
+                                pendingStdout: newPending,
+                                recentlyClosed: newRecentlyClosed,
+                                attachedSessions: newAttached,
                             };
                         });
                     });
@@ -202,6 +205,9 @@ const useSSHStore = create(
                 set({
                     listeners: null,
                     isInitialized: false,
+                    pendingStdout: new Map(),
+                    recentlyClosed: new Map(),
+                    attachedSessions: new Map(),
                 });
 
                 console.log('[SSHStore] Cleanup completed');
@@ -220,6 +226,36 @@ const useSSHStore = create(
              */
             spawnSSH: async (config) => {
                 try {
+                    if (!isTauri()) {
+                        const id = crypto.randomUUID();
+                        const { host, port = 22, username } = config;
+
+                        const sessionConfig = { host, port, username };
+
+                        set((state) => {
+                            const newSessions = new Map(state.sessions);
+                            newSessions.set(id, {
+                                id,
+                                shell: { name: 'SSH' },
+                                title: `${username || 'user'}@${host || 'localhost'}`,
+                                config: sessionConfig,
+                                mode: 'web',
+                                isOpen: true,
+                                createdAt: new Date().toISOString(),
+                            });
+
+                            const newBuffers = new Map(state.commandBuffers);
+                            newBuffers.set(id, []);
+
+                            return {
+                                sessions: newSessions,
+                                commandBuffers: newBuffers,
+                                focusedSession: id,
+                            };
+                        });
+
+                        return;
+                    }
                     const { windowId, host, port = 22, username, password } = config;
                     await invoke(SSH_SPAWN_COMMAND, {
                         windowId: windowId || crypto.randomUUID(),
@@ -240,6 +276,7 @@ const useSSHStore = create(
              */
             writeSSH: async (id, data) => {
                 try {
+                    if (!isTauri()) return;
                     const state = get();
                     const buffer = state.commandBuffers.get(id) || [];
 
@@ -276,9 +313,52 @@ const useSSHStore = create(
              */
             killSSH: async (id) => {
                 try {
+                    if (!isTauri()) {
+                        set((state) => {
+                            const newSessions = new Map(state.sessions);
+                            newSessions.delete(id);
+
+                            const newBuffers = new Map(state.commandBuffers);
+                            newBuffers.delete(id);
+
+                            const newSerialized = new Map(state.serializedContent);
+                            newSerialized.delete(id);
+
+                            const newPending = new Map(state.pendingStdout);
+                            newPending.delete(id);
+
+                            const newRecentlyClosed = new Map(state.recentlyClosed);
+                            newRecentlyClosed.set(id, Date.now());
+
+                            const newAttached = new Map(state.attachedSessions);
+                            newAttached.delete(id);
+
+                            const nextFocused = state.focusedSession === id ? null : state.focusedSession;
+
+                            return {
+                                sessions: newSessions,
+                                commandBuffers: newBuffers,
+                                focusedSession: nextFocused,
+                                serializedContent: newSerialized,
+                                pendingStdout: newPending,
+                                recentlyClosed: newRecentlyClosed,
+                                attachedSessions: newAttached,
+                            };
+                        });
+                        return;
+                    }
                     await invoke(SSH_KILL_COMMAND, { id });
                 } catch (error) {
                     console.error(`[SSHStore] Failed to kill SSH ${id}:`, error);
+                }
+            },
+
+            resizeSSH: async (id, size) => {
+                try {
+                    if (!isTauri()) return;
+                    await invoke(SSH_RESIZE_COMMAND, { id, size });
+                } catch (error) {
+                    console.error(`[SSHStore] Failed to resize SSH ${id}:`, error);
                 }
             },
 
@@ -314,6 +394,10 @@ const useSSHStore = create(
                         sessions: new Map(),
                         commandBuffers: new Map(),
                         focusedSession: null,
+                        serializedContent: new Map(),
+                        pendingStdout: new Map(),
+                        recentlyClosed: new Map(),
+                        attachedSessions: new Map(),
                     });
                 } catch (error) {
                     console.error('[SSHStore] Failed to shutdown all sessions:', error);
@@ -346,7 +430,54 @@ const useSSHStore = create(
                     sessions: new Map(),
                     commandBuffers: new Map(),
                     focusedSession: null,
+                    serializedContent: new Map(),
+                    pendingStdout: new Map(),
+                    recentlyClosed: new Map(),
+                    attachedSessions: new Map(),
                 });
+            },
+
+            attachSession: (id) => {
+                set((state) => {
+                    const next = new Map(state.attachedSessions);
+                    next.set(id, (next.get(id) || 0) + 1);
+                    return { attachedSessions: next };
+                });
+            },
+
+            detachSession: (id) => {
+                set((state) => {
+                    const next = new Map(state.attachedSessions);
+                    const current = next.get(id) || 0;
+                    if (current <= 1) {
+                        next.delete(id);
+                    } else {
+                        next.set(id, current - 1);
+                    }
+                    return { attachedSessions: next };
+                });
+            },
+
+            drainPendingStdout: (id) => {
+                const pending = get().pendingStdout.get(id) || [];
+                const next = new Map(get().pendingStdout);
+                next.delete(id);
+                set({ pendingStdout: next });
+                return pending;
+            },
+
+            setSerializedContent: (id, content) => {
+                const next = new Map(get().serializedContent);
+                next.set(id, content);
+                set({ serializedContent: next });
+            },
+
+            consumeSerializedContent: (id) => {
+                const current = get().serializedContent.get(id);
+                const next = new Map(get().serializedContent);
+                next.delete(id);
+                set({ serializedContent: next });
+                return current ?? null;
             },
         }),
         { name: 'SSHStore' }

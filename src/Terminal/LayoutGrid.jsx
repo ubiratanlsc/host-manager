@@ -35,6 +35,8 @@ const LayoutGrid = () => {
     // Terminal/SSH Stores
     const terminals = useTerminalStore(state => state.terminals);
     const sessions = useSSHStore(state => state.sessions);
+    const saveTerminalContent = useTerminalStore(state => state.saveSerializedContent);
+    const saveSSHContent = useSSHStore(state => state.saveSerializedContent);
 
     // Configurar sensors
     const sensors = useSensors(
@@ -54,9 +56,29 @@ const LayoutGrid = () => {
         if (active.data.current?.type === 'pane') {
             setIsDraggingPane(true);
             setIsDraggingTab(false);
+
+            // Serializar conteúdo de todos os terminais do pane
+            const terminalIds = active.data.current?.terminalIds || [];
+            terminalIds.forEach(terminalId => {
+                if (terminals.has(terminalId)) {
+                    saveTerminalContent(terminalId);
+                } else if (sessions.has(terminalId)) {
+                    saveSSHContent(terminalId);
+                }
+            });
         } else if (active.data.current?.type === 'terminal-tab') {
             setIsDraggingTab(true);
             setIsDraggingPane(false);
+
+            // Serializar conteúdo do terminal sendo arrastado
+            const terminalId = active.data.current?.terminalId;
+            if (terminalId) {
+                if (terminals.has(terminalId)) {
+                    saveTerminalContent(terminalId);
+                } else if (sessions.has(terminalId)) {
+                    saveSSHContent(terminalId);
+                }
+            }
         }
     };
 

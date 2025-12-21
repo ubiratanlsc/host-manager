@@ -1,9 +1,13 @@
 import { writeFile, BaseDirectory, readFile, readDir } from '@tauri-apps/plugin-fs';
+import { isTauri } from '@tauri-apps/api/core';
 import { create } from "zustand";
 import useConfigStore from './ConfigData';
 
 const useLoadData = create((set) => ({
     loadData: async () => {
+        if (!isTauri()) {
+            return;
+        }
         const file = await readFile('config.json', {
             baseDir: BaseDirectory.Resource,
         });

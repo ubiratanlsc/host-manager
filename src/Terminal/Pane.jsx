@@ -198,7 +198,7 @@ const Pane = ({ paneId }) => {
             className={`
                 relative flex flex-col h-full bg-[#25262B] rounded-lg overflow-hidden
                 border-2 transition-colors
-                ${isDragging ? 'border-blue-500 z-50' : 'border-gray-800'}
+                ${isDragging ? 'border-blue-500 z-[20000]' : 'border-gray-800'}
             `}
             onClick={() => setActivePane(paneId)}
         >

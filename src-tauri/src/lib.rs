@@ -50,6 +50,7 @@ pub fn run() {
             pty::commands::kill_pty,
             ssh::commands::spawn_ssh,
             ssh::commands::write_ssh,
+            ssh::commands::resize_ssh,
             ssh::commands::kill_ssh,
         ])
         .run(tauri::generate_context!())

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { cn } from '@/lib/utils';
 import useSplitStore from '../../stores/useSplitStore';
@@ -8,6 +8,7 @@ import Pane from '../../Terminal/Pane';
 import {
     DndContext,
     PointerSensor,
+    DragOverlay,
     useSensor,
     useSensors,
     closestCenter,
@@ -53,7 +54,10 @@ const SplitPaneRenderer = ({ splitId }) => {
     return (
         <ResizablePanelGroup
             direction={split.type}
-            onLayout={(sizes) => updateSplitSizes(splitId, sizes)}
+            onLayout={(sizes) => {
+                updateSplitSizes(splitId, sizes);
+                window.dispatchEvent(new Event('terminal:relayout'));
+            }}
             className="w-full h-full"
         >
             <ResizablePanel className="z-[10000] overflow-hidden" defaultSize={defaultSizes[0]} minSize={10}>
@@ -91,6 +95,37 @@ const SplitPane = () => {
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
     );
 
+    const [activeDrag, setActiveDrag] = useState(null);
+
+    const dragOverlay = useMemo(() => {
+        const data = activeDrag?.data?.current;
+        if (!data) return null;
+
+        if (data.type === 'pane') {
+            const ids = data.terminalIds || [];
+            const label = ids.length === 1 ? '1 tab' : `${ids.length} tabs`;
+            return (
+                <div className="w-[360px] max-w-[70vw] rounded-lg border-2 border-blue-500 bg-[#25262B] shadow-xl overflow-hidden">
+                    <div className="h-10 px-3 flex items-center gap-2 border-b border-gray-800 bg-[#2C2D32]">
+                        <div className="h-2 w-2 rounded-full bg-blue-500" />
+                        <span className="text-sm text-gray-200">{label}</span>
+                    </div>
+                    <div className="h-[220px] bg-[#1A1B1E]" />
+                </div>
+            );
+        }
+
+        if (data.type === 'terminal-tab') {
+            return (
+                <div className="rounded-md border border-gray-700 bg-[#25262B] px-3 py-1 text-sm text-gray-100 shadow-lg">
+                    {data.terminalId}
+                </div>
+            );
+        }
+
+        return null;
+    }, [activeDrag]);
+
     // NOTA: Inicialização de terminais é feita pelo MainTerminalView.jsx
     // Não duplicar aqui para evitar race conditions
 
@@ -111,10 +146,19 @@ const SplitPane = () => {
 
     const handleDragEnd = (event) => {
         const { active, over } = event;
+        setActiveDrag(null);
         if (!over) return;
 
         const activeData = active.data?.current;
         const overData = over.data?.current;
+
+        const saveTerminalSnapshot = (terminalId) => {
+            if (useTerminalStore.getState().terminals.has(terminalId)) {
+                window.dispatchEvent(new CustomEvent('terminal:snapshot', { detail: { kind: 'pty', id: terminalId } }));
+            } else if (useSSHStore.getState().sessions.has(terminalId)) {
+                window.dispatchEvent(new CustomEvent('terminal:snapshot', { detail: { kind: 'ssh', id: terminalId } }));
+            }
+        };
 
         if (activeData?.type === 'pane' && overData?.type === 'drop-zone') {
             const sourceSplitId = activeData.paneId;
@@ -124,12 +168,16 @@ const SplitPane = () => {
             if (sourceSplitId === targetSplitId) return;
 
             if (zone === 'center') {
+                (activeData.terminalIds || []).forEach(saveTerminalSnapshot);
                 mergePane(sourceSplitId, targetSplitId);
+                window.dispatchEvent(new Event('terminal:relayout'));
                 return;
             }
 
             const direction = (zone === 'top' || zone === 'bottom') ? 'vertical' : 'horizontal';
+            (activeData.terminalIds || []).forEach(saveTerminalSnapshot);
             splitPaneWithPane(targetSplitId, direction, sourceSplitId);
+            window.dispatchEvent(new Event('terminal:relayout'));
             return;
         }
 
@@ -145,9 +193,11 @@ const SplitPane = () => {
 
                 if (zone === 'center') {
                     if (sourceSplitId !== targetSplitId) {
+                        saveTerminalSnapshot(activeTerminalId);
                         moveTerminalBetweenSplits(activeTerminalId, sourceSplitId, targetSplitId);
                     }
                     setActiveTerminal(targetSplitId, activeTerminalId);
+                    window.dispatchEvent(new Event('terminal:relayout'));
                     return;
                 }
 
@@ -156,11 +206,13 @@ const SplitPane = () => {
                 const sourceIds = sourceSplit?.terminalIds || [];
                 if (sourceSplitId === targetSplitId && sourceIds.length === 1) return;
 
+                saveTerminalSnapshot(activeTerminalId);
                 removeTerminalFromSplit(sourceSplitId, activeTerminalId);
                 const newLeafId = splitPane(targetSplitId, direction, activeTerminalId);
                 if (newLeafId) {
                     setActiveTerminal(newLeafId, activeTerminalId);
                 }
+                window.dispatchEvent(new Event('terminal:relayout'));
                 return;
             }
 
@@ -177,9 +229,11 @@ const SplitPane = () => {
                     const newIndex = ids.indexOf(overTerminalId);
                     if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
                     setSplitTerminalIds(sourceSplitId, arrayMove(ids, oldIndex, newIndex));
+                    window.dispatchEvent(new Event('terminal:relayout'));
                     return;
                 }
 
+                saveTerminalSnapshot(activeTerminalId);
                 moveTerminalBetweenSplits(activeTerminalId, sourceSplitId, targetSplitId);
                 const targetSplit = useSplitStore.getState().splits.get(targetSplitId);
                 const nextIds = targetSplit?.terminalIds || [];
@@ -189,6 +243,7 @@ const SplitPane = () => {
                     setSplitTerminalIds(targetSplitId, arrayMove(nextIds, movedIndex, overIndex));
                 }
                 setActiveTerminal(targetSplitId, activeTerminalId);
+                window.dispatchEvent(new Event('terminal:relayout'));
                 return;
             }
 
@@ -196,18 +251,29 @@ const SplitPane = () => {
                 const targetSplitId = overData.paneId;
                 if (!targetSplitId) return;
                 if (sourceSplitId !== targetSplitId) {
+                    saveTerminalSnapshot(activeTerminalId);
                     moveTerminalBetweenSplits(activeTerminalId, sourceSplitId, targetSplitId);
                 }
                 setActiveTerminal(targetSplitId, activeTerminalId);
+                window.dispatchEvent(new Event('terminal:relayout'));
             }
         }
     };
 
     return (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={(event) => setActiveDrag(event.active)}
+            onDragCancel={() => setActiveDrag(null)}
+            onDragEnd={handleDragEnd}
+        >
             <div className="w-full h-full">
                 <SplitPaneRenderer splitId={rootSplitId} />
             </div>
+            <DragOverlay>
+                {dragOverlay}
+            </DragOverlay>
         </DndContext>
     );
 };
