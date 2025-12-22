@@ -56,7 +56,7 @@ const useSplitStore = create(
 
                 const activeSplit = state.splits.get(activeSplitId);
                 if (!activeSplit || activeSplit.type !== 'single') {
-                     // Se o ativo não for single, tenta encontrar um single
+                    // Se o ativo não for single, tenta encontrar um single
                     const firstLeafId = Array.from(state.splits.values()).find(s => s.type === 'single')?.id;
                     if (firstLeafId) {
                         get().setActivePane(firstLeafId);
@@ -95,7 +95,7 @@ const useSplitStore = create(
              * @param {string} newTerminalId - ID do novo terminal
              * @param {string} sessionType - 'terminal' ou 'ssh'
              */
-            splitPane: (splitId, direction, newTerminalId, sessionType = 'terminal') => {
+            splitPane: (splitId, direction, newTerminalId, position, sessionType = 'terminal') => {
                 const state = get();
                 const existingSplit = state.splits.get(splitId);
 
@@ -109,8 +109,11 @@ const useSplitStore = create(
                     return null;
                 }
 
-                const existingTerminalIds = existingSplit.terminalIds || [];
-                const existingActiveTerminalId = existingSplit.activeTerminalId || existingTerminalIds[0] || null;
+                const existingTerminalIds = (existingSplit.terminalIds || []).filter(id => id !== newTerminalId);
+                let existingActiveTerminalId = existingSplit.activeTerminalId;
+                if (existingActiveTerminalId === newTerminalId || !existingTerminalIds.includes(existingActiveTerminalId)) {
+                    existingActiveTerminalId = existingTerminalIds[0] || null;
+                }
 
                 // Criar novo split para o terminal existente
                 const newSplit1Id = uuidv4();
@@ -130,11 +133,14 @@ const useSplitStore = create(
                     activeTerminalId: newTerminalId,
                 };
 
+                const placeFirst = (position === 'top' && direction === 'vertical')
+                    || (position === 'left' && direction === 'horizontal');
+
                 // Atualizar o split existente para container
                 const updatedSplit = {
                     id: splitId,
                     type: direction,
-                    children: [newSplit1Id, newSplit2Id],
+                    children: placeFirst ? [newSplit2Id, newSplit1Id] : [newSplit1Id, newSplit2Id],
                     sizes: [50, 50], // Dividir 50/50
                 };
 
@@ -315,7 +321,7 @@ const useSplitStore = create(
                 get().setActivePane(toSplitId);
             },
 
-            splitPaneWithPane: (targetSplitId, direction, sourceSplitId) => {
+            splitPaneWithPane: (targetSplitId, direction, sourceSplitId, position) => {
                 const state = get();
                 const targetSplit = state.splits.get(targetSplitId);
                 const sourceSplit = state.splits.get(sourceSplitId);
@@ -323,45 +329,97 @@ const useSplitStore = create(
                 if (!sourceSplit || sourceSplit.type !== 'single') return null;
                 if (targetSplitId === sourceSplitId) return null;
 
-                const newSplit1Id = uuidv4();
-                const newSplit2Id = uuidv4();
+                const newTargetLeafId = uuidv4();
+                const newSourceLeafId = uuidv4();
 
-                const left = {
-                    id: newSplit1Id,
+                const targetLeaf = {
+                    id: newTargetLeafId,
                     type: 'single',
                     terminalIds: targetSplit.terminalIds || [],
                     activeTerminalId: targetSplit.activeTerminalId || targetSplit.terminalIds?.[0] || null,
                 };
 
-                const right = {
-                    id: newSplit2Id,
+                const sourceLeaf = {
+                    id: newSourceLeafId,
                     type: 'single',
                     terminalIds: sourceSplit.terminalIds || [],
                     activeTerminalId: sourceSplit.activeTerminalId || sourceSplit.terminalIds?.[0] || null,
                 };
 
+                const placeSourceFirst = (position === 'top' && direction === 'vertical')
+                    || (position === 'left' && direction === 'horizontal');
+
                 const updatedSplit = {
                     id: targetSplitId,
                     type: direction,
-                    children: [newSplit1Id, newSplit2Id],
+                    children: placeSourceFirst ? [newSourceLeafId, newTargetLeafId] : [newTargetLeafId, newSourceLeafId],
                     sizes: [50, 50],
                 };
 
                 set((state) => {
                     const newSplits = new Map(state.splits);
                     newSplits.set(targetSplitId, updatedSplit);
-                    newSplits.set(newSplit1Id, left);
-                    newSplits.set(newSplit2Id, right);
+                    newSplits.set(newTargetLeafId, targetLeaf);
+                    newSplits.set(newSourceLeafId, sourceLeaf);
+
+                    const parentByChild = new Map();
+                    const buildParents = (nodeId) => {
+                        const node = newSplits.get(nodeId);
+                        if (!node?.children) return;
+                        for (const childId of node.children) {
+                            parentByChild.set(childId, nodeId);
+                            buildParents(childId);
+                        }
+                    };
+                    if (state.rootSplitId) {
+                        buildParents(state.rootSplitId);
+                    }
+
+                    const parentId = parentByChild.get(sourceSplitId);
+                    if (!parentId) {
+                        return {
+                            splits: newSplits,
+                            activePaneId: newSourceLeafId,
+                        };
+                    }
+
+                    const parent = newSplits.get(parentId);
+                    const siblingId = parent?.children?.find((id) => id !== sourceSplitId);
+                    const grandParentId = parentByChild.get(parentId);
+
+                    newSplits.delete(sourceSplitId);
+                    if (parentId !== targetSplitId) {
+                        newSplits.delete(parentId);
+                    }
+
+                    if (!siblingId) {
+                        return {
+                            splits: newSplits,
+                            activePaneId: newSourceLeafId,
+                        };
+                    }
+
+                    if (!grandParentId) {
+                        return {
+                            splits: newSplits,
+                            rootSplitId: siblingId,
+                            activePaneId: newSourceLeafId,
+                        };
+                    }
+
+                    const grandParent = newSplits.get(grandParentId);
+                    if (grandParent?.children) {
+                        const nextChildren = grandParent.children.map((id) => (id === parentId ? siblingId : id));
+                        newSplits.set(grandParentId, { ...grandParent, children: nextChildren });
+                    }
+
                     return {
                         splits: newSplits,
-                        activePaneId: newSplit2Id,
+                        activePaneId: newSourceLeafId,
                     };
                 });
 
-                get().closePane(sourceSplitId);
-                get().setActivePane(newSplit2Id);
-
-                return newSplit2Id;
+                return newSourceLeafId;
             },
 
             /**
@@ -369,66 +427,67 @@ const useSplitStore = create(
              * @param {string} splitId - ID do split a fechar
              */
             closePane: (splitId) => {
-                const state = get();
-                const split = state.splits.get(splitId);
-
-                if (!split) return;
-
-                // Se for o root e único, limpar tudo
-                if (splitId === state.rootSplitId && state.splits.size === 1) {
-                    set({
-                        splits: new Map(),
-                        rootSplitId: null,
-                        activePaneId: null,
-                    });
-                    return;
-                }
-
-                // Encontrar o pai deste split
-                const parentSplit = Array.from(state.splits.values()).find(
-                    (s) => s.children?.includes(splitId)
-                );
-
-                if (!parentSplit) {
-                    console.error(`[SplitStore] Pai de ${splitId} não encontrado`);
-                    return;
-                }
-
-                // Obter o irmão (sibling)
-                const siblingId = parentSplit.children.find((id) => id !== splitId);
-                const sibling = state.splits.get(siblingId);
-
-                if (!sibling) return;
-
-                // Substituir o pai pelo irmão
                 set((state) => {
+                    const existing = state.splits.get(splitId);
+                    if (!existing) return state;
+
+                    // Se for o root e único, limpar tudo
+                    if (splitId === state.rootSplitId && state.splits.size === 1) {
+                        return {
+                            splits: new Map(),
+                            rootSplitId: null,
+                            activePaneId: null,
+                        };
+                    }
+
                     const newSplits = new Map(state.splits);
 
-                    // Remover o split fechado
-                    newSplits.delete(splitId);
+                    const parentByChild = new Map();
+                    const buildParents = (nodeId) => {
+                        const node = newSplits.get(nodeId);
+                        if (!node?.children) return;
+                        for (const childId of node.children) {
+                            parentByChild.set(childId, nodeId);
+                            buildParents(childId);
+                        }
+                    };
+                    if (state.rootSplitId) {
+                        buildParents(state.rootSplitId);
+                    }
 
-                    // Se o pai for o root, o irmão vira o novo root
-                    if (parentSplit.id === state.rootSplitId) {
+                    const parentId = parentByChild.get(splitId);
+                    if (!parentId) {
+                        console.error(`[SplitStore] Pai de ${splitId} não encontrado`);
+                        return state;
+                    }
+
+                    const parent = newSplits.get(parentId);
+                    if (!parent?.children) return state;
+
+                    const siblingId = parent.children.find((id) => id !== splitId);
+                    if (!siblingId) return state;
+
+                    const grandParentId = parentByChild.get(parentId);
+
+                    newSplits.delete(splitId);
+                    newSplits.delete(parentId);
+
+                    if (!grandParentId) {
                         return {
-                            splits: new Map([[siblingId, sibling]]),
+                            splits: newSplits,
                             rootSplitId: siblingId,
                             activePaneId: siblingId,
                         };
                     }
 
-                    // Caso contrário, substituir o pai pelo irmão
-                    const grandParent = Array.from(newSplits.values()).find(
-                        (s) => s.children?.includes(parentSplit.id)
-                    );
-
-                    if (grandParent) {
-                        grandParent.children = grandParent.children.map((id) =>
-                            id === parentSplit.id ? siblingId : id
-                        );
-                        newSplits.set(grandParent.id, { ...grandParent });
+                    const grandParent = newSplits.get(grandParentId);
+                    if (!grandParent?.children) {
+                        console.error(`[SplitStore] Avô de ${parentId} não encontrado`);
+                        return state;
                     }
 
-                    newSplits.delete(parentSplit.id);
+                    const nextChildren = grandParent.children.map((id) => (id === parentId ? siblingId : id));
+                    newSplits.set(grandParentId, { ...grandParent, children: nextChildren });
 
                     return {
                         splits: newSplits,

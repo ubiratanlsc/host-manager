@@ -176,7 +176,7 @@ const SplitPane = () => {
 
             const direction = (zone === 'top' || zone === 'bottom') ? 'vertical' : 'horizontal';
             (activeData.terminalIds || []).forEach(saveTerminalSnapshot);
-            splitPaneWithPane(targetSplitId, direction, sourceSplitId);
+            splitPaneWithPane(targetSplitId, direction, sourceSplitId, zone);
             window.dispatchEvent(new Event('terminal:relayout'));
             return;
         }
@@ -208,7 +208,7 @@ const SplitPane = () => {
 
                 saveTerminalSnapshot(activeTerminalId);
                 removeTerminalFromSplit(sourceSplitId, activeTerminalId);
-                const newLeafId = splitPane(targetSplitId, direction, activeTerminalId);
+                const newLeafId = splitPane(targetSplitId, direction, activeTerminalId, zone);
                 if (newLeafId) {
                     setActiveTerminal(newLeafId, activeTerminalId);
                 }

@@ -225,7 +225,7 @@ const TerminalComponent = ({ terminalId }) => {
     }, [isReady, terminalId]);
 
     useEffect(() => {
-        if (!isReady || !initOk || openedRef.current) return;
+        if (!isReady || openedRef.current) return;
         const xterm = xtermRef.current;
         if (!xterm || !terminalRef.current) return;
 
@@ -245,11 +245,12 @@ const TerminalComponent = ({ terminalId }) => {
                 xterm.write(chunk);
             }
         }
+    }, [isReady, terminalId]);
 
-        setTimeout(() => {
-            scheduleResize();
-        }, 50);
-    }, [isReady, initOk, scheduleResize, terminalId]);
+    useEffect(() => {
+        if (!isInitialized || !initOk) return;
+        scheduleResize();
+    }, [isInitialized, initOk, scheduleResize]);
 
     useEffect(() => {
         const xterm = xtermRef.current;

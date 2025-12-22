@@ -238,7 +238,7 @@ const SSHComponent = ({ sessionId }) => {
     }, [session, sessionId]);
 
     useEffect(() => {
-        if (!session || !initOk || openedRef.current) return;
+        if (!session || openedRef.current) return;
         const xterm = xtermRef.current;
         if (!xterm || !terminalRef.current) return;
 
@@ -261,10 +261,12 @@ const SSHComponent = ({ sessionId }) => {
             }
         }
 
-        setTimeout(() => {
-            scheduleResize();
-        }, 50);
-    }, [session, initOk, scheduleResize, sessionId]);
+    }, [session, sessionId]);
+
+    useEffect(() => {
+        if (!isInitialized || !initOk) return;
+        scheduleResize();
+    }, [isInitialized, initOk, scheduleResize]);
 
     /**
      * Controlar foco da sessão SSH
