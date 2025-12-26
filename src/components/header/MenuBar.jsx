@@ -94,7 +94,7 @@ export function MenuBar({ className, disabled = false }) {
 
         try {
             if (shells.length > 0) {
-                const selectedShell = shells[1] || shells[0];
+                const selectedShell = shells[2] || shells[0];
                 console.log('[Home] Spawning with shell:', selectedShell);
                 await spawnPty(selectedShell);
             } else {

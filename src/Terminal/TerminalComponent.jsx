@@ -4,6 +4,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SerializeAddon } from '@xterm/addon-serialize';
+import { LigaturesAddon } from '@xterm/addon-ligatures';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { isTauri } from '@tauri-apps/api/core';
 import useTerminalStore from '../stores/useTerminalStore';
@@ -52,7 +53,7 @@ const TerminalComponent = ({ terminalId }) => {
     const isReady = !!terminalMeta;
 
     const [isInitialized, setIsInitialized] = useState(false);
-    const { colors } = useConfigStore();
+    const { colors, configs } = useConfigStore();
     const { theme } = useThemeStore();
 
     const initOk = useMemo(() => {
@@ -107,6 +108,8 @@ const TerminalComponent = ({ terminalId }) => {
             },
             fontFamily: 'JetBrainsMono Nerd Font, monospace',
             cursorBlink: true,
+            cursorStyle: 'bar',
+            // convertEol: true,
             allowTransparency: true,
             allowProposedApi: true,
             overviewRulerWidth: 8,
@@ -121,6 +124,8 @@ const TerminalComponent = ({ terminalId }) => {
         xterm.loadAddon(fitAddon);
         xterm.loadAddon(webLinksAddon);
         xterm.loadAddon(serializeAddon);
+
+
 
         if (canUseWebgl()) {
             try {
@@ -279,6 +284,26 @@ const TerminalComponent = ({ terminalId }) => {
         window.addEventListener('terminal:relayout', handler);
         return () => window.removeEventListener('terminal:relayout', handler);
     }, [isInitialized, scheduleResize]);
+
+    useEffect(() => {
+        if (!isInitialized || !configs?.ligatures) return;
+        const xterm = xtermRef.current;
+        if (!xterm) return;
+
+        let ligaturesAddon = null;
+        try {
+            ligaturesAddon = new LigaturesAddon();
+            xterm.loadAddon(ligaturesAddon);
+        } catch (e) {
+            console.error('Failed to load ligatures addon:', e);
+        }
+
+        return () => {
+            if (ligaturesAddon) {
+                ligaturesAddon.dispose();
+            }
+        };
+    }, [isInitialized, configs?.ligatures]);
 
     if (!terminalMeta) {
         return (

@@ -4,9 +4,11 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SerializeAddon } from '@xterm/addon-serialize';
+import { LigaturesAddon } from '@xterm/addon-ligatures';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { isTauri } from '@tauri-apps/api/core';
 import useSSHStore from '../stores/useSSHStore';
+import useConfigStore from '@/stores/ConfigData';
 import '@xterm/xterm/css/xterm.css';
 
 const canUseWebgl = () => {
@@ -53,6 +55,7 @@ const SSHComponent = ({ sessionId }) => {
     const isFocused = focusedSession === sessionId;
 
     const [isInitialized, setIsInitialized] = useState(false);
+    const { configs } = useConfigStore();
 
     const initOk = useMemo(() => {
         const width = containerSize?.width ?? 0;
@@ -290,9 +293,28 @@ const SSHComponent = ({ sessionId }) => {
     useEffect(() => {
         if (!isInitialized) return;
         const handler = () => scheduleResize();
-        window.addEventListener('terminal:relayout', handler);
         return () => window.removeEventListener('terminal:relayout', handler);
     }, [isInitialized, scheduleResize]);
+
+    useEffect(() => {
+        if (!isInitialized || !configs?.ligatures) return;
+        const xterm = xtermRef.current;
+        if (!xterm) return;
+
+        let ligaturesAddon = null;
+        try {
+            ligaturesAddon = new LigaturesAddon();
+            xterm.loadAddon(ligaturesAddon);
+        } catch (e) {
+            console.error('Failed to load ligatures addon:', e);
+        }
+
+        return () => {
+            if (ligaturesAddon) {
+                ligaturesAddon.dispose();
+            }
+        };
+    }, [isInitialized, configs?.ligatures]);
 
     // Se sessão não existe, não renderizar nada
     if (!session) {

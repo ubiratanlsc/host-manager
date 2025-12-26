@@ -29,10 +29,10 @@ pub fn get_available_shells() -> Vec<SystemShell> {
     let mut shells = Vec::new();
 
     shells = get_stock(shells);
-    // shells = get_gitbash(shells);
+    shells = get_gitbash(shells);
     shells = get_powershell_core(shells);
     shells = get_vscode(shells);
-    // shells = get_wsl(shells);
+    shells = get_wsl(shells);
 
     shells
 }

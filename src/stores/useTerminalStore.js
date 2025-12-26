@@ -63,6 +63,8 @@ const useTerminalStore = create(
                     }
                     const shells = await invoke(GET_SYSTEM_SHELLS_COMMAND, {});
                     set({ shells });
+                    console.log('shells', shells);
+
                     return shells;
                 } catch (error) {
                     console.error('[TerminalStore] Failed to load system shells:', error);

@@ -8,6 +8,7 @@ const useConfigStore = create((set) => ({
     configs: {
         theme: "dark",
         font: "Roboto",
+        ligatures: true,
     },
     colors: {},
     addCustomer: (id, name, host, port, username, password, group, tagId) => set((state) => ({
