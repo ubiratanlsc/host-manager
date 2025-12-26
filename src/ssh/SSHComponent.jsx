@@ -5,10 +5,12 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SerializeAddon } from '@xterm/addon-serialize';
 import { LigaturesAddon } from '@xterm/addon-ligatures';
+import { SearchAddon } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { isTauri } from '@tauri-apps/api/core';
 import useSSHStore from '../stores/useSSHStore';
 import useConfigStore from '@/stores/ConfigData';
+import SearchOverlay from '@/Terminal/SearchOverlay';
 import '@xterm/xterm/css/xterm.css';
 
 const canUseWebgl = () => {
@@ -46,6 +48,7 @@ const SSHComponent = ({ sessionId }) => {
     const xtermRef = useRef(null);
     const fitAddonRef = useRef(null);
     const serializeAddonRef = useRef(null);
+    const searchAddonRef = useRef(null);
     const webglAddonRef = useRef(null);
     const openedRef = useRef(false);
     const isWebModeRef = useRef(false);
@@ -120,10 +123,12 @@ const SSHComponent = ({ sessionId }) => {
         const fitAddon = new FitAddon();
         const webLinksAddon = new WebLinksAddon();
         const serializeAddon = new SerializeAddon();
+        const searchAddon = new SearchAddon();
 
         xterm.loadAddon(fitAddon);
         xterm.loadAddon(webLinksAddon);
         xterm.loadAddon(serializeAddon);
+        xterm.loadAddon(searchAddon);
 
         if (canUseWebgl()) {
             try {
@@ -165,6 +170,7 @@ const SSHComponent = ({ sessionId }) => {
         xtermRef.current = xterm;
         fitAddonRef.current = fitAddon;
         serializeAddonRef.current = serializeAddon;
+        searchAddonRef.current = searchAddon;
 
         useSSHStore.getState().attachSession(sessionId);
 
@@ -230,6 +236,7 @@ const SSHComponent = ({ sessionId }) => {
             xtermRef.current = null;
             fitAddonRef.current = null;
             serializeAddonRef.current = null;
+            searchAddonRef.current = null;
             webglAddonRef.current = null;
             openedRef.current = false;
 
@@ -322,8 +329,11 @@ const SSHComponent = ({ sessionId }) => {
     }
 
     return (
-        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative">
+        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative group">
             <div ref={terminalRef} className="absolute inset-0" />
+            {isInitialized && searchAddonRef.current && (
+                <SearchOverlay searchAddon={searchAddonRef.current} />
+            )}
         </div>
     );
 };
