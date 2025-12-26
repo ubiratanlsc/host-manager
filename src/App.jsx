@@ -66,7 +66,7 @@ const App = () => {
   return (
     <div className="h-screen flex flex-col overflow-hidden text-gray-900 dark:text-gray-100 font-[IBM Plex Sans]">
       <MenuBar />
-      <Home />
+      {/* <Home /> */}
       <div className="flex-1 flex flex-col overflow-hidden bg-background transition-colors duration-300">
         <MainTerminalView />
       </div>

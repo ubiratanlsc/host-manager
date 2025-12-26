@@ -15,7 +15,7 @@ const useLoadData = create((set) => ({
 
         const contents = new TextDecoder().decode(file);
 
-        const { addCustomer, addGroup, addTag, addConfig } = useConfigStore.getState();
+        const { addCustomer, addGroup, addTag, addConfig, addColors } = useConfigStore.getState();
         JSON.parse(contents).customers?.forEach(
             ({ id, name, host, port, username, password, groups, tagId }) => addCustomer(id, name, host, port, username, password, groups[0], tagId)
         );
@@ -25,8 +25,8 @@ const useLoadData = create((set) => ({
         JSON.parse(contents).tags?.forEach(
             ({ id, name, description, color }) => addTag(id, name, description, color)
         );
+        Object.entries(JSON.parse(contents).colors)?.forEach(([key, value]) => addColors(key, value));
         Object.entries(JSON.parse(contents).configs)?.forEach(([key, value]) => addConfig(key, value));
-        // JSON.parse(contents).configs?.forEach(([key, value]) => addConfig(key, value));
     },
     initLoadData: () => {
         const { loadData } = useLoadData.getState();

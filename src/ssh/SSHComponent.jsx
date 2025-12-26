@@ -300,8 +300,8 @@ const SSHComponent = ({ sessionId }) => {
     }
 
     return (
-        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative bg-[#1A1B1E]">
-            <div ref={terminalRef} className="absolute inset-0 pl-2" />
+        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative">
+            <div ref={terminalRef} className="absolute inset-0" />
         </div>
     );
 };

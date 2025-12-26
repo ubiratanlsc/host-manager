@@ -195,11 +195,10 @@ const Pane = ({ paneId }) => {
         <div
             ref={setDragRef}
             style={style}
-            className={`
-                relative flex flex-col h-full bg-[#25262B] rounded-lg overflow-hidden
-                border-2 transition-colors
-                ${isDragging ? 'border-blue-500 z-[20000]' : 'border-gray-800'}
-            `}
+            className={`relative flex flex-col h-full rounded-md overflow-hidden transition-colors
+                ${isDragging ? 'z-[20000]' : ''}
+            `} 
+            // mt-1
             onClick={() => setActivePane(paneId)}
         >
             <Tabs
@@ -207,7 +206,8 @@ const Pane = ({ paneId }) => {
                 onValueChange={handleActivateTerminal}
                 className="flex flex-col h-full"
             >
-                <div className="flex items-center gap-2 bg-[#2C2D32] border-b border-gray-800 px-2 py-1">
+                {/* 1d1d1d */}
+                <div className="flex items-center gap-2 px-2 py-0 dark:bg-[#121212] bg-[#D7D7D7] rounded-t-md">
                     <div
                         className="flex items-center gap-2 cursor-grab active:cursor-grabbing"
                         {...attributes}
@@ -220,7 +220,7 @@ const Pane = ({ paneId }) => {
                         ref={setTabListDropRef}
                         className={`flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent ${isOverTabList ? 'bg-blue-500/10 rounded' : ''}`}
                     >
-                        <TabsList className="inline-flex flex-nowrap h-8 items-center justify-start rounded-md bg-transparent p-0 gap-1 w-auto">
+                        <TabsList className="inline-flex flex-nowrap h-8 items-center justify-start rounded-md p-0 gap-1 w-auto bg-inherit">
                             <SortableContext items={terminalIds} strategy={horizontalListSortingStrategy}>
                                 {terminalIds.map((terminalId) => {
                                     const terminal = terminals.get(terminalId);
@@ -251,7 +251,7 @@ const Pane = ({ paneId }) => {
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 text-red-400 hover:text-red-300"
+                            className="h-6 w-6 text-red-700 hover:text-red-700"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 handleClosePane();

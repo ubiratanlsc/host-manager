@@ -24,12 +24,17 @@ import {
     DropdownMenuShortcut,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import { useTerminalStore } from "@/stores";
 
 export function MenuBar({ className, disabled = false }) {
     const [isMobile, setIsMobile] = React.useState(false);
     const [openMax, setOpenMax] = React.useState(true);
     const { openModal } = useModalStore();
     const { configs, addConfig } = useConfigStore();
+    const shells = useTerminalStore((state) => state.shells);
+    const spawnPty = useTerminalStore((state) => state.spawnPty);
+    const loadSystemShells = useTerminalStore((state) => state.loadSystemShells);
+    const isInitialized = useTerminalStore((state) => state.isInitialized);
     const appWindow = React.useMemo(() => {
         try {
             return isTauri() ? getCurrentWindow() : null;
@@ -79,7 +84,33 @@ export function MenuBar({ className, disabled = false }) {
         window.addEventListener("keydown", handleKeyboard);
         return () => window.removeEventListener("keydown", handleKeyboard);
     }, [disabled, openModal]);
+    const handleSpawnTerminal = async () => {
 
+        if (!isInitialized) {
+            console.warn('[Home] Listeners not initialized yet');
+            alert('Terminal system is still initializing. Please wait a moment.');
+            return;
+        }
+
+        try {
+            if (shells.length > 0) {
+                const selectedShell = shells[1] || shells[0];
+                console.log('[Home] Spawning with shell:', selectedShell);
+                await spawnPty(selectedShell);
+            } else {
+                console.warn('[Home] No shells detected. Attempting fallback spawn...');
+                await spawnPty({
+                    name: 'PowerShell',
+                    command: 'powershell.exe',
+                    args: []
+                });
+            }
+
+        } catch (error) {
+            console.error('[Home] Error spawning terminal:', error);
+            alert(`Failed to spawn terminal: ${error.message || error}`);
+        }
+    };
     const handleToggleTheme = () => {
         const newTheme = configs.theme === "dark" ? "light" : "dark";
         addConfig("theme", newTheme);
@@ -164,6 +195,10 @@ export function MenuBar({ className, disabled = false }) {
                                 <TerminalTag className="mr-2 h-4 w-4" />
                                 <span>Nova Conexão</span>
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openModal("connect")}>
+                                <TerminalTag className="mr-2 h-4 w-4" />
+                                <span>Novo Terminal Local</span>
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => openModal("host")}>
                                 <Server className="mr-2 h-4 w-4" />
                                 <span>Novo Host</span>
@@ -204,6 +239,10 @@ export function MenuBar({ className, disabled = false }) {
                                 <DropdownMenuItem onClick={() => openModal("connect")}>
                                     <TerminalTag className="mr-2 h-4 w-4" />
                                     <span>Conexão</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleSpawnTerminal()}>
+                                    <TerminalTag className="mr-2 h-4 w-4" />
+                                    <span>Terminal</span>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => openModal("host")}>
                                     <Server className="mr-2 h-4 w-4" />

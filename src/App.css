@@ -90,6 +90,6 @@ body {
 html,
 :root {
   height: 100vh;
-  scrollbar-color: #2a3441 #0b0f12;
+  scrollbar-color: transparent transparent;
   scrollbar-width: thin;
 }

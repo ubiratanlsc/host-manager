@@ -7,6 +7,8 @@ import { SerializeAddon } from '@xterm/addon-serialize';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { isTauri } from '@tauri-apps/api/core';
 import useTerminalStore from '../stores/useTerminalStore';
+import useConfigStore from '@/stores/ConfigData';
+import useThemeStore from '@/stores/useThemeStore';
 
 const canUseWebgl = () => {
     try {
@@ -50,6 +52,8 @@ const TerminalComponent = ({ terminalId }) => {
     const isReady = !!terminalMeta;
 
     const [isInitialized, setIsInitialized] = useState(false);
+    const { colors } = useConfigStore();
+    const { theme } = useThemeStore();
 
     const initOk = useMemo(() => {
         const width = containerSize?.width ?? 0;
@@ -96,9 +100,10 @@ const TerminalComponent = ({ terminalId }) => {
 
         const xterm = new Terminal({
             theme: {
-                background: '#1A1B1E',
-                cursor: '#10B981',
-                cursorAccent: '#10B98100',
+                // background: 'transparent',
+                // cursor: '#10B981',
+                // cursorAccent: '#10B98100',
+                ...theme
             },
             fontFamily: 'JetBrainsMono Nerd Font, monospace',
             cursorBlink: true,
@@ -287,8 +292,8 @@ const TerminalComponent = ({ terminalId }) => {
     }
 
     return (
-        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative bg-[#1A1B1E]">
-            <div ref={terminalRef} className="absolute inset-0 pl-2" />
+        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative">
+            <div ref={terminalRef} className="absolute inset-0" />
         </div>
     );
 };

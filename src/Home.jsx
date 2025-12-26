@@ -114,7 +114,7 @@ const Home = () => {
             </Card>
 
             {/* Stats */}
-            <div className="flex gap-4 mb-4 text-sm text-muted-foreground px-1">
+            {/* <div className="flex gap-4 mb-4 text-sm text-muted-foreground px-1">
                 <div className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full ${terminalsCount > 0 ? 'bg-green-500' : 'bg-gray-400'}`} />
                     <span>Terminals: {terminalsCount}</span>
@@ -127,7 +127,7 @@ const Home = () => {
                     <div className={`w-2 h-2 rounded-full ${hostsCount > 0 ? 'bg-purple-500' : 'bg-gray-400'}`} />
                     <span>Hosts: {hostsCount}</span>
                 </div>
-            </div>
+            </div> */}
         </div>
     );
 };

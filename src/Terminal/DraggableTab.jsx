@@ -46,8 +46,8 @@ const DraggableTab = ({
             value={terminalId}
             className={cn(
                 "group relative flex items-center gap-2 h-7 rounded-md px-2",
-                "border border-transparent bg-[#25262B] text-gray-300",
-                "data-[state=active]:bg-[#1A1B1E] data-[state=active]:text-white data-[state=active]:border-gray-700",
+                "border border-transparent dark:bg-[#25262B] dark:text-gray-300",
+                "data-[state=active]:dark:bg-[#1A1B1E] data-[state=active]:dark:text-white data-[state=active]:dark:border-gray-700",
                 "hover:bg-[#2C2D32] hover:text-gray-100",
                 isDragging && "z-50"
             )}
@@ -61,7 +61,18 @@ const DraggableTab = ({
                 <span className="text-xs font-medium select-none truncate max-w-[160px]">{label}</span>
             </div>
 
-            <div
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 ml-auto opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive p-0 flex items-center justify-center"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onClose?.();
+                }}
+                title="Close Tab">
+                <X className="h-3 w-3" />
+            </Button>
+            {/* <div
                 role="button"
                 className="h-5 w-5 ml-auto opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive p-0 flex items-center justify-center"
                 onClick={(e) => {
@@ -70,7 +81,7 @@ const DraggableTab = ({
                 }}
             >
                 <X className="h-3 w-3" />
-            </div>
+            </div> */}
         </TabsTrigger>
     );
 };
