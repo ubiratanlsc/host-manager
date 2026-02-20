@@ -11,6 +11,7 @@ const SSH_SPAWN_COMMAND = 'spawn_ssh';
 const SSH_STDIN_COMMAND = 'write_ssh';
 const SSH_RESIZE_COMMAND = 'resize_ssh';
 const SSH_KILL_COMMAND = 'kill_ssh';
+const SSH_LIST_COMMAND = 'list_ssh_sessions';
 
 /**
  * SSH Store - Gerencia sessões SSH remotas com Xterm.js
@@ -36,7 +37,7 @@ const useSSHStore = create(
             focusedSession: null,
             listeners: null,
             isInitialized: false,
-            commandBuffers: new Map(), // Buffer de comandos por sessão
+            commandBuffers: new Map(), // { buffer: string, history: string[], historyIndex: number, cursorPosition: number, currentAttempt: string }
             serializedContent: new Map(), // Armazena conteúdo serializado temporariamente
             pendingStdout: new Map(),
             recentlyClosed: new Map(),
@@ -82,9 +83,15 @@ const useSSHStore = create(
                                 createdAt: new Date().toISOString(),
                             });
 
-                            // Inicializar buffer de comandos
+                            // Inicializar buffer de comandos com metadados de histórico
                             const newBuffers = new Map(state.commandBuffers);
-                            newBuffers.set(id, []);
+                            newBuffers.set(id, {
+                                buffer: '',
+                                history: [],
+                                historyIndex: -1,
+                                cursorPosition: 0,
+                                currentAttempt: ''
+                            });
 
                             const newRecentlyClosed = new Map(state.recentlyClosed);
                             newRecentlyClosed.delete(id);
@@ -185,6 +192,48 @@ const useSSHStore = create(
                     });
 
                     console.log('[SSHStore] Listeners initialized successfully');
+
+                    // Restaurar sessões ativas do backend (sobrevivem ao F5/reload)
+                    try {
+                        const activeSessions = await invoke(SSH_LIST_COMMAND);
+                        if (activeSessions && activeSessions.length > 0) {
+                            console.log(`[SSHStore] Restoring ${activeSessions.length} active sessions`);
+                            set((state) => {
+                                const newSessions = new Map(state.sessions);
+                                const newBuffers = new Map(state.commandBuffers);
+                                let lastId = null;
+
+                                for (const session of activeSessions) {
+                                    if (!newSessions.has(session.id)) {
+                                        newSessions.set(session.id, {
+                                            id: session.id,
+                                            shell: { name: 'SSH' },
+                                            title: `${session.username}@${session.host}`,
+                                            config: { host: session.host, port: session.port, username: session.username },
+                                            isOpen: true,
+                                            createdAt: new Date().toISOString(),
+                                        });
+                                        newBuffers.set(session.id, {
+                                            buffer: '',
+                                            history: [],
+                                            historyIndex: -1,
+                                            cursorPosition: 0,
+                                            currentAttempt: ''
+                                        });
+                                        lastId = session.id;
+                                    }
+                                }
+
+                                return {
+                                    sessions: newSessions,
+                                    commandBuffers: newBuffers,
+                                    ...(lastId ? { focusedSession: lastId } : {}),
+                                };
+                            });
+                        }
+                    } catch (listError) {
+                        console.warn('[SSHStore] Failed to list active sessions:', listError);
+                    }
                 } catch (error) {
                     console.error('[SSHStore] Failed to initialize listeners:', error);
                 }
@@ -245,7 +294,13 @@ const useSSHStore = create(
                             });
 
                             const newBuffers = new Map(state.commandBuffers);
-                            newBuffers.set(id, []);
+                            newBuffers.set(id, {
+                                buffer: '',
+                                history: [],
+                                historyIndex: -1,
+                                cursorPosition: 0,
+                                currentAttempt: ''
+                            });
 
                             return {
                                 sessions: newSessions,
@@ -278,34 +333,206 @@ const useSSHStore = create(
                 try {
                     if (!isTauri()) return;
                     const state = get();
-                    const buffer = state.commandBuffers.get(id) || [];
+                    const cmdData = state.commandBuffers.get(id) || {
+                        buffer: '',
+                        history: [],
+                        historyIndex: -1,
+                        cursorPosition: 0,
+                        currentAttempt: ''
+                    };
 
                     // Se for Enter, enviar comando acumulado
                     if (data === '\r') {
-                        const command = buffer.join('');
+                        const command = cmdData.buffer;
                         console.log(`[SSHStore] Sending command to ${id}:`, command);
 
                         // Enviar comando para o backend
                         await invoke(SSH_STDIN_COMMAND, { id, data: command });
 
+                        // Adicionar ao histórico se não for vazio e for diferente do último
+                        const newHistory = [...cmdData.history];
+                        if (command.trim() && (newHistory.length === 0 || newHistory[newHistory.length - 1] !== command)) {
+                            newHistory.push(command);
+                            if (newHistory.length > 100) newHistory.shift();
+                        }
+
                         // Limpar buffer
                         set((state) => {
                             const newBuffers = new Map(state.commandBuffers);
-                            newBuffers.set(id, []);
+                            newBuffers.set(id, {
+                                ...cmdData,
+                                buffer: '',
+                                history: newHistory,
+                                historyIndex: -1,
+                                cursorPosition: 0,
+                                currentAttempt: ''
+                            });
                             return { commandBuffers: newBuffers };
                         });
-                    } else {
-                        // Acumular no buffer
-                        buffer.push(data);
+                        return { action: 'enter', command };
+                    }
+
+                    // Ctrl+C (\x03)
+                    if (data === '\x03') {
+                        console.log(`[SSHStore] Sending SIGINT to ${id}`);
+                        await invoke(SSH_STDIN_COMMAND, { id, data: '\x03' });
+                        // Limpar buffer local
                         set((state) => {
                             const newBuffers = new Map(state.commandBuffers);
-                            newBuffers.set(id, buffer);
+                            newBuffers.set(id, {
+                                ...cmdData,
+                                buffer: '',
+                                historyIndex: -1,
+                                cursorPosition: 0,
+                                currentAttempt: ''
+                            });
                             return { commandBuffers: newBuffers };
                         });
+                        return { action: 'interrupt' };
+                    }
+
+                    // Backspace (\x7f ou \b)
+                    if (data === '\x7f' || data === '\b') {
+                        if (cmdData.cursorPosition > 0) {
+                            const newBuffer = cmdData.buffer.slice(0, cmdData.cursorPosition - 1) +
+                                cmdData.buffer.slice(cmdData.cursorPosition);
+                            const newPos = cmdData.cursorPosition - 1;
+
+                            set((state) => {
+                                const newBuffers = new Map(state.commandBuffers);
+                                newBuffers.set(id, {
+                                    ...cmdData,
+                                    buffer: newBuffer,
+                                    cursorPosition: newPos
+                                });
+                                return { commandBuffers: newBuffers };
+                            });
+                            return { action: 'backspace', buffer: newBuffer, cursorPosition: newPos, oldCursorPos: cmdData.cursorPosition };
+                        }
+                        return null;
+                    }
+
+                    // Delete (\x1b[3~)
+                    if (data === '\x1b[3~') {
+                        if (cmdData.cursorPosition < cmdData.buffer.length) {
+                            const newBuffer = cmdData.buffer.slice(0, cmdData.cursorPosition) +
+                                cmdData.buffer.slice(cmdData.cursorPosition + 1);
+
+                            set((state) => {
+                                const newBuffers = new Map(state.commandBuffers);
+                                newBuffers.set(id, {
+                                    ...cmdData,
+                                    buffer: newBuffer
+                                });
+                                return { commandBuffers: newBuffers };
+                            });
+                            return { action: 'delete', buffer: newBuffer, cursorPosition: cmdData.cursorPosition, oldCursorPos: cmdData.cursorPosition };
+                        }
+                        return null;
+                    }
+
+                    // Regular characters and multi-character strings (pastes)
+                    if (data.length > 0 && data.charCodeAt(0) >= 32) {
+                        const newBuffer = cmdData.buffer.slice(0, cmdData.cursorPosition) +
+                            data +
+                            cmdData.buffer.slice(cmdData.cursorPosition);
+                        const newPos = cmdData.cursorPosition + data.length;
+
+                        set((state) => {
+                            const newBuffers = new Map(state.commandBuffers);
+                            newBuffers.set(id, {
+                                ...cmdData,
+                                buffer: newBuffer,
+                                cursorPosition: newPos
+                            });
+                            return { commandBuffers: newBuffers };
+                        });
+                        return { action: data.length > 1 ? 'paste' : 'write', char: data, buffer: newBuffer, cursorPosition: newPos, oldCursorPos: cmdData.cursorPosition };
                     }
                 } catch (error) {
                     console.error(`[SSHStore] Failed to write to SSH ${id}:`, error);
                 }
+                return null;
+            },
+
+            /**
+             * Navega no histórico de comandos
+             */
+            navigateSSHHistory: (id, direction) => {
+                const state = get();
+                const cmdData = state.commandBuffers.get(id);
+                if (!cmdData || cmdData.history.length === 0) return null;
+
+                let newIndex = cmdData.historyIndex;
+                let currentAttempt = cmdData.currentAttempt;
+
+                // Se está começando a navegar (estava no prompt vazio)
+                if (newIndex === -1) {
+                    currentAttempt = cmdData.buffer;
+                }
+
+                if (direction === 'up') {
+                    if (newIndex === -1) {
+                        newIndex = cmdData.history.length - 1;
+                    } else if (newIndex > 0) {
+                        newIndex--;
+                    }
+                } else if (direction === 'down') {
+                    if (newIndex !== -1) {
+                        if (newIndex < cmdData.history.length - 1) {
+                            newIndex++;
+                        } else {
+                            newIndex = -1;
+                        }
+                    }
+                }
+
+                if (newIndex === cmdData.historyIndex) return null;
+
+                const newBuffer = newIndex === -1 ? currentAttempt : cmdData.history[newIndex];
+
+                set((state) => {
+                    const newBuffers = new Map(state.commandBuffers);
+                    newBuffers.set(id, {
+                        ...cmdData,
+                        buffer: newBuffer,
+                        historyIndex: newIndex,
+                        cursorPosition: newBuffer.length,
+                        currentAttempt
+                    });
+                    return { commandBuffers: newBuffers };
+                });
+
+                return { action: 'history', buffer: newBuffer, cursorPosition: newBuffer.length, oldCursorPos: cmdData.cursorPosition };
+            },
+
+            /**
+             * Move o cursor dentro do buffer
+             */
+            moveSSHCursor: (id, direction) => {
+                const state = get();
+                const cmdData = state.commandBuffers.get(id);
+                if (!cmdData) return null;
+
+                let newPos = cmdData.cursorPosition;
+                if (direction === 'left' && newPos > 0) {
+                    newPos--;
+                } else if (direction === 'right' && newPos < cmdData.buffer.length) {
+                    newPos++;
+                }
+
+                if (newPos === cmdData.cursorPosition) return null;
+
+                set((state) => {
+                    const newBuffers = new Map(state.commandBuffers);
+                    newBuffers.set(id, {
+                        ...cmdData,
+                        cursorPosition: newPos
+                    });
+                    return { commandBuffers: newBuffers };
+                });
+
+                return { action: 'cursor', cursorPosition: newPos };
             },
 
             /**

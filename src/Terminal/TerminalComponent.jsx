@@ -12,6 +12,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import useTerminalStore from '../stores/useTerminalStore';
 import useConfigStore from '@/stores/ConfigData';
 import useThemeStore from '@/stores/useThemeStore';
+import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 
 const canUseWebgl = () => {
     try {
@@ -142,6 +143,49 @@ const TerminalComponent = ({ terminalId }) => {
             }
         }
 
+        // Auto-copiar ao selecionar texto
+        xterm.onSelectionChange(() => {
+            if (xterm.hasSelection()) {
+                const selectedText = xterm.getSelection();
+                if (selectedText) {
+                    writeText(selectedText);
+                }
+            }
+        });
+
+        // Botão direito do mouse para colar
+        const handleContextMenu = async (e) => {
+            e.preventDefault();
+            try {
+                const text = await readText();
+                if (text) {
+                    useTerminalStore.getState().writePty(terminalId, text);
+                }
+            } catch (_) { }
+        };
+        containerRef.current?.addEventListener('contextmenu', handleContextMenu);
+
+        xterm.attachCustomKeyEventHandler((event) => {
+            // Ctrl+C para copiar se houver seleção
+            if (event.ctrlKey && event.key === 'c' && event.type === 'keydown') {
+                if (xterm.hasSelection()) {
+                    const selectedText = xterm.getSelection();
+                    writeText(selectedText);
+                    return false;
+                }
+            }
+            // Ctrl+V para colar
+            if (event.ctrlKey && event.key === 'v' && event.type === 'keydown') {
+                readText().then(text => {
+                    if (text) {
+                        useTerminalStore.getState().writePty(terminalId, text);
+                    }
+                });
+                return false;
+            }
+            return true;
+        });
+
         xterm.onData((data) => {
             if (!isTauri() || isWebModeRef.current) {
                 if (data === '\r') {
@@ -196,6 +240,7 @@ const TerminalComponent = ({ terminalId }) => {
         window.addEventListener('terminal:snapshot', onSnapshot);
 
         return () => {
+            containerRef.current?.removeEventListener('contextmenu', handleContextMenu);
             window.removeEventListener('pty:stdout', onStdout);
             window.removeEventListener('terminal:snapshot', onSnapshot);
 

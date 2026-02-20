@@ -12,7 +12,6 @@ const useLoadData = create((set) => ({
             baseDir: BaseDirectory.Resource,
         });
         let diretorio = await readDir('', { baseDir: BaseDirectory.Resource })
-
         const contents = new TextDecoder().decode(file);
 
         const { addCustomer, addGroup, addTag, addConfig, addColors } = useConfigStore.getState();

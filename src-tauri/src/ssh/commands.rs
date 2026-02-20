@@ -6,10 +6,10 @@ use ssh2::KeyboardInteractivePrompt;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::thread;
+use std::time::Duration;
 use std::{io::Read, path::Path};
 use tauri::Emitter;
 use tokio::sync::mpsc;
-use std::time::Duration;
 
 struct PasswordPrompt(String);
 
@@ -246,6 +246,9 @@ pub async fn spawn_ssh(
     let session = SshSession {
         id: id.clone(),
         window_id: window_id.clone(),
+        host: host.clone(),
+        port,
+        username: username.clone(),
         channel: Arc::clone(&channel),
         stdin_tx,
         stdin_task,
@@ -333,7 +336,11 @@ pub async fn write_ssh(
 }
 
 #[tauri::command]
-pub async fn resize_ssh(state: State<'_, JexpeState>, id: String, size: PtySize) -> Result<(), String> {
+pub async fn resize_ssh(
+    state: State<'_, JexpeState>,
+    id: String,
+    size: PtySize,
+) -> Result<(), String> {
     let channel = {
         let ssh_sessions = state.ssh_sessions.lock().await;
         let session = ssh_sessions
@@ -383,6 +390,28 @@ pub async fn kill_ssh(state: State<'_, JexpeState>, id: String) -> Result<(), St
 
     println!("ponto: 45 - Sessão encerrada");
     Ok(())
+}
+
+#[tauri::command]
+pub async fn list_ssh_sessions(state: State<'_, JexpeState>) -> Result<Vec<SshSpawnPayload>, String> {
+    let ssh_sessions = state.ssh_sessions.lock().await;
+    let mut result = Vec::new();
+
+    for (_, session) in ssh_sessions.iter() {
+        let is_connected = session.connected.lock().map(|c| *c).unwrap_or(false);
+        if is_connected {
+            result.push(SshSpawnPayload {
+                id: session.id.clone(),
+                host: session.host.clone(),
+                port: session.port,
+                username: session.username.clone(),
+                password: None,
+            });
+        }
+    }
+
+    println!("[SSH] list_ssh_sessions: {} sessões ativas", result.len());
+    Ok(result)
 }
 
 #[tauri::command]

@@ -39,6 +39,7 @@ pub fn run() {
     // };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .manage(JexpeState::new())
@@ -52,6 +53,7 @@ pub fn run() {
             ssh::commands::write_ssh,
             ssh::commands::resize_ssh,
             ssh::commands::kill_ssh,
+            ssh::commands::list_ssh_sessions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

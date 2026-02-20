@@ -10,7 +10,9 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { isTauri } from '@tauri-apps/api/core';
 import useSSHStore from '../stores/useSSHStore';
 import useConfigStore from '@/stores/ConfigData';
+import useThemeStore from '@/stores/useThemeStore';
 import SearchOverlay from '@/Terminal/SearchOverlay';
+import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import '@xterm/xterm/css/xterm.css';
 
 const canUseWebgl = () => {
@@ -59,6 +61,7 @@ const SSHComponent = ({ sessionId }) => {
 
     const [isInitialized, setIsInitialized] = useState(false);
     const { configs } = useConfigStore();
+    const { theme } = useThemeStore();
 
     const initOk = useMemo(() => {
         const width = containerSize?.width ?? 0;
@@ -108,8 +111,7 @@ const SSHComponent = ({ sessionId }) => {
 
         const xterm = new Terminal({
             theme: {
-                cursor: '#10B981',
-                selectionForeground: 'transparent'
+                ...theme,
             },
             fontFamily: 'Cascadia Mono, Consolas, "DejaVu Sans Mono", monospace',
             fontSize: 14,
@@ -140,7 +142,74 @@ const SSHComponent = ({ sessionId }) => {
             }
         }
 
-        xterm.onData((data) => {
+        // Função auxiliar para redesenhar a linha do buffer
+        // oldCursorPos = posição onde o cursor ESTAVA na tela antes da mudança
+        const redrawLine = (xterm, oldCursorPos, newBuffer, newCursorPos) => {
+            // Voltar até o início do comando (usando a posição ANTERIOR real do cursor)
+            if (oldCursorPos > 0) {
+                xterm.write('\b'.repeat(oldCursorPos));
+            }
+            // Limpar do início do comando até o fim da linha
+            xterm.write('\x1b[K');
+            // Escrever o novo buffer
+            xterm.write(newBuffer);
+            // Posicionar o cursor na posição correta
+            const moveBack = newBuffer.length - newCursorPos;
+            if (moveBack > 0) {
+                xterm.write('\b'.repeat(moveBack));
+            }
+        };
+
+        // Auto-copiar ao selecionar texto
+        xterm.onSelectionChange(() => {
+            if (xterm.hasSelection()) {
+                const selectedText = xterm.getSelection();
+                if (selectedText) {
+                    writeText(selectedText);
+                }
+            }
+        });
+
+        // Botão direito do mouse para colar
+        const handleContextMenu = async (e) => {
+            e.preventDefault();
+            try {
+                const text = await readText();
+                if (text) {
+                    const result = await useSSHStore.getState().writeSSH(sessionId, text);
+                    if (result) {
+                        redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
+                    }
+                }
+            } catch (_) { }
+        };
+        terminalRef.current?.addEventListener('contextmenu', handleContextMenu);
+
+        xterm.attachCustomKeyEventHandler((event) => {
+            // Ctrl+C para copiar se houver seleção
+            if (event.ctrlKey && event.key === 'c' && event.type === 'keydown') {
+                if (xterm.hasSelection()) {
+                    const selectedText = xterm.getSelection();
+                    writeText(selectedText);
+                    return false;
+                }
+            }
+            // Ctrl+V para colar
+            if (event.ctrlKey && event.key === 'v' && event.type === 'keydown') {
+                readText().then(async (text) => {
+                    if (text) {
+                        const result = await useSSHStore.getState().writeSSH(sessionId, text);
+                        if (result) {
+                            redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
+                        }
+                    }
+                });
+                return false;
+            }
+            return true;
+        });
+
+        xterm.onData(async (data) => {
             if (!isTauri() || isWebModeRef.current) {
                 if (data === '\r') {
                     xterm.writeln('');
@@ -150,12 +219,55 @@ const SSHComponent = ({ sessionId }) => {
                 return;
             }
 
-            if (data === '\r') {
-                xterm.writeln('');
-            } else {
-                xterm.write(data);
+            // Capturar setas (Séquencias de escape ANSI)
+            if (data === '\x1b[A') { // Cima
+                const result = useSSHStore.getState().navigateSSHHistory(sessionId, 'up');
+                if (result) {
+                    redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
+                }
+                return;
             }
-            useSSHStore.getState().writeSSH(sessionId, data);
+            if (data === '\x1b[B') { // Baixo
+                const result = useSSHStore.getState().navigateSSHHistory(sessionId, 'down');
+                if (result) {
+                    redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
+                }
+                return;
+            }
+            if (data === '\x1b[C') { // Direita
+                const result = useSSHStore.getState().moveSSHCursor(sessionId, 'right');
+                if (result) {
+                    xterm.write('\x1b[C');
+                }
+                return;
+            }
+            if (data === '\x1b[D') { // Esquerda
+                const result = useSSHStore.getState().moveSSHCursor(sessionId, 'left');
+                if (result) {
+                    xterm.write('\b');
+                }
+                return;
+            }
+
+            const result = await useSSHStore.getState().writeSSH(sessionId, data);
+
+            if (result) {
+                if (result.action === 'enter') {
+                    xterm.writeln('');
+                } else if (result.action === 'backspace' || result.action === 'delete' || result.action === 'paste' || result.action === 'interrupt') {
+                    redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
+                    if (result.action === 'interrupt') {
+                        xterm.write('^C\r\n');
+                    }
+                } else if (result.action === 'write') {
+                    // Se estiver no fim do buffer, apenas escreve. Se estiver no meio, redesenha.
+                    if (result.cursorPosition === result.buffer.length) {
+                        xterm.write(data);
+                    } else {
+                        redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
+                    }
+                }
+            }
         });
 
         xterm.onResize((size) => {
@@ -201,7 +313,27 @@ const SSHComponent = ({ sessionId }) => {
         window.addEventListener('ssh:stdout', onStdout);
         window.addEventListener('terminal:snapshot', onSnapshot);
 
+        // Salvar conteúdo no sessionStorage antes do reload (F5)
+        const handleBeforeUnload = () => {
+            try {
+                const addon = serializeAddonRef.current;
+                if (addon) {
+                    const content = addon.serialize({
+                        scrollback: 2000,
+                        excludeModes: false,
+                        excludeAltBuffer: false,
+                    });
+                    if (content) {
+                        sessionStorage.setItem(`ssh_content_${sessionId}`, content);
+                    }
+                }
+            } catch (_) { }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
         return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            terminalRef.current?.removeEventListener('contextmenu', handleContextMenu);
             window.removeEventListener('ssh:stdout', onStdout);
             window.removeEventListener('terminal:snapshot', onSnapshot);
 
@@ -257,9 +389,16 @@ const SSHComponent = ({ sessionId }) => {
         openedRef.current = true;
         setIsInitialized(true);
 
-        const serialized = useSSHStore.getState().consumeSerializedContent(sessionId);
-        if (serialized) {
-            xterm.write(serialized);
+        // Restaurar conteúdo: tentar sessionStorage primeiro (sobrevive F5), depois store
+        const savedContent = sessionStorage.getItem(`ssh_content_${sessionId}`);
+        if (savedContent) {
+            xterm.write(savedContent);
+            sessionStorage.removeItem(`ssh_content_${sessionId}`);
+        } else {
+            const serialized = useSSHStore.getState().consumeSerializedContent(sessionId);
+            if (serialized) {
+                xterm.write(serialized);
+            }
         }
 
         const pending = useSSHStore.getState().drainPendingStdout(sessionId);

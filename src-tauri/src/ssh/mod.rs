@@ -49,6 +49,9 @@ pub struct SshExitPayload {
 pub struct SshSession {
     pub id: String,
     window_id: String,
+    pub host: String,
+    pub port: u16,
+    pub username: String,
     channel: Arc<StdMutex<Channel>>,
     stdin_tx: mpsc::Sender<Vec<u8>>,
     stdin_task: JoinHandle<()>,
