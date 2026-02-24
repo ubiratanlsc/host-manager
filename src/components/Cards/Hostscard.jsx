@@ -56,11 +56,11 @@ const HostCard = ({ host, onEdit, onConnect }) => {
                 <div className="flex justify-between items-start">
                     <div className="flex items-center gap-2">
                         <div className="my-1 relative">
-                            <Badge className={cn("rounded-full px-1.5 py-0.5 pointer-events-none relative", statusColor)}>
+                            <Badge className={cn("rounded-full p-[2.5px] pointer-events-none relative top-0.5 left-2", statusColor)}>
                                 <span className="sr-only">{host.status}</span>
                             </Badge>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 text-muted-foreground">
-                                <Server size={18} />
+                            <Button variant="ghost" size="icon" className="h-10 w-10 -ml-2 text-muted-foreground">
+                                <Server size={20} />
                             </Button>
                         </div>
                         <div className="mx-1 my-1">

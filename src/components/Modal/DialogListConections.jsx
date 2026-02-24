@@ -57,7 +57,7 @@ export default function DialogListConections() {
                                 const filteredCustomers = customers.filter(customer => customer.groups.includes(id));
 
                                 return (
-                                    <TabsContent key={name} value={name} className="mt-0 h-full">
+                                    <TabsContent key={name} value={name} className="mt-2 h-full">
                                         <div className="flex gap-4 flex-wrap content-start">
                                             {filteredCustomers.length > 0 ? (
                                                 filteredCustomers.map(customer => (
