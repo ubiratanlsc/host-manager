@@ -11,18 +11,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { v4 as uuidv4 } from 'uuid';
-import useConfigStore from "../../stores/ConfigData";
-import useModalStore from "../../stores/useModalStore";
+import { useSaveData, useModalStore } from "@/stores";
 
 export default function DialogTag() {
     const [name, setName] = useState("");
     const [color, setColor] = useState("#000000"); // Default color
-    const { addCustomer } = useConfigStore(); // Original used addCustomer but signature is uuid, name, color? 'addCustomer' usually implies host. 'addTag' might be missing or reused. Original Code used addCustomer(uuidv4(), name, color).
+    const { saveTag } = useSaveData(); // Original used addCustomer but signature is uuid, name, color? 'addCustomer' usually implies host. 'addTag' might be missing or reused. Original Code used addCustomer(uuidv4(), name, color).
     const { modals, closeModal } = useModalStore();
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        addCustomer(uuidv4(), name, color);
+        saveTag(uuidv4(), name, "", color);
         closeModal('tag');
     };
 

@@ -4,9 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import useModalStore from '../../stores/useModalStore';
-import useSSHStore from '../../stores/useSSHStore';
-import useConfigStore from '../../stores/ConfigData';
+import { useModalStore, useSSHStore, useConfigStore } from '@/stores';
 
 const HostCard = ({ host, onEdit, onConnect }) => {
     const { openModal, closeModal } = useModalStore();

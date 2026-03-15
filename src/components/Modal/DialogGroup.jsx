@@ -12,12 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState } from "react";
 import { v4 as uuidv4 } from 'uuid';
-import useSaveData from "../../stores/SaveData";
-import useConfigStore from "../../stores/ConfigData";
-import useModalStore from "../../stores/useModalStore";
+import { useSaveData, useConfigStore, useModalStore } from "@/stores";
 
 export default function DialogGroup() {
-    const { saveData } = useSaveData(); // Note: Original code used saveData but passed wrong args for group (uuid, name, port??). Group usually needs name. DialogGroup logic seemed copy-pasted in original. I'll preserve 'name' input.
+    const { saveGroup } = useSaveData(); // Note: Original code used saveData but passed wrong args for group (uuid, name, port??). Group usually needs name. DialogGroup logic seemed copy-pasted in original. I'll preserve 'name' input.
     // Original DialogGroup used useConfigStore for addGroup too but called saveData? 
     // Wait, original DialogGroup.jsx:
     // const { addGroup } = useConfigStore();
@@ -41,7 +39,7 @@ export default function DialogGroup() {
     const handleSubmit = (e) => {
         e.preventDefault();
         // Preserving original call signature, though it looks suspicious for a group.
-        saveData(uuidv4(), name, 22, username, password);
+        saveGroup(uuidv4(), name, username, password);
         closeModal('group');
     };
 
@@ -80,10 +78,6 @@ export default function DialogGroup() {
                     </div>
 
                     <Tabs defaultValue="senha" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="senha">Senha</TabsTrigger>
-                            <TabsTrigger value="chave">Chave SSH</TabsTrigger>
-                        </TabsList>
                         <TabsContent value="senha">
                             <div className="grid gap-2">
                                 <Label htmlFor="password">Senha</Label>
@@ -107,7 +101,7 @@ export default function DialogGroup() {
                         <Button type="button" variant="secondary" onClick={() => closeModal('group')}>
                             Cancel
                         </Button>
-                        <Button type="submit">Salvar</Button>
+                        <Button type="button" onClick={handleSubmit}>Salvar</Button>
                     </DialogFooter>
                 </form>
             </DialogContent>

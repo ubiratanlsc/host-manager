@@ -19,12 +19,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState } from "react";
 import { v4 as uuidv4 } from 'uuid';
-import useSaveData from "../../stores/SaveData";
-import useConfigStore from "../../stores/ConfigData";
-import useModalStore from "../../stores/useModalStore";
+import { useSaveData, useConfigStore, useModalStore } from "@/stores";
 
 export default function DialogHost() {
-    const { saveData } = useSaveData();
+    const { saveHost } = useSaveData();
     const [name, setName] = useState("");
     const [group, setGroup] = useState("");
     const [host, setHost] = useState("");
@@ -39,8 +37,8 @@ export default function DialogHost() {
     const { groups } = useConfigStore();
 
     const handleSubmit = (e) => {
-        e.preventDefault();
-        saveData(uuidv4(), name, host, port, username, password, group, tag);
+        if (e) e.preventDefault();
+        saveHost(uuidv4(), name.trim(), host.trim(), parseInt(port), username.trim(), password, group || 'default', tag);
         closeModal('host');
     };
 
@@ -54,7 +52,7 @@ export default function DialogHost() {
                 <DialogHeader>
                     <DialogTitle>Host</DialogTitle>
                     <DialogDescription>
-                        Digite as informações do host para conexão SSH.
+                        Digite as informações do host que serão salvas.
                     </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="grid gap-4 py-4">

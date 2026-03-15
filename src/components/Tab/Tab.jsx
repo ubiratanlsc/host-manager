@@ -19,10 +19,10 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, X } from 'lucide-react';
 import { Button } from "@/components/ui/button";
-import useTabStore from "../../stores/useTabStore";
+import { useTabStore } from "@/stores";
 import SplitPane from "../Split/SplitPane";
-import TerminalComponent from "../../Terminal/TerminalComponent";
-import SSHComponent from "../../ssh/SSHComponent";
+import LocalTerminal from "../terminals/LocalTerminal";
+import SSHTerminal from "../terminals/SSHTerminal";
 import { cn } from "@/lib/utils";
 
 /**
@@ -383,9 +383,9 @@ const TabTerms = () => {
                                             className="h-[calc(100vh-8rem)]"
                                         >
                                             {subTab.sessionType === 'ssh' ? (
-                                                <SSHComponent sessionId={subTab.id} />
+                                                <SSHTerminal sessionId={subTab.id} />
                                             ) : (
-                                                <TerminalComponent terminalId={subTab.id} />
+                                                <LocalTerminal terminalId={subTab.id} />
                                             )}
                                         </TabsContent>
                                     ))}

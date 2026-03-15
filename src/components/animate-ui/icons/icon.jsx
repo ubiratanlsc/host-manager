@@ -59,24 +59,28 @@ function composeEventHandlers(theirs, ours) {
   };
 }
 
-function AnimateIcon({
-  asChild = false,
-  animate = false,
-  animateOnHover = false,
-  animateOnTap = false,
-  animateOnView = false,
-  animateOnViewMargin = '0px',
-  animateOnViewOnce = true,
-  animation = 'default',
-  loop = false,
-  loopDelay = 0,
-  initialOnAnimateEnd = false,
-  completeOnStop = false,
-  persistOnAnimateEnd = false,
-  delay = 0,
-  children,
-  ...props
-}) {
+const AnimateIcon = React.forwardRef(
+  (
+    {
+      asChild = false,
+      animate = false,
+      animateOnHover = false,
+      animateOnTap = false,
+      animateOnView = false,
+      animateOnViewMargin = '0px',
+      animateOnViewOnce = true,
+      animation = 'default',
+      loop = false,
+      loopDelay = 0,
+      initialOnAnimateEnd = false,
+      completeOnStop = false,
+      persistOnAnimateEnd = false,
+      delay = 0,
+      children,
+      ...props
+    },
+    ref
+  ) => {
   const controls = useAnimation();
 
   const [localAnimate, setLocalAnimate] = React.useState(() => {
@@ -319,7 +323,7 @@ function AnimateIcon({
 
   const content = asChild ? (
     <Slot
-      ref={inViewRef}
+      ref={ref ?? inViewRef}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onPointerDown={handlePointerDown}
@@ -329,7 +333,7 @@ function AnimateIcon({
     </Slot>
   ) : (
     <motion.span
-      ref={inViewRef}
+      ref={ref ?? inViewRef}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onPointerDown={handlePointerDown}
@@ -355,32 +359,34 @@ function AnimateIcon({
       {content}
     </AnimateIconContext.Provider>
   );
-}
+});
 
 const pathClassName =
   "[&_[stroke-dasharray='1px_1px']]:![stroke-dasharray:1px_0px]";
 
-function IconWrapper(
-  {
-    size = 28,
-    animation: animationProp,
-    animate,
-    animateOnHover,
-    animateOnTap,
-    animateOnView,
-    animateOnViewMargin,
-    animateOnViewOnce,
-    icon: IconComponent,
-    loop,
-    loopDelay,
-    persistOnAnimateEnd,
-    initialOnAnimateEnd,
-    delay,
-    completeOnStop,
-    className,
-    ...props
-  }
-) {
+const IconWrapper = React.forwardRef(
+  (
+    {
+      size = 28,
+      animation: animationProp,
+      animate,
+      animateOnHover,
+      animateOnTap,
+      animateOnView,
+      animateOnViewMargin,
+      animateOnViewOnce,
+      icon: IconComponent,
+      loop,
+      loopDelay,
+      persistOnAnimateEnd,
+      initialOnAnimateEnd,
+      delay,
+      completeOnStop,
+      className,
+      ...props
+    },
+    ref
+  ) => {
   const context = React.useContext(AnimateIconContext);
 
   if (context) {
@@ -419,6 +425,7 @@ function IconWrapper(
 
       return (
         <AnimateIcon
+          ref={ref}
           animate={finalAnimate}
           animateOnHover={animateOnHover}
           animateOnTap={animateOnTap}
@@ -481,6 +488,7 @@ function IconWrapper(
   ) {
     return (
       <AnimateIcon
+        ref={ref}
         animate={animate}
         animateOnHover={animateOnHover}
         animateOnTap={animateOnTap}
@@ -504,12 +512,13 @@ function IconWrapper(
 
   return (
     <IconComponent
+      ref={ref}
       size={size}
       className={cn(className, (animationProp === 'path' || animationProp === 'path-loop') &&
         pathClassName)}
       {...props} />
   );
-}
+});
 
 function getVariants(animations) {
   // eslint-disable-next-line react-hooks/rules-of-hooks

@@ -12,8 +12,8 @@ import {
     Xmark,
 } from "iconoir-react";
 import { cn } from "@/lib/utils";
-import useModalStore from "../../stores/useModalStore";
-import useConfigStore from "../../stores/ConfigData";
+import { useModalStore, ThemeConfig, TerminalConfig } from "@/stores";
+import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
@@ -25,16 +25,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { useTerminalStore } from "@/stores";
-
+import IconHM from "@/assets/icon-hm.svg";
 export function MenuBar({ className, disabled = false }) {
     const [isMobile, setIsMobile] = React.useState(false);
     const [openMax, setOpenMax] = React.useState(true);
     const { openModal } = useModalStore();
-    const { configs, addConfig } = useConfigStore();
+    const theme = ThemeConfig((s) => s.theme);
+    const setTheme = ThemeConfig((s) => s.setTheme);
     const shells = useTerminalStore((state) => state.shells);
     const spawnPty = useTerminalStore((state) => state.spawnPty);
     const loadSystemShells = useTerminalStore((state) => state.loadSystemShells);
     const isInitialized = useTerminalStore((state) => state.isInitialized);
+    const defaultShellCommand = TerminalConfig.getState().defaultShell;
     const appWindow = React.useMemo(() => {
         try {
             return isTauri() ? getCurrentWindow() : null;
@@ -53,37 +55,8 @@ export function MenuBar({ className, disabled = false }) {
         return () => window.removeEventListener("resize", checkMobile);
     }, []);
 
-    // Keyboard shortcuts
-    React.useEffect(() => {
-        const handleKeyboard = (e) => {
-            if (disabled) return;
-            if (e.altKey) {
-                switch (e.key) {
-                    case "1":
-                        e.preventDefault();
-                        openModal("connections");
-                        break;
-                    case "2":
-                        e.preventDefault();
-                        openModal("groupsList");
-                        break;
-                    case "3":
-                        e.preventDefault();
-                        openModal("tagList");
-                        break;
-                    case "n":
-                    case "N":
-                        e.preventDefault();
-                        document.getElementById("new-dropdown-trigger")?.click();
-                        break;
-                    default:
-                        break;
-                }
-            }
-        };
-        window.addEventListener("keydown", handleKeyboard);
-        return () => window.removeEventListener("keydown", handleKeyboard);
-    }, [disabled, openModal]);
+    // Keyboard shortcuts extracted to custom hook
+    useGlobalShortcuts(disabled, openModal);
     const handleSpawnTerminal = async () => {
 
         if (!isInitialized) {
@@ -94,7 +67,11 @@ export function MenuBar({ className, disabled = false }) {
 
         try {
             if (shells.length > 0) {
-                const selectedShell = shells[2] || shells[0];
+                // Respeita o shell padrão definido nas Configurações
+                const preferred = defaultShellCommand
+                    ? shells.find(s => s.name === defaultShellCommand)
+                    : null;
+                const selectedShell = preferred || shells[0];
                 console.log('[Home] Spawning with shell:', selectedShell);
                 await spawnPty(selectedShell);
             } else {
@@ -112,8 +89,8 @@ export function MenuBar({ className, disabled = false }) {
         }
     };
     const handleToggleTheme = () => {
-        const newTheme = configs.theme === "dark" ? "light" : "dark";
-        addConfig("theme", newTheme);
+        const newTheme = theme === "dark" ? "light" : "dark";
+        setTheme(newTheme);
     };
 
     const minimizeWindow = async () => {
@@ -144,7 +121,7 @@ export function MenuBar({ className, disabled = false }) {
             <div className="flex items-center gap-4">
                 <Button
                     variant="ghost"
-                    className="flex items-center gap-2 hover:opacity-80 p-0 text-primary [app-region:no-drag]"
+                    className="flex items-center gap-2 hover:opacity-80 p-0 text-primary [app-region:drag]"
                     onClick={() => openModal("dashboard")}
                     disabled={disabled}
                 >
@@ -163,7 +140,7 @@ export function MenuBar({ className, disabled = false }) {
                                 // className="w-8 h-8 rounded-lg [app-region:no-drag]"
                                 disabled={disabled}
                             >
-                                <MenuIcon size={64} />
+                                <MenuIcon size={20} />
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className="w-56 [app-region:no-drag]">
@@ -316,9 +293,9 @@ export function MenuBar({ className, disabled = false }) {
                     className="w-8 h-8 rounded-lg"
                     onClick={handleToggleTheme}
                     disabled={disabled}
-                    title={configs.theme === "dark" ? "Modo Claro" : "Modo Escuro"}
+                    title={theme === "dark" ? "Modo Claro" : "Modo Escuro"}
                 >
-                    {configs.theme === "dark" ? (
+                    {theme === "dark" ? (
                         <Sun className="w-4 h-4" />
                     ) : (
                         <Moon className="w-4 h-4" />

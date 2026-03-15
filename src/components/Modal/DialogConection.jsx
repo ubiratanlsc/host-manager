@@ -11,45 +11,55 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import useConfigStore from "../../stores/ConfigData";
-import useModalStore from "../../stores/useModalStore";
-import useSSHStore from "../../stores/useSSHStore";
+import { useModalStore, useSSHStore, useSaveData } from "@/stores";
 
 export default function DialogConection() {
     const [host, setHost] = useState("");
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [port, setPort] = useState(22);
-    const { addCustomer } = useConfigStore();
+    const { saveHost } = useSaveData();
     const { modals, closeModal } = useModalStore();
     const spawnSSH = useSSHStore((state) => state.spawnSSH);
+    const [isLoading, setIsLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (isLoading) return;
 
-        // Gerar ID para o customer
-        const customerId = uuidv4();
+        const trimmedHost = host.trim();
+        const trimmedUsername = username.trim();
+        const parsedPort = parseInt(port) || 22;
 
-        // Salvar customer na config
-        // addCustomer(id, name, host, port, username, password, group, tagId)
-        addCustomer(
-            customerId,
-            host,           // name
-            host,           // host (IP)
-            parseInt(port),
-            username,
-            password,
-            'default',      // group padrão
-            null            // sem tag
-        );
+        if (!trimmedHost || !trimmedUsername) {
+            alert("Preencha host e usuário.");
+            return;
+        }
 
-        // Spawn SSH session
+        setIsLoading(true);
+
         try {
-            await spawnSSH({
-                host,
-                port: parseInt(port),
-                username,
+            // Gerar ID para o customer
+            const customerId = uuidv4();
+
+            // Salvar customer na config com persistência
+            await saveHost(
+                customerId,
+                trimmedHost,           // name
+                trimmedHost,           // host (IP)
+                parsedPort,
+                trimmedUsername,
                 password,
+                'default',      // group padrão
+                null            // sem tag
+            );
+
+            // Spawn SSH session
+            await spawnSSH({
+                host: trimmedHost,
+                port: parsedPort,
+                username: trimmedUsername,
+                password: password || null,
             });
 
             console.log('[DialogConection] SSH session spawned successfully');
@@ -63,6 +73,8 @@ export default function DialogConection() {
         } catch (error) {
             console.error('[DialogConection] Error spawning SSH:', error);
             alert(`Failed to connect: ${error.message || error}`);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -121,10 +133,12 @@ export default function DialogConection() {
                         />
                     </div>
                     <DialogFooter>
-                        <Button type="button" variant="secondary" onClick={() => closeModal('connect')}>
+                        <Button type="button" variant="secondary" onClick={() => closeModal('connect')} disabled={isLoading}>
                             Cancel
                         </Button>
-                        <Button type="submit">Login</Button>
+                        <Button type="submit" disabled={isLoading}>
+                            {isLoading ? "Connecting..." : "Login"}
+                        </Button>
                     </DialogFooter>
                 </form>
             </DialogContent>

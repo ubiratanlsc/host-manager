@@ -1,12 +1,12 @@
 import {
     Dialog,
     DialogContent,
+    DialogTitle
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEffect, useState } from "react";
-import useConfigStore from "../../stores/ConfigData";
+import { useConfigStore, useModalStore } from "@/stores";
 import HostCard from "../Cards/Hostscard";
-import useModalStore from "../../stores/useModalStore";
 import { Loader2 } from "lucide-react";
 
 export default function DialogListConections() {
@@ -28,6 +28,7 @@ export default function DialogListConections() {
         return (
             <Dialog open={modals.connections} onOpenChange={(open) => !open && closeModal('connections')}>
                 <DialogContent>
+                    <DialogTitle className="sr-only">Carregando Conexões</DialogTitle>
                     <div className="flex justify-center p-4">
                         <Loader2 className="animate-spin h-6 w-6" />
                     </div>
@@ -43,11 +44,12 @@ export default function DialogListConections() {
     return (
         <Dialog open={modals.connections} onOpenChange={handleOpenChange}>
             <DialogContent className="max-w-4xl max-h-[88vh] overflow-hidden flex flex-col p-0">
+                <DialogTitle className="sr-only">Lista de Conexões</DialogTitle>
                 <div className="flex h-full min-h-[500px]">
                     <Tabs defaultValue={defaultTab || undefined} orientation="vertical" className="flex w-full">
                         <TabsList className="flex flex-col h-full justify-start w-48 rounded-none border-r bg-muted/50 p-2 space-y-1">
                             {groups.map(({ id, name }) => (
-                                <TabsTrigger key={name} value={name} className="w-full justify-start">
+                                <TabsTrigger key={id} value={name} className="w-full justify-start">
                                     {name}
                                 </TabsTrigger>
                             ))}
@@ -57,12 +59,12 @@ export default function DialogListConections() {
                                 const filteredCustomers = customers.filter(customer => customer.groups.includes(id));
 
                                 return (
-                                    <TabsContent key={name} value={name} className="mt-2 h-full">
+                                    <TabsContent key={id} value={name} className="mt-0 h-full">
                                         <div className="flex gap-4 flex-wrap content-start">
                                             {filteredCustomers.length > 0 ? (
                                                 filteredCustomers.map(customer => (
                                                     <HostCard
-                                                        key={customer.name}
+                                                        key={customer.id}
                                                         host={{
                                                             status: 'online',
                                                             hostname: customer.name,

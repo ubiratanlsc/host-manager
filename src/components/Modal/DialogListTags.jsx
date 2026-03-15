@@ -8,8 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { v4 as uuidv4 } from 'uuid';
-import useConfigStore from "../../stores/ConfigData";
-import useModalStore from "../../stores/useModalStore";
+import { useConfigStore, useModalStore } from "@/stores";
 import { TagCard } from "../Tag/TagCard";
 import { TagModal } from "../Tag/TagModal";
 

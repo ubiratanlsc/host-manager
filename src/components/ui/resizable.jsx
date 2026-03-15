@@ -5,19 +5,15 @@ import { cn } from "@/lib/utils"
 
 const ResizablePanelGroup = ({
   className,
-  direction,
   ...props
 }) => (
   <Group
     className={cn(
-      "flex h-full w-full data-[panel-group-direction=vertical]:flex-col md:data-[panel-group-direction=vertical]:flex-col",
-      // Fallback: if library ignores direction/orientation and renders row, force it via CSS attribute selector
-      "[&[direction=vertical]]:flex-col [&[direction=vertical]]:!flex-col",
+      "flex h-full w-full data-[panel-group-direction=vertical]:flex-col",
       className
     )}
-    direction={direction}
-    orientation={direction}
-    {...props} />
+    {...props} 
+  />
 )
 
 const ResizablePanel = Panel

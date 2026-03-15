@@ -33,30 +33,32 @@ function mergeProps(childProps, slotProps) {
   return merged;
 }
 
-function Slot(
-  {
-    children,
-    ref,
-    ...props
+const Slot = React.forwardRef(
+  (
+    {
+      children,
+      ...props
+    },
+    ref
+  ) => {
+    const isAlreadyMotion =
+      typeof children.type === 'object' &&
+      children.type !== null &&
+      isMotionComponent(children.type);
+
+    const Base = React.useMemo(() =>
+      isAlreadyMotion
+        ? (children.type)
+        : motion.create(children.type), [isAlreadyMotion, children.type]);
+
+    if (!React.isValidElement(children)) return null;
+
+    const { ref: childRef, ...childProps } = children.props;
+
+    const mergedProps = mergeProps(childProps, props);
+
+    return (<Base {...mergedProps} ref={mergeRefs(childRef, ref)} />);
   }
-) {
-  const isAlreadyMotion =
-    typeof children.type === 'object' &&
-    children.type !== null &&
-    isMotionComponent(children.type);
-
-  const Base = React.useMemo(() =>
-    isAlreadyMotion
-      ? (children.type)
-      : motion.create(children.type), [isAlreadyMotion, children.type]);
-
-  if (!React.isValidElement(children)) return null;
-
-  const { ref: childRef, ...childProps } = children.props;
-
-  const mergedProps = mergeProps(childProps, props);
-
-  return (<Base {...mergedProps} ref={mergeRefs(childRef, ref)} />);
-}
+);
 
 export { Slot };

@@ -1,7 +1,0 @@
-
-> host-manager@0.1.0 build
-> vite build
-
-[36mvite v6.0.7 [32mbuilding for production...[36m[39m
-transforming...
-[32m???[39m 3564 modules transformed.
