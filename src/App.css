@@ -80,6 +80,10 @@
   --radius-windows: 3px;
 }
 
+body.modal-open .xterm {
+  pointer-events: none;
+}
+
 body {
   height: 100vh;
   /* background: radial-gradient(ellipse at center, #1e293b, #000000); Overwritten by @layer base body? */
