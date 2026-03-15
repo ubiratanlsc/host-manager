@@ -1,7 +1,12 @@
-import { writeFile, BaseDirectory, readFile, readDir } from '@tauri-apps/plugin-fs';
+import { readFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { isTauri } from '@tauri-apps/api/core';
 import { create } from "zustand";
 import useConfigStore from './ConfigData';
+import FontConfig from './FontConfig';
+import ThemeConfig from './ThemeConfig';
+import TerminalConfig from './TerminalConfig';
+import ClipboardConfig from './ClipboardConfig';
+import AppVersionConfig from './AppVersionConfig';
 
 const useLoadData = create((set) => ({
     loadData: async () => {
@@ -11,24 +16,42 @@ const useLoadData = create((set) => ({
         const file = await readFile('config.json', {
             baseDir: BaseDirectory.Resource,
         });
-        let diretorio = await readDir('', { baseDir: BaseDirectory.Resource })
         const contents = new TextDecoder().decode(file);
+        const data = JSON.parse(contents);
 
-        const { addCustomer, addGroup, addTag, addConfig, addColors } = useConfigStore.getState();
-        JSON.parse(contents).customers?.forEach(
-            ({ id, name, host, port, username, password, groups, tagId }) => addCustomer(id, name, host, port, username, password, groups[0], tagId)
-        );
-        JSON.parse(contents).groups?.forEach(
-            ({ id, name, username, password }) => addGroup(id, name, username, password)
-        );
-        JSON.parse(contents).tags?.forEach(
-            ({ id, name, description, color }) => addTag(id, name, description, color)
-        );
-        Object.entries(JSON.parse(contents).colors)?.forEach(([key, value]) => addColors(key, value));
-        Object.entries(JSON.parse(contents).configs)?.forEach(([key, value]) => addConfig(key, value));
+        // Carregar dados de entidades no ConfigStore
+        const { setInitialData } = useConfigStore.getState();
+        setInitialData(data);
+
+        // Distribuir configs nos stores componentizados
+        const configs = data.configs || {};
+
+        // ThemeConfig
+        if (configs.theme) ThemeConfig.getState().setTheme(configs.theme);
+        if (configs.colorTheme) ThemeConfig.getState().setColorTheme(configs.colorTheme);
+
+        // FontConfig
+        if (configs.font) FontConfig.setState({ font: configs.font });
+        if (configs.fontSize) FontConfig.getState().setFontSize(configs.fontSize);
+        if (configs.ligatures !== undefined) FontConfig.getState().setLigatures(configs.ligatures);
+
+        // TerminalConfig
+        if (configs.cursorBlink !== undefined) TerminalConfig.getState().setCursorBlink(configs.cursorBlink);
+        if (configs.cursorStyle) TerminalConfig.getState().setCursorStyle(configs.cursorStyle);
+        if (configs.scrollback) TerminalConfig.getState().setScrollback(configs.scrollback);
+        if (configs.lineHeight) TerminalConfig.getState().setLineHeight(configs.lineHeight);
+
+        // ClipboardConfig
+        if (configs.pasteRight !== undefined) ClipboardConfig.getState().setPasteRight(configs.pasteRight);
+        if (configs.copyOnSelect !== undefined) ClipboardConfig.getState().setCopyOnSelect(configs.copyOnSelect);
+
+        // AppVersionConfig
+        if (configs.version) AppVersionConfig.getState().setVersion(configs.version);
     },
     initLoadData: () => {
         const { loadData } = useLoadData.getState();
+        const { loadFonts } = FontConfig.getState();
+        loadFonts();
         loadData();
     }
 }));

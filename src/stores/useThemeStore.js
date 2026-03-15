@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import useConfigStore from './ConfigData';
+import ThemeConfig from './ThemeConfig';
 
 const draculaTheme = {
     foreground: '#f8f8f2',
@@ -32,7 +33,7 @@ const useThemeStore = create((set) => ({
     // Action to initialize or refresh the current theme based on ConfigStore
     initTheme: () => {
         const configState = useConfigStore.getState();
-        const savedThemeName = configState.configs?.colorTheme || 'Dracula';
+        const savedThemeName = ThemeConfig.getState().colorTheme || 'Dracula';
         const themesFromConfig = configState.colors || {};
 
         const allThemes = {};
@@ -71,7 +72,7 @@ const useThemeStore = create((set) => ({
     },
 
     setTheme: (themeName) => {
-        useConfigStore.getState().addConfig('theme', themeName);
+        ThemeConfig.getState().setColorTheme(themeName);
         useThemeStore.getState().initTheme();
     },
 }));
@@ -79,9 +80,13 @@ const useThemeStore = create((set) => ({
 // Initialize theme immediately
 useThemeStore.getState().initTheme();
 
-// Optional: Subscribe to changes in ConfigStore to auto-update ThemeStore? 
-// useful if ConfigStore changes from elsewhere (e.g. LoadData)
-useConfigStore.subscribe((state) => {
+// Optional: Subscribe to changes in ConfigStore to auto-update ThemeStore
+useConfigStore.subscribe(() => {
+    useThemeStore.getState().initTheme();
+});
+
+// Subscribe to ThemeConfig changes too
+ThemeConfig.subscribe(() => {
     useThemeStore.getState().initTheme();
 });
 

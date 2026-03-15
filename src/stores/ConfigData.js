@@ -5,14 +5,12 @@ const useConfigStore = create((set) => ({
     customers: [],
     groups: [],
     tags: [],
-    configs: {
-        theme: "dark",
-        font: "Roboto",
-        ligatures: true,
-    },
     colors: {},
+    configs: {},
     addCustomer: (id, name, host, port, username, password, group, tagId) => set((state) => ({
-        customers: [...state.customers, { id: id, name: name, host: host, port: port, username: username, password: password, groups: [group], tagId: tagId }],
+        customers: state.customers.some(c => c.id === id) 
+            ? state.customers 
+            : [...state.customers, { id, name, host, port, username, password, groups: [group], tagId }],
     })),
     editCustomer: (id, updatedData) => set((state) => ({
         customers: state.customers.map(customer => customer.id === id ? { ...customer, ...updatedData } : customer),
@@ -21,7 +19,9 @@ const useConfigStore = create((set) => ({
         customers: state.customers.filter(customer => customer.id !== id),
     })),
     addGroup: (id, name, username, password) => set((state) => ({
-        groups: [...state.groups, { id: id, name: name, username: username, password: password }],
+        groups: state.groups.some(g => g.id === id)
+            ? state.groups
+            : [...state.groups, { id, name, username, password }],
     })),
     editGroup: (id, updatedData) => set((state) => ({
         groups: state.groups.map(group => group.id === id ? { ...group, ...updatedData } : group),
@@ -30,7 +30,9 @@ const useConfigStore = create((set) => ({
         groups: state.groups.filter(group => group.id !== id),
     })),
     addTag: (id, name, description, color) => set((state) => ({
-        tags: [...state.tags, { id: id, name: name, description: description, color: color }],
+        tags: state.tags.some(t => t.id === id)
+            ? state.tags
+            : [...state.tags, { id, name, description, color }],
     })),
     editTag: (id, updatedData) => set((state) => ({
         tags: state.tags.map(tag => tag.id === id ? { ...tag, ...updatedData } : tag),
@@ -43,6 +45,13 @@ const useConfigStore = create((set) => ({
     })),
     addColors: (id, obj) => set((state) => ({
         colors: { ...state.colors, [id]: { id: id, name: obj?.name, colors: obj?.colors } },
+    })),
+    setInitialData: (data) => set(() => ({
+        customers: data.customers || [],
+        groups: data.groups || [],
+        tags: data.tags || [],
+        colors: data.colors || {},
+        configs: data.configs || {}
     }))
 }));
 

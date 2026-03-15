@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
-const useModalStore = create((set) => ({
+
+const useModalStore = create((set, get) => ({
     modals: {
         connections: false,
         connect: false,
@@ -11,11 +12,32 @@ const useModalStore = create((set) => ({
         tag: false,
         tagList: false,
     },
+    
+    overlayCount: 0,
+
+    // Retorna true se qualquer modal está aberto
+    anyModalOpen: () => {
+        return Object.values(get().modals).some(Boolean);
+    },
+
+    // Retorna true se QUALQUER sobreposição crítica estiver ativa (Modal ou Dropdown solto)
+    isOverlayActive: () => {
+        return get().overlayCount > 0 || get().anyModalOpen();
+    },
+
+    // Controle genérico para componentes como Dropdown/Select
+    incrementOverlay: () => set((state) => ({ overlayCount: state.overlayCount + 1 })),
+    decrementOverlay: () => set((state) => ({ overlayCount: Math.max(0, state.overlayCount - 1) })),
 
     // Abre um modal específico pelo ID
-    openModal: (modalId) => set((state) => ({
-        modals: { ...state.modals, [modalId]: true },
-    })),
+    openModal: (modalId) => {
+        if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+        }
+        set((state) => ({
+            modals: { ...state.modals, [modalId]: true },
+        }));
+    },
 
     // Fecha um modal específico pelo ID
     closeModal: (modalId) => set((state) => ({
@@ -23,9 +45,16 @@ const useModalStore = create((set) => ({
     })),
 
     // Alterna o estado de um modal (aberto/fechado)
-    toggleModal: (modalId) => set((state) => ({
-        modals: { ...state.modals, [modalId]: !state.modals[modalId] },
-    })),
+    toggleModal: (modalId) => {
+        if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+        }
+        set((state) => {
+            return {
+                modals: { ...state.modals, [modalId]: !state.modals[modalId] },
+            }
+        });
+    },
 
     // Verifica se um modal está aberto
     isModalOpen: (modalId) => (state) => state.modals[modalId] || false,
