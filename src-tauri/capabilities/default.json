@@ -30,6 +30,7 @@
     "clipboard-manager:default",
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-read-text",
+    "system-fonts:default",
     {
       "identifier": "fs:allow-app-write-recursive",
       "allow": [
