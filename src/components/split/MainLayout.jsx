@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef } from 'react';
-import useTerminalStore from '../stores/useTerminalStore';
-import useSSHStore from '../stores/useSSHStore';
-import useSplitStore from '../stores/useSplitStore';
-import SplitPane from '../components/split/SplitPane';
+import { useTerminalStore, useSSHStore, useSplitStore } from '@/stores';
+import SplitPane from './SplitPane';
 
 /**
- * MainTerminalView - View principal que renderiza terminais locais e SSH
+ * MainLayout - View principal que renderiza terminais locais e SSH
  * Agora usa o sistema de layout com drag-and-drop e splits (Termius style)
  */
-const MainTerminalView = () => {
+const MainLayout = () => {
     // Terminal Store
     const terminalsMap = useTerminalStore((state) => state.terminals);
 
@@ -92,4 +90,4 @@ const MainTerminalView = () => {
     return <SplitPane />;
 };
 
-export default MainTerminalView;
+export default MainLayout;

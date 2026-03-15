@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { cn } from '@/lib/utils';
-import useSplitStore from '../../stores/useSplitStore';
-import useTerminalStore from '../../stores/useTerminalStore';
-import useSSHStore from '../../stores/useSSHStore';
-import Pane from '../../Terminal/Pane';
+import { useSplitStore, useTerminalStore, useSSHStore } from '@/stores';
+import Pane from './Pane';
 import {
     DndContext,
     PointerSensor,
+    MouseSensor,
     DragOverlay,
     useSensor,
     useSensors,
@@ -53,25 +52,58 @@ const SplitPaneRenderer = ({ splitId }) => {
 
     return (
         <ResizablePanelGroup
-            direction={split.type}
-            onLayout={(sizes) => {
+            orientation={split.type}
+            onLayoutChange={(sizes) => {
                 updateSplitSizes(splitId, sizes);
                 window.dispatchEvent(new Event('terminal:relayout'));
             }}
             className="w-full h-full"
         >
-            <ResizablePanel className="z-[10000] overflow-hidden" defaultSize={defaultSizes[0]} minSize={10}>
+            <ResizablePanel className="z-[1] overflow-hidden" defaultSize={defaultSizes[0]} minSize={10}>
                 <SplitPaneRenderer splitId={split.children[0]} />
             </ResizablePanel>
 
             <CustomResizeHandle direction={split.type} />
 
-            <ResizablePanel className="z-[10002] overflow-hidden" defaultSize={defaultSizes[1]} minSize={10}>
+            <ResizablePanel className="z-[2] overflow-hidden" defaultSize={defaultSizes[1]} minSize={10}>
                 <SplitPaneRenderer splitId={split.children[1]} />
             </ResizablePanel>
         </ResizablePanelGroup>
     );
 };
+
+// Previne que o DnD intercete eventos dentro de portais Radix (Select, Dialog, Popover)
+// mas permite drag normal nos panes, tabs e handles
+const shouldHandleEvent = (element) => {
+    let el = element;
+    while (el) {
+        // Bloqueia se estiver dentro de um portal/overlay Radix UI
+        if (
+            el.hasAttribute?.('data-radix-popper-content-wrapper') ||
+            el.hasAttribute?.('data-radix-select-viewport') ||
+            el.closest?.('[data-radix-popper-content-wrapper]') ||
+            el.closest?.('[data-radix-select-content]') ||
+            el.closest?.('[role="dialog"]') ||
+            el.closest?.('[role="listbox"]') ||
+            el.closest?.('[role="menu"]')
+        ) {
+            return false;
+        }
+        el = el.parentElement;
+    }
+    return true;
+};
+
+class SmartPointerSensor extends PointerSensor {
+    static activators = [
+        {
+            eventName: 'onPointerDown',
+            handler: ({ nativeEvent: event }) => {
+                return shouldHandleEvent(event.target);
+            },
+        },
+    ];
+}
 
 /**
  * Split Pane Container - Componente principal
@@ -90,9 +122,9 @@ const SplitPane = () => {
     const setActiveTerminal = useSplitStore((state) => state.setActiveTerminal);
     const findSplitByTerminal = useSplitStore((state) => state.findSplitByTerminal);
 
-    // DnD sensors
+    // DnD sensors — SmartPointerSensor definido fora do componente para evitar recriação
     const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+        useSensor(SmartPointerSensor, { activationConstraint: { distance: 8 } })
     );
 
     const [activeDrag, setActiveDrag] = useState(null);
@@ -126,7 +158,7 @@ const SplitPane = () => {
         return null;
     }, [activeDrag]);
 
-    // NOTA: Inicialização de terminais é feita pelo MainTerminalView.jsx
+    // NOTA: Inicialização de terminais é feita pelo MainLayout.jsx
     // Não duplicar aqui para evitar race conditions
 
     if (!rootSplitId) {

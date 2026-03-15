@@ -7,12 +7,14 @@ import { SerializeAddon } from '@xterm/addon-serialize';
 import { LigaturesAddon } from '@xterm/addon-ligatures';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
-import SearchOverlay from './SearchOverlay';
+import SearchOverlay from '@/components/Search/SearchOverlay';
 import { isTauri } from '@tauri-apps/api/core';
-import useTerminalStore from '../stores/useTerminalStore';
-import useConfigStore from '@/stores/ConfigData';
-import useThemeStore from '@/stores/useThemeStore';
+import { useTerminalStore } from '@/stores';
+import { FontConfig } from '@/stores';
+import { useThemeStore } from '@/stores';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { useModalStore } from '@/stores';
+import '@xterm/xterm/css/xterm.css';
 
 const canUseWebgl = () => {
     try {
@@ -35,7 +37,7 @@ const releaseWebgl = () => {
     }
 };
 
-const TerminalComponent = ({ terminalId }) => {
+const LocalTerminal = ({ terminalId }) => {
     const containerRef = useRef(null);
     const terminalRef = useRef(null);
     const resizeTimeoutRef = useRef(null);
@@ -57,8 +59,12 @@ const TerminalComponent = ({ terminalId }) => {
     const isReady = !!terminalMeta;
 
     const [isInitialized, setIsInitialized] = useState(false);
-    const { colors, configs } = useConfigStore();
+    const font = FontConfig((s) => s.font);
+    const fontSize = FontConfig((s) => s.fontSize);
+    const ligatures = FontConfig((s) => s.ligatures);
     const { theme } = useThemeStore();
+    const modals = useModalStore((s) => s.modals);
+    const hasModalOpen = Object.values(modals).some(Boolean);
 
     const initOk = useMemo(() => {
         const width = containerSize?.width ?? 0;
@@ -110,7 +116,8 @@ const TerminalComponent = ({ terminalId }) => {
                 // cursorAccent: '#10B98100',
                 ...theme
             },
-            fontFamily: 'JetBrainsMono Nerd Font, monospace',
+            fontFamily: font,
+            fontSize: fontSize,
             cursorBlink: true,
             cursorStyle: 'bar',
             // convertEol: true,
@@ -317,13 +324,38 @@ const TerminalComponent = ({ terminalId }) => {
     useEffect(() => {
         const xterm = xtermRef.current;
         if (!xterm || !isInitialized) return;
+
+        if (hasModalOpen) {
+            xterm.blur();
+            return;
+        }
+
         if (isFocused) {
             xterm.focus();
             scheduleResize();
         } else {
             xterm.blur();
         }
-    }, [isFocused, isInitialized, scheduleResize]);
+    }, [isFocused, isInitialized, hasModalOpen, scheduleResize]);
+
+    // Efeito para garantir que o terminal foque ao ser clicado diretamente
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container || !isInitialized) return;
+
+        const handleMouseDown = () => {
+            if (hasModalOpen) return;
+            // Força o foco no xterm e sincroniza o store
+            if (useTerminalStore.getState().focusedTerminal !== terminalId) {
+                useTerminalStore.getState().setFocused(terminalId);
+            }
+            // Pequeno delay para garantir que o xterm está pronto para receber foco
+            setTimeout(() => xtermRef.current?.focus(), 10);
+        };
+
+        container.addEventListener('mousedown', handleMouseDown);
+        return () => container.removeEventListener('mousedown', handleMouseDown);
+    }, [isInitialized, terminalId, hasModalOpen]);
 
     useEffect(() => {
         if (!isInitialized) return;
@@ -338,7 +370,7 @@ const TerminalComponent = ({ terminalId }) => {
     }, [isInitialized, scheduleResize]);
 
     useEffect(() => {
-        if (!isInitialized || !configs?.ligatures) return;
+        if (!isInitialized || !ligatures) return;
         const xterm = xtermRef.current;
         if (!xterm) return;
 
@@ -355,7 +387,7 @@ const TerminalComponent = ({ terminalId }) => {
                 ligaturesAddon.dispose();
             }
         };
-    }, [isInitialized, configs?.ligatures]);
+    }, [isInitialized, ligatures]);
 
     if (!terminalMeta) {
         return (
@@ -378,4 +410,4 @@ const TerminalComponent = ({ terminalId }) => {
     );
 };
 
-export default TerminalComponent;
+export default LocalTerminal;

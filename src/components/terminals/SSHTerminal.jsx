@@ -8,10 +8,8 @@ import { LigaturesAddon } from '@xterm/addon-ligatures';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { isTauri } from '@tauri-apps/api/core';
-import useSSHStore from '../stores/useSSHStore';
-import useConfigStore from '@/stores/ConfigData';
-import useThemeStore from '@/stores/useThemeStore';
-import SearchOverlay from '@/Terminal/SearchOverlay';
+import { useSSHStore, FontConfig, useThemeStore, useModalStore } from '@/stores';
+import SearchOverlay from '@/components/Search/SearchOverlay';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import '@xterm/xterm/css/xterm.css';
 
@@ -40,7 +38,7 @@ const releaseWebgl = () => {
  * SSHComponent - Renderiza um terminal SSH individual usando xterm.js
  * Agora usa Zustand store ao invés de Context API
  */
-const SSHComponent = ({ sessionId }) => {
+const SSHTerminal = ({ sessionId }) => {
     const containerRef = useRef(null);
     const terminalRef = useRef(null);
     const resizeTimeoutRef = useRef(null);
@@ -60,8 +58,12 @@ const SSHComponent = ({ sessionId }) => {
     const isFocused = focusedSession === sessionId;
 
     const [isInitialized, setIsInitialized] = useState(false);
-    const { configs } = useConfigStore();
+    const font = FontConfig((s) => s.font);
+    const fontSize = FontConfig((s) => s.fontSize);
+    const ligatures = FontConfig((s) => s.ligatures);
     const { theme } = useThemeStore();
+    const modals = useModalStore((s) => s.modals);
+    const hasModalOpen = Object.values(modals).some(Boolean);
 
     const initOk = useMemo(() => {
         const width = containerSize?.width ?? 0;
@@ -113,8 +115,8 @@ const SSHComponent = ({ sessionId }) => {
             theme: {
                 ...theme,
             },
-            fontFamily: 'Cascadia Mono, Consolas, "DejaVu Sans Mono", monospace',
-            fontSize: 14,
+            fontFamily: font,
+            fontSize: fontSize,
             lineHeight: 1.2,
             cursorBlink: true,
             allowTransparency: false,
@@ -423,13 +425,38 @@ const SSHComponent = ({ sessionId }) => {
     useEffect(() => {
         const xterm = xtermRef.current;
         if (!xterm || !isInitialized) return;
+
+        if (hasModalOpen) {
+            xterm.blur();
+            return;
+        }
+
         if (isFocused) {
             xterm.focus();
             scheduleResize();
         } else {
             xterm.blur();
         }
-    }, [isFocused, isInitialized, scheduleResize]);
+    }, [isFocused, isInitialized, hasModalOpen, scheduleResize]);
+
+    // Efeito para garantir que a sessão SSH foque ao ser clicada diretamente
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container || !isInitialized) return;
+
+        const handleMouseDown = () => {
+            if (hasModalOpen) return;
+            // Força o foco no xterm e sincroniza o store
+            if (useSSHStore.getState().focusedSession !== sessionId) {
+                useSSHStore.getState().setFocused(sessionId);
+            }
+            // Pequeno delay para garantir que o xterm está pronto para receber foco
+            setTimeout(() => xtermRef.current?.focus(), 10);
+        };
+
+        container.addEventListener('mousedown', handleMouseDown);
+        return () => container.removeEventListener('mousedown', handleMouseDown);
+    }, [isInitialized, sessionId, hasModalOpen]);
 
     useEffect(() => {
         if (!isInitialized) return;
@@ -443,7 +470,7 @@ const SSHComponent = ({ sessionId }) => {
     }, [isInitialized, scheduleResize]);
 
     useEffect(() => {
-        if (!isInitialized || !configs?.ligatures) return;
+        if (!isInitialized || !ligatures) return;
         const xterm = xtermRef.current;
         if (!xterm) return;
 
@@ -460,7 +487,7 @@ const SSHComponent = ({ sessionId }) => {
                 ligaturesAddon.dispose();
             }
         };
-    }, [isInitialized, configs?.ligatures]);
+    }, [isInitialized, ligatures]);
 
     // Se sessão não existe, não renderizar nada
     if (!session) {
@@ -477,4 +504,4 @@ const SSHComponent = ({ sessionId }) => {
     );
 };
 
-export default SSHComponent;
+export default SSHTerminal;

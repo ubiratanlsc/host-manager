@@ -4,12 +4,11 @@ import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortabl
 import { GripVertical, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList } from '@/components/ui/tabs';
-import TerminalComponent from './TerminalComponent';
-import SSHComponent from '../ssh/SSHComponent';
-import useSplitStore from '../stores/useSplitStore';
-import useTerminalStore from '../stores/useTerminalStore';
-import useSSHStore from '../stores/useSSHStore';
-import DraggableTab from './DraggableTab';
+import LocalTerminal from '../terminals/LocalTerminal';
+import SSHTerminal from '../terminals/SSHTerminal';
+import DraggableTab from '../Tab/DraggableTab';
+import { useSplitStore, useTerminalStore, useSSHStore } from '@/stores';
+import { useEffect } from 'react';
 
 /**
  * Pane - Container arrastável que contém terminais/SSH
@@ -25,6 +24,7 @@ const Pane = ({ paneId }) => {
 
     // Split Store
     const pane = useSplitStore(state => state.splits.get(paneId));
+    const activePane = useSplitStore(state => state.activePaneId);
     const setActiveTerminal = useSplitStore(state => state.setActiveTerminal);
     const closePane = useSplitStore(state => state.closePane);
     const removeTerminalFromSplit = useSplitStore(state => state.removeTerminalFromSplit);
@@ -39,6 +39,24 @@ const Pane = ({ paneId }) => {
     const sessions = useSSHStore(state => state.sessions);
     const killSSH = useSSHStore(state => state.killSSH);
     const setFocusedSession = useSSHStore(state => state.setFocused);
+
+    const terminalIds = pane?.terminalIds || [];
+    const activeTerminalId = pane?.activeTerminalId || terminalIds[0] || null;
+
+    // Sincronizar foco global quando o pane ou terminal ativo muda
+    useEffect(() => {
+        if (activePane === paneId && activeTerminalId) {
+            // Pequeno delay para garantir que o DOM está pronto e o xterm existe
+            const timer = setTimeout(() => {
+                if (useTerminalStore.getState().terminals.has(activeTerminalId)) {
+                    setFocusedTerminal(activeTerminalId);
+                } else if (useSSHStore.getState().sessions.has(activeTerminalId)) {
+                    setFocusedSession(activeTerminalId);
+                }
+            }, 50);
+            return () => clearTimeout(timer);
+        }
+    }, [activePane, paneId, activeTerminalId, setFocusedTerminal, setFocusedSession]);
 
     // Tornar o pane inteiro arrastável
     const {
@@ -95,9 +113,7 @@ const Pane = ({ paneId }) => {
         );
     }
 
-    // Desestruturar com fallback seguro para evitar undefined
-    const terminalIds = pane.terminalIds || [];
-    const activeTerminalId = pane.activeTerminalId || terminalIds[0] || null;
+    // Desestruturar já feito acima do useEffect
 
     const handleActivateTerminal = (terminalId) => {
         setActiveTerminal(paneId, terminalId);
@@ -160,7 +176,7 @@ const Pane = ({ paneId }) => {
                                     pointerEvents: isActive ? 'auto' : 'none'
                                 }}
                             >
-                                <TerminalComponent terminalId={terminalId} />
+                                <LocalTerminal terminalId={terminalId} />
                             </div>
                         );
                     }
@@ -175,7 +191,7 @@ const Pane = ({ paneId }) => {
                                     pointerEvents: isActive ? 'auto' : 'none'
                                 }}
                             >
-                                <SSHComponent sessionId={terminalId} />
+                                <SSHTerminal sessionId={terminalId} />
                             </div>
                         );
                     }
@@ -196,8 +212,8 @@ const Pane = ({ paneId }) => {
             ref={setDragRef}
             style={style}
             className={`relative flex flex-col h-full rounded-md overflow-hidden transition-colors
-                ${isDragging ? 'z-[20000]' : ''}
-            `} 
+                ${isDragging ? 'z-40' : ''}
+            `}
             // mt-1
             onClick={() => setActivePane(paneId)}
         >
