@@ -1,4 +1,4 @@
-# JEXT Project Documentation
+# Host manager Project Documentation
 
 Jext is a cross-platform terminal application built with Tauri (Rust backend) and React (frontend). It provides terminal emulation functionality with support for both local PTY (Pseudo-Terminal) sessions and SSH connections.
 
