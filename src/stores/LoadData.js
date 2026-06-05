@@ -2,6 +2,7 @@ import { readFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { isTauri } from '@tauri-apps/api/core';
 import { create } from "zustand";
 import useConfigStore from './ConfigData';
+import useSaveData from './SaveData';
 import FontConfig from './FontConfig';
 import ThemeConfig from './ThemeConfig';
 import TerminalConfig from './TerminalConfig';
@@ -13,40 +14,46 @@ const useLoadData = create((set) => ({
         if (!isTauri()) {
             return;
         }
-        const file = await readFile('config.json', {
-            baseDir: BaseDirectory.Resource,
-        });
-        const contents = new TextDecoder().decode(file);
-        const data = JSON.parse(contents);
+        try {
+            const file = await readFile('config.json', {
+                baseDir: BaseDirectory.Resource,
+            });
+            const contents = new TextDecoder().decode(file);
+            const data = JSON.parse(contents);
 
-        // Carregar dados de entidades no ConfigStore
-        const { setInitialData } = useConfigStore.getState();
-        setInitialData(data);
+            // Carregar dados de entidades no ConfigStore
+            const { setInitialData } = useConfigStore.getState();
+            setInitialData(data);
 
-        // Distribuir configs nos stores componentizados
-        const configs = data.configs || {};
+            // Distribuir configs nos stores componentizados
+            const configs = data.configs || {};
 
-        // ThemeConfig
-        if (configs.theme) ThemeConfig.getState().setTheme(configs.theme);
-        if (configs.colorTheme) ThemeConfig.getState().setColorTheme(configs.colorTheme);
+            // ThemeConfig
+            if (configs.theme) ThemeConfig.getState().setTheme(configs.theme);
+            if (configs.colorTheme) ThemeConfig.getState().setColorTheme(configs.colorTheme);
 
-        // FontConfig
-        if (configs.font) FontConfig.setState({ font: configs.font });
-        if (configs.fontSize) FontConfig.getState().setFontSize(configs.fontSize);
-        if (configs.ligatures !== undefined) FontConfig.getState().setLigatures(configs.ligatures);
+            // FontConfig
+            if (configs.font) FontConfig.setState({ font: configs.font });
+            if (configs.fontSize) FontConfig.getState().setFontSize(configs.fontSize);
+            if (configs.ligatures !== undefined) FontConfig.getState().setLigatures(configs.ligatures);
 
-        // TerminalConfig
-        if (configs.cursorBlink !== undefined) TerminalConfig.getState().setCursorBlink(configs.cursorBlink);
-        if (configs.cursorStyle) TerminalConfig.getState().setCursorStyle(configs.cursorStyle);
-        if (configs.scrollback) TerminalConfig.getState().setScrollback(configs.scrollback);
-        if (configs.lineHeight) TerminalConfig.getState().setLineHeight(configs.lineHeight);
+            // TerminalConfig
+            if (configs.cursorBlink !== undefined) TerminalConfig.getState().setCursorBlink(configs.cursorBlink);
+            if (configs.cursorStyle) TerminalConfig.getState().setCursorStyle(configs.cursorStyle);
+            if (configs.scrollback) TerminalConfig.getState().setScrollback(configs.scrollback);
+            if (configs.lineHeight) TerminalConfig.getState().setLineHeight(configs.lineHeight);
 
-        // ClipboardConfig
-        if (configs.pasteRight !== undefined) ClipboardConfig.getState().setPasteRight(configs.pasteRight);
-        if (configs.copyOnSelect !== undefined) ClipboardConfig.getState().setCopyOnSelect(configs.copyOnSelect);
+            // ClipboardConfig
+            if (configs.pasteRight !== undefined) ClipboardConfig.getState().setPasteRight(configs.pasteRight);
+            if (configs.copyOnSelect !== undefined) ClipboardConfig.getState().setCopyOnSelect(configs.copyOnSelect);
 
-        // AppVersionConfig
-        if (configs.version) AppVersionConfig.getState().setVersion(configs.version);
+            // AppVersionConfig
+            if (configs.version) AppVersionConfig.getState().setVersion(configs.version);
+        } catch (error) {
+            console.warn('config.json não encontrado, criando arquivo padrão...');
+            const { persist } = useSaveData.getState();
+            await persist();
+        }
     },
     initLoadData: () => {
         const { loadData } = useLoadData.getState();
