@@ -2,7 +2,7 @@ use super::constants::{MAX_PIPE_CHUNK_SIZE, READ_PAUSE_DURATION};
 use super::{PtyExitPayload, PtyProcess, PtySpawnPayload, PtyStdoutPayload};
 use crate::pty::constants::{PTY_EXIT_EVENT, PTY_SPAWN_EVENT, PTY_STDOUT_EVENT};
 use crate::shell::SystemShell;
-use crate::JexpeState;
+use crate::AppState;
 // use cuid2;
 use cuid::cuid;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
@@ -14,7 +14,7 @@ use tokio::time::sleep;
 #[tauri::command]
 pub async fn spawn_pty(
     app_handle: AppHandle,
-    state: State<'_, JexpeState>,
+    state: State<'_, AppState>,
     shell: SystemShell,
     cols: u16,
     rows: u16,
@@ -196,7 +196,7 @@ pub async fn spawn_pty(
 
 #[tauri::command]
 pub async fn write_pty(
-    state: State<'_, JexpeState>,
+    state: State<'_, AppState>,
     id: String,
     data: String,
 ) -> Result<(), String> {
@@ -216,7 +216,7 @@ pub async fn write_pty(
 
 #[tauri::command]
 pub async fn resize_pty(
-    state: State<'_, JexpeState>,
+    state: State<'_, AppState>,
     id: String,
     size: PtySize,
 ) -> Result<(), String> {
@@ -232,7 +232,7 @@ pub async fn resize_pty(
 }
 
 #[tauri::command]
-pub async fn kill_pty(state: State<'_, JexpeState>, id: String) -> Result<(), String> {
+pub async fn kill_pty(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let mut ptys = state.ptys.lock().await;
 
     let pty = ptys

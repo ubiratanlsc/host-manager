@@ -14,6 +14,7 @@ import DialogListTags from './components/Modal/DialogListTags';
 import MainLayout from '@/components/split/MainLayout';
 import NotificationContainer from '@/components/Notifications/NotificationContainer';
 import QuickSearch from '@/components/Modal/QuickSearch';
+import HostKeyDialog from '@/components/Modal/HostKeyDialog';
 
 
 const App = () => {
@@ -68,6 +69,7 @@ const App = () => {
       <DialogSettings onClose={() => closeModal('settings')} />
       <DialogTag onClose={() => closeModal('tag')} />
       <QuickSearch open={quickSearchOpen} onClose={() => setQuickSearchOpen(false)} />
+      <HostKeyDialog />
       <NotificationContainer />
     </div>
   );

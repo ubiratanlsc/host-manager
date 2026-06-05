@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useConfigStore, useModalStore } from "@/stores";
 import { TagCard } from "../Tag/TagCard";
 import { TagModal } from "../Tag/TagModal";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 export default function DialogListTags() {
     const { tags, addTag, editTag, removeTag } = useConfigStore();
@@ -19,6 +20,7 @@ export default function DialogListTags() {
     const [isTagModalOpen, setIsTagModalOpen] = useState(false);
     const [editingTag, setEditingTag] = useState(null);
     const [search, setSearch] = useState('');
+    const [tagToDelete, setTagToDelete] = useState(null);
 
     const filteredTags = useMemo(() => {
         if (!search.trim()) return tags;
@@ -41,8 +43,13 @@ export default function DialogListTags() {
     };
 
     const handleDeleteTag = (id) => {
-        if (confirm("Tem certeza que deseja excluir esta tag?")) {
-            removeTag(id);
+        setTagToDelete(id);
+    };
+
+    const confirmDeleteTag = () => {
+        if (tagToDelete) {
+            removeTag(tagToDelete);
+            setTagToDelete(null);
         }
     };
 
@@ -110,6 +117,16 @@ export default function DialogListTags() {
                 onClose={() => setIsTagModalOpen(false)}
                 onSave={handleSaveTag}
                 tag={editingTag}
+            />
+
+            <ConfirmDialog
+                open={!!tagToDelete}
+                onOpenChange={(o) => { if (!o) setTagToDelete(null); }}
+                title="Excluir tag"
+                description="Tem certeza que deseja excluir esta tag? Esta ação não pode ser desfeita."
+                onConfirm={confirmDeleteTag}
+                confirmLabel="Excluir"
+                destructive
             />
         </>
     );

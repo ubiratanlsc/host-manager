@@ -1,8 +1,8 @@
 use super::*;
-use crate::JexpeState;
+use crate::AppState;
 use cuid::cuid;
 use portable_pty::PtySize;
-use ssh2::KeyboardInteractivePrompt;
+use ssh2::{CheckResult, HashType, HostKeyType, KeyboardInteractivePrompt, KnownHostFileKind, KnownHostKeyFormat};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::thread;
@@ -23,6 +23,28 @@ impl KeyboardInteractivePrompt for PasswordPrompt {
         println!("ponto: 1 - Recebido prompt interativo");
         prompts.iter().map(|_| self.0.clone()).collect()
     }
+}
+
+fn get_known_hosts_path() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "windows")]
+    let home = std::env::var("USERPROFILE").ok()?;
+    #[cfg(not(target_os = "windows"))]
+    let home = std::env::var("HOME").ok()?;
+    let ssh_dir = Path::new(&home).join(".ssh");
+    let _ = std::fs::create_dir_all(&ssh_dir);
+    Some(ssh_dir.join("known_hosts"))
+}
+
+fn base64_encode_sha256(hash: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(hash)
+}
+
+fn hex_encode_md5(hash: &[u8]) -> String {
+    hash.iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<Vec<_>>()
+        .join(":")
 }
 
 fn authenticate(
@@ -62,7 +84,7 @@ fn authenticate(
 #[tauri::command]
 pub async fn spawn_ssh(
     app_handle: AppHandle,
-    state: State<'_, JexpeState>,
+    state: State<'_, AppState>,
     window_id: String,
     host: String,
     port: u16,
@@ -89,6 +111,65 @@ pub async fn spawn_ssh(
 
     sess.set_tcp_stream(tcp);
     sess.handshake().map_err(|e| e.to_string())?;
+
+    // Verificação de host key
+    let (hostkey, hostkey_type) = sess.host_key().ok_or("Failed to get host key")?;
+    let hostkey_type_str = format!("{:?}", hostkey_type);
+    let hash_sha256 = sess.host_key_hash(HashType::Sha256).ok_or("Failed to get SHA256 hash")?;
+    let hash_md5 = sess.host_key_hash(HashType::Md5).ok_or("Failed to get MD5 hash")?;
+    let fingerprint_sha256 = base64_encode_sha256(hash_sha256);
+    let fingerprint_md5 = hex_encode_md5(hash_md5);
+
+    let known_hosts_path = get_known_hosts_path();
+    let hostname = format!("[{}]:{}", host, port);
+
+    let (needs_prompt, known_hosts_path2) = {
+        let mut known = sess.known_hosts().map_err(|e| e.to_string())?;
+        if let Some(ref path) = known_hosts_path {
+            let _ = known.read_file(path, KnownHostFileKind::OpenSSH);
+        }
+        let check_result = known.check(&hostname, hostkey);
+        let needs = match check_result {
+            CheckResult::Match => {
+                println!("ponto: 8.5 - Host key conhecido");
+                false
+            }
+            _ => true,
+        };
+        (needs, known_hosts_path.clone())
+    };
+
+    if needs_prompt {
+        println!("ponto: 8.6 - Host key desconhecido, solicitando confirmação");
+        let prompt_id = cuid().map_err(|_| "Failed to generate prompt ID")?;
+        let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
+        {
+            let mut pending = state.pending_hostkey.lock().await;
+            pending.insert(prompt_id.clone(), tx);
+        }
+            let _ = app_handle.emit("hostkey-prompt", serde_json::json!({
+                "prompt_id": prompt_id,
+                "host": host,
+                "port": port,
+                "fingerprint_sha256": fingerprint_sha256,
+                "fingerprint_md5": fingerprint_md5,
+                "key_type": hostkey_type_str,
+            }));
+        let accepted = rx.await.map_err(|_| "Host key verification timed out".to_string())?;
+        if !accepted {
+            return Err("Conexão rejeitada pelo usuário".to_string());
+        }
+        println!("ponto: 8.7 - Host key aceito pelo usuário");
+        // Adicionar ao known_hosts (precisa de um novo KnownHosts pois o anterior foi dropado)
+        if let Some(ref path) = known_hosts_path2 {
+            if let Ok(mut known2) = sess.known_hosts() {
+                let _ = known2.read_file(path, KnownHostFileKind::OpenSSH);
+                let fmt: KnownHostKeyFormat = hostkey_type.into();
+                let _ = known2.add(&hostname, hostkey, &host, fmt);
+                let _ = known2.write_file(path, KnownHostFileKind::OpenSSH);
+            }
+        }
+    }
 
     authenticate(&mut sess, &username, &password)?;
 
@@ -294,7 +375,7 @@ pub async fn spawn_ssh(
 
 #[tauri::command]
 pub async fn write_ssh(
-    state: State<'_, JexpeState>,
+    state: State<'_, AppState>,
     id: String,
     data: String,
 ) -> Result<usize, String> {
@@ -337,7 +418,7 @@ pub async fn write_ssh(
 
 #[tauri::command]
 pub async fn resize_ssh(
-    state: State<'_, JexpeState>,
+    state: State<'_, AppState>,
     id: String,
     size: PtySize,
 ) -> Result<(), String> {
@@ -378,7 +459,7 @@ pub async fn resize_ssh(
 }
 
 #[tauri::command]
-pub async fn kill_ssh(state: State<'_, JexpeState>, id: String) -> Result<(), String> {
+pub async fn kill_ssh(state: State<'_, AppState>, id: String) -> Result<(), String> {
     println!("ponto: 43 - Iniciando kill_ssh para ID: {}", id);
 
     let mut ssh_sessions = state.ssh_sessions.lock().await;
@@ -393,7 +474,7 @@ pub async fn kill_ssh(state: State<'_, JexpeState>, id: String) -> Result<(), St
 }
 
 #[tauri::command]
-pub async fn list_ssh_sessions(state: State<'_, JexpeState>) -> Result<Vec<SshSpawnPayload>, String> {
+pub async fn list_ssh_sessions(state: State<'_, AppState>) -> Result<Vec<SshSpawnPayload>, String> {
     let ssh_sessions = state.ssh_sessions.lock().await;
     let mut result = Vec::new();
 
@@ -415,7 +496,7 @@ pub async fn list_ssh_sessions(state: State<'_, JexpeState>) -> Result<Vec<SshSp
 }
 
 #[tauri::command]
-pub async fn cleanup_inactive_sessions(state: State<'_, JexpeState>) -> Result<(), String> {
+pub async fn cleanup_inactive_sessions(state: State<'_, AppState>) -> Result<(), String> {
     let mut ssh_sessions = state.ssh_sessions.lock().await;
     let now = SystemTime::now();
 
@@ -454,8 +535,22 @@ pub async fn cleanup_inactive_sessions(state: State<'_, JexpeState>) -> Result<(
     Ok(())
 }
 #[tauri::command]
+pub async fn respond_hostkey(
+    state: State<'_, AppState>,
+    prompt_id: String,
+    accept: bool,
+) -> Result<(), String> {
+    let mut pending = state.pending_hostkey.lock().await;
+    if let Some(sender) = pending.remove(&prompt_id) {
+        sender.send(accept).map_err(|_| "Failed to send response".to_string())
+    } else {
+        Err("Prompt not found or already responded".to_string())
+    }
+}
+
+#[tauri::command]
 pub async fn heartbeat(
-    state: State<'_, JexpeState>,
+    state: State<'_, AppState>,
     id: String,
     window_id: String,
 ) -> Result<(), String> {
@@ -472,7 +567,7 @@ pub async fn heartbeat(
 }
 
 #[tauri::command]
-pub async fn shutdown_all_sessions(state: State<'_, JexpeState>) -> Result<(), String> {
+pub async fn shutdown_all_sessions(state: State<'_, AppState>) -> Result<(), String> {
     let mut ssh_sessions = state.ssh_sessions.lock().await;
     for (id, session) in ssh_sessions.drain() {
         println!("ponto: 60 - Encerrando sessão: {} (shutdown)", id);
@@ -481,25 +576,4 @@ pub async fn shutdown_all_sessions(state: State<'_, JexpeState>) -> Result<(), S
     }
     Ok(())
 }
-#[tauri::command]
-pub async fn reconnect_session(
-    state: State<'_, JexpeState>,
-    window_id: String,
-) -> Result<String, String> {
-    let ssh_sessions = state.ssh_sessions.lock().await;
 
-    // Procurar sessão existente para esta janela
-    for (id, session) in ssh_sessions.iter() {
-        if session.window_id == window_id {
-            if let Ok(mut connected) = session.connected.lock() {
-                *connected = true;
-            }
-            if let Ok(mut last_heartbeat) = session.heartbeat.lock() {
-                *last_heartbeat = SystemTime::now();
-            }
-            return Ok(id.clone());
-        }
-    }
-
-    Err("Nenhuma sessão encontrada para esta janela".to_string())
-}

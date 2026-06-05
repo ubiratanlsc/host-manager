@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useConfigStore, useModalStore, useSaveData, useAppStore } from "@/stores";
 import GroupCard from "../Group/Groupscard";
 import { GroupModal } from "../Group/GroupModal";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 export default function DialogListGroups() {
     const { groups, editGroup, removeGroup } = useConfigStore();
@@ -18,6 +19,7 @@ export default function DialogListGroups() {
     const { modals, closeModal } = useModalStore();
     const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
     const [editingGroup, setEditingGroup] = useState(null);
+    const [groupToDelete, setGroupToDelete] = useState(null);
     const [search, setSearch] = useState('');
 
     const filteredGroups = useMemo(() => {
@@ -41,8 +43,13 @@ export default function DialogListGroups() {
     };
 
     const handleDeleteGroup = (id) => {
-        if (confirm("Tem certeza que deseja excluir este grupo?")) {
-            removeGroup(id);
+        setGroupToDelete(id);
+    };
+
+    const confirmDeleteGroup = () => {
+        if (groupToDelete) {
+            removeGroup(groupToDelete);
+            setGroupToDelete(null);
         }
     };
 
@@ -110,6 +117,16 @@ export default function DialogListGroups() {
                 onClose={() => setIsGroupModalOpen(false)}
                 onSave={handleSaveGroup}
                 group={editingGroup}
+            />
+
+            <ConfirmDialog
+                open={!!groupToDelete}
+                onOpenChange={(o) => { if (!o) setGroupToDelete(null); }}
+                title="Excluir grupo"
+                description="Tem certeza que deseja excluir este grupo? Esta ação não pode ser desfeita."
+                onConfirm={confirmDeleteGroup}
+                confirmLabel="Excluir"
+                destructive
             />
         </>
     );

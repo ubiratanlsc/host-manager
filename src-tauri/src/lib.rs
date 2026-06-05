@@ -9,21 +9,18 @@ mod pty;
 mod shell;
 mod ssh;
 
-// mod crypto;
-// mod models;
-// mod storage;
-// mod ui;
-
-pub struct JexpeState {
+pub struct AppState {
     ptys: Mutex<HashMap<String, PtyProcess>>,
     ssh_sessions: Mutex<HashMap<String, ssh::SshSession>>,
+    pending_hostkey: Mutex<HashMap<String, tokio::sync::oneshot::Sender<bool>>>,
 }
 
-impl JexpeState {
+impl AppState {
     fn new() -> Self {
         Self {
             ptys: Mutex::new(HashMap::new()),
             ssh_sessions: Mutex::new(HashMap::new()),
+            pending_hostkey: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -43,7 +40,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_system_fonts::init())
-        .manage(JexpeState::new())
+        .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             shell::commands::get_system_shells,
             pty::commands::spawn_pty,
@@ -55,6 +52,10 @@ pub fn run() {
             ssh::commands::resize_ssh,
             ssh::commands::kill_ssh,
             ssh::commands::list_ssh_sessions,
+            ssh::commands::respond_hostkey,
+            ssh::commands::cleanup_inactive_sessions,
+            ssh::commands::heartbeat,
+            ssh::commands::shutdown_all_sessions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
