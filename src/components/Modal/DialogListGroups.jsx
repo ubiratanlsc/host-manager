@@ -3,51 +3,89 @@ import {
     DialogContent,
     DialogTitle
 } from "@/components/ui/dialog";
-import { useConfigStore, useModalStore } from "@/stores";
-import GroupCard from "../Cards/Groupscard";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+import { useState } from "react";
+import { v4 as uuidv4 } from 'uuid';
+import { useConfigStore, useModalStore, useSaveData, useAppStore } from "@/stores";
+import GroupCard from "../Group/Groupscard";
+import { GroupModal } from "../Group/GroupModal";
 
 export default function DialogListGroups() {
-    const { groups } = useConfigStore();
+    const { groups, editGroup, removeGroup } = useConfigStore();
+    const { saveGroup } = useSaveData();
     const { modals, closeModal } = useModalStore();
-
-    if (!groups) {
-        return (
-            <Dialog open={modals.groupsList} onOpenChange={(open) => !open && closeModal('groupsList')}>
-                <DialogContent>
-                    <DialogTitle className="sr-only">Carregando Grupos</DialogTitle>
-                    <div className="flex justify-center p-4">
-                        <Loader2 className="animate-spin h-6 w-6" />
-                    </div>
-                </DialogContent>
-            </Dialog>
-        )
-    }
+    const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+    const [editingGroup, setEditingGroup] = useState(null);
 
     const handleOpenChange = (open) => {
         if (!open) closeModal('groupsList');
     };
 
+    const handleCreateGroup = () => {
+        setEditingGroup(null);
+        setIsGroupModalOpen(true);
+    };
+
+    const handleEditGroup = (group) => {
+        setEditingGroup(group);
+        setIsGroupModalOpen(true);
+    };
+
+    const handleDeleteGroup = (id) => {
+        if (confirm("Tem certeza que deseja excluir este grupo?")) {
+            removeGroup(id);
+        }
+    };
+
+    const handleSaveGroup = (groupData) => {
+        if (groupData.id) {
+            editGroup(groupData.id, groupData);
+            useAppStore.getState().addNotification({ type: 'success', title: 'Grupo atualizado', message: `${groupData.name} foi atualizado com sucesso.` });
+        } else {
+            saveGroup(uuidv4(), groupData.name, groupData.username, groupData.password);
+        }
+        setIsGroupModalOpen(false);
+    };
+
     return (
-        <Dialog open={modals.groupsList} onOpenChange={handleOpenChange}>
-            <DialogContent className="w-[calc(100vw-2rem)] md:w-[88vw] lg:w-[85vw] xl:w-[80vw] max-w-[1200px] max-h-[88vh] overflow-hidden flex flex-col p-4">
-                <DialogTitle className="sr-only">Meus Grupos</DialogTitle>
-                <div className="flex flex-col gap-2 overflow-auto">
-                    <h2 className="text-lg font-semibold mb-2">My Groups</h2>
-                    <div className="flex flex-wrap gap-4">
-                        {groups.map(({ id, name }) => (
-                            <div key={id} className="w-full sm:w-auto">
-                                <GroupCard
-                                    group={{
-                                        name: name,
-                                        length: '0' // Placeholder as in original
-                                    }}
-                                />
-                            </div>
-                        ))}
+        <>
+            <Dialog open={modals.groupsList} onOpenChange={handleOpenChange}>
+                <DialogContent className="w-[calc(100vw-2rem)] sm:w-[500px] max-h-[88vh] flex flex-col p-6">
+                    <div className="flex items-center justify-between pb-4 border-b">
+                        <DialogTitle className="text-2xl font-bold">Meus Grupos</DialogTitle>
+                        <Button onClick={handleCreateGroup} className="gap-2" variant="default">
+                            <Plus className="w-4 h-4" />
+                            Novo Grupo
+                        </Button>
                     </div>
-                </div>
-            </DialogContent>
-        </Dialog>
+                    <div className="flex-1 overflow-y-auto pt-4">
+                        {groups.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed rounded-xl">
+                                <p>Nenhum grupo criado ainda.</p>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-1.5">
+                                {groups.map((group) => (
+                                    <GroupCard
+                                        key={group.id}
+                                        group={group}
+                                        onEdit={handleEditGroup}
+                                        onDelete={handleDeleteGroup}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <GroupModal
+                isOpen={isGroupModalOpen}
+                onClose={() => setIsGroupModalOpen(false)}
+                onSave={handleSaveGroup}
+                group={editingGroup}
+            />
+        </>
     );
 }

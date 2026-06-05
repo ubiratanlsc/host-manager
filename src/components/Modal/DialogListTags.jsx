@@ -50,10 +50,10 @@ export default function DialogListTags() {
     return (
         <>
             <Dialog open={modals.tagList} onOpenChange={handleOpenChange}>
-                <DialogContent className="w-[calc(100vw-2rem)] md:w-[88vw] lg:w-[85vw] xl:w-[80vw] max-w-[1200px] max-h-[88vh] flex flex-col p-6">
+                <DialogContent className="w-[calc(100vw-2rem)] sm:w-[500px] max-h-[88vh] flex flex-col p-6">
                     <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b">
                         <DialogTitle className="text-2xl font-bold">Galeria de Tags</DialogTitle>
-                        <Button onClick={handleCreateTag} className="gap-2">
+                        <Button onClick={handleCreateTag} className="gap-2" variant="default">
                             <Plus className="w-4 h-4" />
                             Nova Tag
                         </Button>
@@ -68,7 +68,7 @@ export default function DialogListTags() {
                                 </Button>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="flex flex-col gap-1.5">
                                 {tags.map((tag) => (
                                     <TagCard
                                         key={tag.id}

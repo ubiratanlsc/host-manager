@@ -1,46 +1,30 @@
 import React from 'react';
-import { Edit2, Server } from 'lucide-react';
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { Pencil, Trash2 } from 'lucide-react';
 
-const GroupCard = ({ group }) => {
-    // Status logic similar to HostCard? Group usually doesn't have status online/offline unless it aggregates?
-    // Original code had status logic but unused 'status' prop in ListGroups?
-    // I'll keep it safe.
-
-    const statusColor =
-        group.status === 'online'
-            ? 'bg-emerald-500 hover:bg-emerald-600'
-            : group.status === 'offline'
-                ? 'bg-red-500 hover:bg-red-600'
-                : 'bg-amber-500 hover:bg-amber-600';
-
+const GroupCard = ({ group, onEdit, onDelete }) => {
     return (
-        <Card className="flex-1 max-h-24 min-w-[200px] transition-all hover:shadow-lg hover:-translate-y-1 overflow-hidden">
-            <CardContent className="p-2">
-                <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                        <div className="my-1">
-                            {group.status && (
-                                <Badge className={cn("mr-2", statusColor)} />
-                            )}
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                                <Server size={18} />
-                            </Button>
-                        </div>
-                        <div className="mx-1 my-1">
-                            <h3 className="font-bold text-sm leading-tight">{group.name}</h3>
-                            {/* <span className="text-xs text-muted-foreground">{group.length} hosts</span> */}
-                        </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground ml-auto">
-                            <Edit2 size={16} />
-                        </Button>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
+        <div className="flex items-center justify-between p-2 px-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors group">
+            <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground/30 shrink-0" />
+                <span className="text-sm font-medium truncate">{group.name}</span>
+            </div>
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                    onClick={() => onEdit(group)}
+                    className="p-1.5 rounded-md hover:bg-background transition-colors text-muted-foreground hover:text-foreground"
+                    title="Editar"
+                >
+                    <Pencil className="w-3.5 h-3.5" />
+                </button>
+                <button
+                    onClick={() => onDelete(group.id)}
+                    className="p-1.5 rounded-md hover:bg-background transition-colors text-muted-foreground hover:text-red-500"
+                    title="Excluir"
+                >
+                    <Trash2 className="w-3.5 h-3.5" />
+                </button>
+            </div>
+        </div>
     );
 };
 

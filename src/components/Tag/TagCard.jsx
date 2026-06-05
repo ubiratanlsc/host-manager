@@ -1,66 +1,41 @@
 import { Pencil, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { useThemeStore } from "@/stores";
 
 export function TagCard({ tag, onEdit, onDelete }) {
-    // Função para verificar se a cor é clara ou escura
-    const isLightColor = (hex) => {
-        const rgb = parseInt(hex.substring(1), 16);
-        const r = (rgb >> 16) & 0xff;
-        const g = (rgb >> 8) & 0xff;
-        const b = (rgb >> 0) & 0xff;
-        const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-        return luma > 186;
-    };
-
-    const textColor = isLightColor(tag.color) ? "#000000" : "#ffffff";
+    const theme = useThemeStore((s) => s.theme);
 
     return (
-        <Card className="group overflow-hidden transition-all hover:shadow-lg hover:scale-[1.02] duration-200 rounded-xl">
-            <div
-                className="h-2"
-                style={{ backgroundColor: tag.color }}
-            />
-            <CardContent className="p-2">
-                <div className="flex items-start justify-between gap-3 mb-3">
-                    <div
-                        className="px-3 py-1.5 rounded-lg inline-flex items-center gap-2"
-                        style={{ backgroundColor: tag.color }}
-                    >
-                        <div
-                            className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: textColor, opacity: 0.7 }}
-                        />
-                        <span style={{ color: textColor }}>
-                            {tag.name}
-                        </span>
-                    </div>
-                </div>
-
-                <p className="text-muted-foreground mb-4 min-h-[3rem]">
-                    {tag.description}
-                </p>
-
-                <div className="flex gap-2 group-hover:opacity-100 transition-opacity duration-200">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onEdit(tag)}
-                        className="flex-1 rounded-lg"
-                    >
-                        <Pencil className="w-4 h-4 mr-2" />
-                        Editar
-                    </Button>
-                    <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => onDelete(tag.id)}
-                        className="rounded-lg"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                    </Button>
-                </div>
-            </CardContent>
-        </Card>
+        <div className="flex items-center justify-between p-2 px-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors group">
+            <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: tag.color }}
+                />
+                <span className="text-sm font-medium truncate">{tag.name}</span>
+                {tag.description && (
+                    <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+                        {tag.description}
+                    </span>
+                )}
+            </div>
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                    onClick={() => onEdit(tag)}
+                    className="p-1.5 rounded-md hover:bg-background transition-colors"
+                    // style={{ color: theme.blue || '#6366f1' }}
+                    title="Editar"
+                >
+                    <Pencil className="w-3.5 h-3.5" />
+                </button>
+                <button
+                    onClick={() => onDelete(tag.id)}
+                    className="p-1.5 rounded-md hover:bg-background transition-colors text-muted-foreground hover:text-red-500"
+                    // style={{ color: theme.red || '#ef4444' }}
+                    title="Excluir"
+                >
+                    <Trash2 className="w-3.5 h-3.5" />
+                </button>
+            </div>
+        </div>
     );
 }
