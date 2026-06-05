@@ -200,7 +200,7 @@ export default function DialogListConections() {
                 <DialogTitle className="sr-only">Lista de Conexões</DialogTitle>
                 <div className="flex h-full min-h-[500px]">
                     <Tabs defaultValue={defaultTab || undefined} orientation="vertical" className="flex w-full" onValueChange={(v) => setDefaultTab(v)}>
-                        <TabsList className="flex flex-col h-full justify-start w-48 rounded-none border-r bg-muted/50 p-2 space-y-1">
+                        <TabsList className="flex flex-col h-full justify-start w-48 rounded-none border-r bg-background p-2 space-y-1">
                             {tabs.map(({ id, name }) => (
                                 <TabsTrigger key={id} value={id} className="w-full justify-start">
                                     {name}
@@ -213,7 +213,7 @@ export default function DialogListConections() {
                             )}
                         </TabsList>
                         <div className="flex-1 flex flex-col overflow-hidden">
-                            <div className="flex items-center gap-1 p-2 border-b bg-muted/30 shrink-0">
+                            <div className="flex items-center gap-1 p-2 border-b shrink-0">
                                 {viewModes.map(mode => (
                                     <button
                                         key={mode.id}

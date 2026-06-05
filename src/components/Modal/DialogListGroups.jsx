@@ -53,7 +53,7 @@ export default function DialogListGroups() {
             <Dialog open={modals.groupsList} onOpenChange={handleOpenChange}>
                 <DialogContent className="w-[calc(100vw-2rem)] sm:w-[500px] max-h-[88vh] flex flex-col p-6">
                     <div className="pb-4 border-b">
-                        <DialogTitle className="text-2xl font-bold">Meus Grupos</DialogTitle>
+                        <DialogTitle className="text-lg font-bold">Grupos</DialogTitle>
                     </div>
                     <div className="flex-1 overflow-y-auto pt-4">
                         {groups.length === 0 ? (

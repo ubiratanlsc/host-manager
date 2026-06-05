@@ -52,7 +52,7 @@ export default function DialogListTags() {
             <Dialog open={modals.tagList} onOpenChange={handleOpenChange}>
                 <DialogContent className="w-[calc(100vw-2rem)] sm:w-[500px] max-h-[88vh] flex flex-col p-6">
                     <DialogHeader className="pb-4 border-b">
-                        <DialogTitle className="text-2xl font-bold">Galeria de Tags</DialogTitle>
+                        <DialogTitle className="text-lg font-bold">Tags</DialogTitle>
                     </DialogHeader>
 
                     <div className="flex-1 overflow-y-auto py-6 pr-2">
