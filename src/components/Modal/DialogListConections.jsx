@@ -28,11 +28,16 @@ const viewModes = [
 
 function HostListRow({ customer, groupName }) {
     const spawnSSH = useSSHStore((state) => state.spawnSSH);
-    const { closeModal } = useModalStore();
+    const { closeModal, openModal, setEditingCustomer } = useModalStore();
 
     const handleConnect = async () => {
         closeModal('connections');
         await spawnSSH({ host: customer.host, port: customer.port || 22, username: customer.username, password: customer.password });
+    };
+
+    const handleEdit = () => {
+        setEditingCustomer(customer);
+        openModal('host');
     };
 
     return (
@@ -52,6 +57,7 @@ function HostListRow({ customer, groupName }) {
                     <Terminal className="w-3.5 h-3.5" />
                 </button>
                 <button
+                    onClick={handleEdit}
                     className="p-1.5 rounded-md hover:bg-background transition-colors text-muted-foreground hover:text-foreground"
                     title="Editar"
                 >
@@ -64,11 +70,16 @@ function HostListRow({ customer, groupName }) {
 
 function HostDetailCard({ customer, groupName }) {
     const spawnSSH = useSSHStore((state) => state.spawnSSH);
-    const { closeModal } = useModalStore();
+    const { closeModal, openModal, setEditingCustomer } = useModalStore();
 
     const handleConnect = async () => {
         closeModal('connections');
         await spawnSSH({ host: customer.host, port: customer.port || 22, username: customer.username, password: customer.password });
+    };
+
+    const handleEdit = () => {
+        setEditingCustomer(customer);
+        openModal('host');
     };
 
     return (
@@ -90,7 +101,7 @@ function HostDetailCard({ customer, groupName }) {
                     <Button variant="secondary" size="icon" className="h-8 w-8" onClick={handleConnect} title="Conectar">
                         <Terminal className="w-4 h-4" />
                     </Button>
-                    <Button variant="secondary" size="icon" className="h-8 w-8" title="Editar">
+                    <Button variant="secondary" size="icon" className="h-8 w-8" onClick={handleEdit} title="Editar">
                         <Edit2 className="w-4 h-4" />
                     </Button>
                 </div>
@@ -111,7 +122,7 @@ function HostDetailCard({ customer, groupName }) {
 
 export default function DialogListConections() {
     const { customers, groups } = useConfigStore();
-    const { modals, closeModal } = useModalStore();
+    const { modals, closeModal, openModal, setEditingCustomer } = useModalStore();
     const [viewMode, setViewMode] = useState('blocks');
     const [search, setSearch] = useState('');
 
@@ -186,6 +197,11 @@ export default function DialogListConections() {
             );
         }
 
+        const handleEdit = (customer) => {
+            setEditingCustomer(customer);
+            openModal('host');
+        };
+
         return (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {withStatus.map(customer => (
@@ -198,6 +214,7 @@ export default function DialogListConections() {
                             ip: customer.host,
                             port: customer.port
                         }}
+                        onEdit={() => handleEdit(customer)}
                     />
                 ))}
             </div>
@@ -212,7 +229,7 @@ export default function DialogListConections() {
                     <Tabs defaultValue={defaultTab || undefined} orientation="vertical" className="flex w-full" onValueChange={(v) => setDefaultTab(v)}>
                         <TabsList className="flex flex-col h-full justify-start w-48 rounded-none border-r bg-background p-2 space-y-1">
                             {tabs.map(({ id, name }) => (
-                                <TabsTrigger key={id} value={id} className="w-full justify-start">
+                                <TabsTrigger key={id} value={id} className="w-full justify-start data-[state=active]:bg-muted">
                                     {name}
                                 </TabsTrigger>
                             ))}

@@ -17,42 +17,70 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { v4 as uuidv4 } from 'uuid';
 import { useSaveData, useConfigStore, useModalStore } from "@/stores";
 
 export default function DialogHost() {
-    const { saveHost } = useSaveData();
+    const { saveHost, updateHost } = useSaveData();
     const [name, setName] = useState("");
     const [group, setGroup] = useState("");
     const [host, setHost] = useState("");
     const [port, setPort] = useState(22);
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
-    const [tag, setTag] = useState(""); // tag state was defined but unused in original UI logic fully? Adding basic support if needed or keeping as is.
+    const [tag, setTag] = useState("");
 
-    // Original code had sshKey states but only partially implemented Tabs.
-
-    const { modals, closeModal } = useModalStore();
+    const { modals, closeModal, editingCustomer, setEditingCustomer } = useModalStore();
     const { groups } = useConfigStore();
+
+    const isEditing = !!editingCustomer;
+
+    useEffect(() => {
+        if (editingCustomer) {
+            setName(editingCustomer.name || "");
+            setGroup(editingCustomer.groups?.[0] || "");
+            setHost(editingCustomer.host || "");
+            setPort(editingCustomer.port || 22);
+            setUsername(editingCustomer.username || "");
+            setPassword(editingCustomer.password || "");
+            setTag(editingCustomer.tagId || "");
+        } else {
+            setName("");
+            setGroup("");
+            setHost("");
+            setPort(22);
+            setUsername("");
+            setPassword("");
+            setTag("");
+        }
+    }, [editingCustomer, modals.host]);
 
     const handleSubmit = (e) => {
         if (e) e.preventDefault();
-        saveHost(uuidv4(), name.trim(), host.trim(), parseInt(port), username.trim(), password, group || '', tag);
+        if (isEditing) {
+            updateHost(editingCustomer.id, { name: name.trim(), host: host.trim(), port: parseInt(port), username: username.trim(), password, groups: group ? [group] : [], tagId: tag || undefined });
+        } else {
+            saveHost(uuidv4(), name.trim(), host.trim(), parseInt(port), username.trim(), password, group || '', tag);
+        }
+        setEditingCustomer(null);
         closeModal('host');
     };
 
     const handleOpenChange = (open) => {
-        if (!open) closeModal('host');
+        if (!open) {
+            setEditingCustomer(null);
+            closeModal('host');
+        }
     };
 
     return (
         <Dialog open={modals.host} onOpenChange={handleOpenChange}>
             <DialogContent className="w-[calc(100vw-2rem)] sm:w-[75vw] md:w-[60vw] lg:w-[50vw] xl:w-[40vw] max-w-[800px]">
                 <DialogHeader>
-                    <DialogTitle>Host</DialogTitle>
+                    <DialogTitle>{isEditing ? 'Editar Host' : 'Novo Host'}</DialogTitle>
                     <DialogDescription>
-                        Digite as informações do host que serão salvas.
+                        {isEditing ? 'Atualize as informações do host abaixo.' : 'Digite as informações do host que serão salvas.'}
                     </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="grid gap-4 py-4">

@@ -60,6 +60,17 @@ const persistConfig = async () => {
 
 const useSaveData = create(() => ({
 
+    updateHost: async (id, data) => {
+        try {
+            const { editCustomer } = useConfigStore.getState();
+            editCustomer(id, data);
+            await persistConfig();
+            useAppStore.getState().addNotification({ type: 'success', title: 'Host atualizado', message: `${data.name || 'Host'} foi atualizado com sucesso.` });
+        } catch (error) {
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao atualizar host', message: error.message || error });
+        }
+    },
+
     saveHost: async (id, name, host, port, username, password, group, tag) => {
         try {
             const { addCustomer } = useConfigStore.getState();

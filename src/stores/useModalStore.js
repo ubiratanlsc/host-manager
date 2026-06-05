@@ -71,6 +71,9 @@ const useModalStore = create((set, get) => ({
             tag: false,
         },
     })),
+
+    editingCustomer: null,
+    setEditingCustomer: (customer) => set({ editingCustomer: customer }),
 }));
 
 export default useModalStore;
