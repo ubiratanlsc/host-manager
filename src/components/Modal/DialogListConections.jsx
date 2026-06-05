@@ -51,7 +51,7 @@ export default function DialogListConections() {
 
     return (
         <Dialog open={modals.connections} onOpenChange={handleOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[88vh] overflow-hidden flex flex-col p-0">
+            <DialogContent className="w-[calc(100vw-2rem)] md:w-[88vw] lg:w-[85vw] xl:w-[80vw] max-w-[1200px] max-h-[88vh] overflow-hidden flex flex-col p-0">
                 <DialogTitle className="sr-only">Lista de Conexões</DialogTitle>
                 <div className="flex h-full min-h-[500px]">
                     <Tabs defaultValue={defaultTab || undefined} orientation="vertical" className="flex w-full" onValueChange={(v) => setDefaultTab(v)}>

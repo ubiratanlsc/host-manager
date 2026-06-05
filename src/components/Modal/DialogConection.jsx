@@ -84,7 +84,7 @@ export default function DialogConection() {
 
     return (
         <Dialog open={modals.connect} onOpenChange={handleOpenChange}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="w-[calc(100vw-2rem)] sm:w-[70vw] md:w-[55vw] lg:w-[45vw] xl:w-[35vw] max-w-[700px]">
                 <DialogHeader>
                     <DialogTitle>Login</DialogTitle>
                     <DialogDescription>

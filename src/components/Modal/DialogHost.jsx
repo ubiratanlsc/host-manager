@@ -48,7 +48,7 @@ export default function DialogHost() {
 
     return (
         <Dialog open={modals.host} onOpenChange={handleOpenChange}>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="w-[calc(100vw-2rem)] sm:w-[75vw] md:w-[60vw] lg:w-[50vw] xl:w-[40vw] max-w-[800px]">
                 <DialogHeader>
                     <DialogTitle>Host</DialogTitle>
                     <DialogDescription>

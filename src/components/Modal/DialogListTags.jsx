@@ -50,7 +50,7 @@ export default function DialogListTags() {
     return (
         <>
             <Dialog open={modals.tagList} onOpenChange={handleOpenChange}>
-                <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-6">
+                <DialogContent className="w-[calc(100vw-2rem)] md:w-[88vw] lg:w-[85vw] xl:w-[80vw] max-w-[1200px] max-h-[88vh] flex flex-col p-6">
                     <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b">
                         <DialogTitle className="text-2xl font-bold">Galeria de Tags</DialogTitle>
                         <Button onClick={handleCreateTag} className="gap-2">

@@ -120,7 +120,7 @@ export default function DialogSettings() {
     return (
         <Dialog open={modals.settings} onOpenChange={handleOpenChange}>
             <DialogContent
-                className="sm:max-w-[700px] gap-0 p-0 overflow-hidden"
+                className="w-[calc(100vw-2rem)] sm:w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw] max-w-[900px] gap-0 p-0 overflow-hidden"
             >
                 <form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh]">
                     <DialogHeader className="px-6 py-4 border-b">

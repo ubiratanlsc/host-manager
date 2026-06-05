@@ -70,8 +70,8 @@ export function TagModal({ isOpen, onClose, onSave, tag }) {
 
     return (
         <Dialog open={isOpen} onOpenChange={handleClose}>
-            <DialogContent className="sm:max-w-[500px] rounded-xl">
-                <DialogHeader>
+            <DialogContent className="w-[calc(100vw-2rem)] sm:w-[70vw] md:w-[55vw] lg:w-[45vw] xl:w-[35vw] max-w-[700px] max-h-[85vh] p-0 gap-0 overflow-hidden rounded-xl z-[60] flex flex-col">
+                <DialogHeader className="px-6 py-4 shrink-0">
                     <DialogTitle>
                         {tag ? "Editar Tag" : "Nova Tag"}
                     </DialogTitle>
@@ -82,7 +82,7 @@ export function TagModal({ isOpen, onClose, onSave, tag }) {
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-5 py-4">
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
                     <div className="space-y-2">
                         <Label htmlFor="name">Nome</Label>
                         <Input
@@ -157,7 +157,7 @@ export function TagModal({ isOpen, onClose, onSave, tag }) {
                     </div>
                 </div>
 
-                <DialogFooter className="gap-2">
+                <DialogFooter className="px-6 py-4 border-t shrink-0 gap-2">
                     <Button
                         variant="outline"
                         onClick={handleClose}
