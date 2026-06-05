@@ -12,6 +12,7 @@ import DialogListConections from './components/Modal/DialogListConections';
 import DialogListGroups from './components/Modal/DialogListGroups';
 import DialogListTags from './components/Modal/DialogListTags';
 import MainLayout from '@/components/split/MainLayout';
+import NotificationContainer from '@/components/Notifications/NotificationContainer';
 
 
 const App = () => {
@@ -51,6 +52,7 @@ const App = () => {
       <DialogGroup onClose={() => closeModal('group')} />
       <DialogSettings onClose={() => closeModal('settings')} />
       <DialogTag onClose={() => closeModal('tag')} />
+      <NotificationContainer />
     </div>
   );
 };

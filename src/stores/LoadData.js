@@ -3,6 +3,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { create } from "zustand";
 import useConfigStore from './ConfigData';
 import useSaveData from './SaveData';
+import useAppStore from './useAppStore';
 import FontConfig from './FontConfig';
 import ThemeConfig from './ThemeConfig';
 import TerminalConfig from './TerminalConfig';
@@ -50,7 +51,7 @@ const useLoadData = create((set) => ({
             // AppVersionConfig
             if (configs.version) AppVersionConfig.getState().setVersion(configs.version);
         } catch (error) {
-            console.warn('config.json não encontrado, criando arquivo padrão...');
+            useAppStore.getState().addNotification({ type: 'info', title: 'Configuração inicial', message: 'Arquivo de configuração não encontrado. Criando com valores padrão.' });
             const { persist } = useSaveData.getState();
             await persist();
         }

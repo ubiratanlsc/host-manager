@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useAppStore } from "@/stores";
 
 const PRESET_COLORS = [
     "#3b82f6", // blue
@@ -46,7 +47,7 @@ export function TagModal({ isOpen, onClose, onSave, tag }) {
 
     const handleSave = () => {
         if (!name.trim()) {
-            alert("O nome da tag é obrigatório");
+            useAppStore.getState().addNotification({ type: 'warning', title: 'Campo obrigatório', message: 'O nome da tag é obrigatório.' });
             return;
         }
 

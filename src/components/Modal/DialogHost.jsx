@@ -38,7 +38,7 @@ export default function DialogHost() {
 
     const handleSubmit = (e) => {
         if (e) e.preventDefault();
-        saveHost(uuidv4(), name.trim(), host.trim(), parseInt(port), username.trim(), password, group || 'default', tag);
+        saveHost(uuidv4(), name.trim(), host.trim(), parseInt(port), username.trim(), password, group || '', tag);
         closeModal('host');
     };
 

@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { useModalStore, useSSHStore, useSaveData } from "@/stores";
+import { useModalStore, useSSHStore, useSaveData, useAppStore } from "@/stores";
 
 export default function DialogConection() {
     const [host, setHost] = useState("");
@@ -32,7 +32,7 @@ export default function DialogConection() {
         const parsedPort = parseInt(port) || 22;
 
         if (!trimmedHost || !trimmedUsername) {
-            alert("Preencha host e usuário.");
+            useAppStore.getState().addNotification({ type: 'warning', title: 'Campos obrigatórios', message: 'Preencha host e usuário.' });
             return;
         }
 
@@ -50,7 +50,7 @@ export default function DialogConection() {
                 parsedPort,
                 trimmedUsername,
                 password,
-                'default',      // group padrão
+                '',      // group vazio (sem grupo)
                 null            // sem tag
             );
 
@@ -72,7 +72,7 @@ export default function DialogConection() {
             setPort(22);
         } catch (error) {
             console.error('[DialogConection] Error spawning SSH:', error);
-            alert(`Failed to connect: ${error.message || error}`);
+            useAppStore.getState().addNotification({ type: 'error', title: 'Falha na conexão', message: error.message || error });
         } finally {
             setIsLoading(false);
         }

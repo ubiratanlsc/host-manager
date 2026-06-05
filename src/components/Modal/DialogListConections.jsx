@@ -4,38 +4,46 @@ import {
     DialogTitle
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useConfigStore, useModalStore } from "@/stores";
 import HostCard from "../Cards/Hostscard";
-import { Loader2 } from "lucide-react";
 
 export default function DialogListConections() {
-    // const [host, setHost] = useState("");
-    const [defaultTab, setDefaultTab] = useState(null);
-    // const [username, setUsername] = useState("");
-    // const [password, setPassword] = useState("");
     const { customers, groups } = useConfigStore();
     const { modals, closeModal } = useModalStore();
 
-    useEffect(() => {
+    const tabs = useMemo(() => {
+        const result = [];
         if (groups.length > 0) {
-            setDefaultTab(groups[0].name)
+            result.push({ id: '__all__', name: 'Todos' });
+            groups.forEach(g => result.push({ id: g.id, name: g.name }));
         }
-    }, [groups])
+        const ungrouped = customers.filter(c =>
+            !c.groups || c.groups.length === 0 || !groups.some(g => c.groups.includes(g.id))
+        );
+        if (ungrouped.length > 0) {
+            result.push({ id: '__ungrouped__', name: 'Sem grupo' });
+        }
+        return result;
+    }, [customers, groups]);
 
-    if (defaultTab === null && groups.length === 0) {
-        // Handle case where no groups exist or loading
-        return (
-            <Dialog open={modals.connections} onOpenChange={(open) => !open && closeModal('connections')}>
-                <DialogContent>
-                    <DialogTitle className="sr-only">Carregando Conexões</DialogTitle>
-                    <div className="flex justify-center p-4">
-                        <Loader2 className="animate-spin h-6 w-6" />
-                    </div>
-                </DialogContent>
-            </Dialog>
-        )
-    }
+    const [defaultTab, setDefaultTab] = useState(null);
+
+    useEffect(() => {
+        if (tabs.length > 0 && defaultTab === null) {
+            setDefaultTab(tabs[0].id);
+        }
+    }, [tabs, defaultTab]);
+
+    const getCustomersForTab = (tabId) => {
+        if (tabId === '__all__') return customers;
+        if (tabId === '__ungrouped__') {
+            return customers.filter(c =>
+                !c.groups || c.groups.length === 0 || !groups.some(g => c.groups.includes(g.id))
+            );
+        }
+        return customers.filter(c => c.groups && c.groups.includes(tabId));
+    };
 
     const handleOpenChange = (open) => {
         if (!open) closeModal('connections');
@@ -46,20 +54,25 @@ export default function DialogListConections() {
             <DialogContent className="max-w-4xl max-h-[88vh] overflow-hidden flex flex-col p-0">
                 <DialogTitle className="sr-only">Lista de Conexões</DialogTitle>
                 <div className="flex h-full min-h-[500px]">
-                    <Tabs defaultValue={defaultTab || undefined} orientation="vertical" className="flex w-full">
+                    <Tabs defaultValue={defaultTab || undefined} orientation="vertical" className="flex w-full" onValueChange={(v) => setDefaultTab(v)}>
                         <TabsList className="flex flex-col h-full justify-start w-48 rounded-none border-r bg-muted/50 p-2 space-y-1">
-                            {groups.map(({ id, name }) => (
-                                <TabsTrigger key={id} value={name} className="w-full justify-start">
+                            {tabs.map(({ id, name }) => (
+                                <TabsTrigger key={id} value={id} className="w-full justify-start">
                                     {name}
                                 </TabsTrigger>
                             ))}
+                            {tabs.length === 0 && (
+                                <div className="text-sm text-muted-foreground p-2 text-center">
+                                    Nenhum host salvo
+                                </div>
+                            )}
                         </TabsList>
                         <div className="flex-1 overflow-auto p-4 bg-background">
-                            {groups.map(({ id, name }) => {
-                                const filteredCustomers = customers.filter(customer => customer.groups.includes(id));
+                            {tabs.map(({ id, name }) => {
+                                const filteredCustomers = getCustomersForTab(id);
 
                                 return (
-                                    <TabsContent key={id} value={name} className="mt-0 h-full">
+                                    <TabsContent key={id} value={id} className="mt-0 h-full">
                                         <div className="flex gap-4 flex-wrap content-start">
                                             {filteredCustomers.length > 0 ? (
                                                 filteredCustomers.map(customer => (
@@ -80,7 +93,9 @@ export default function DialogListConections() {
                                                         Nenhum host encontrado
                                                     </p>
                                                     <p className="text-sm">
-                                                        Não há hosts neste grupo ainda.
+                                                        {id === '__ungrouped__'
+                                                            ? 'Todos os hosts pertencem a um grupo.'
+                                                            : 'Não há hosts neste grupo ainda.'}
                                                     </p>
                                                 </div>
                                             )}
@@ -88,6 +103,16 @@ export default function DialogListConections() {
                                     </TabsContent>
                                 );
                             })}
+                            {tabs.length === 0 && (
+                                <div className="flex flex-col items-center justify-center w-full h-64 text-center text-muted-foreground">
+                                    <p className="text-lg font-medium mb-2">
+                                        Nenhum host salvo
+                                    </p>
+                                    <p className="text-sm">
+                                        Crie uma nova conexão para começar.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </Tabs>
                 </div>

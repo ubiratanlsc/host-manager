@@ -12,7 +12,7 @@ import {
     Xmark,
 } from "iconoir-react";
 import { cn } from "@/lib/utils";
-import { useModalStore, ThemeConfig, TerminalConfig } from "@/stores";
+import { useModalStore, ThemeConfig, TerminalConfig, useAppStore } from "@/stores";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,7 +61,7 @@ export function MenuBar({ className, disabled = false }) {
 
         if (!isInitialized) {
             console.warn('[Home] Listeners not initialized yet');
-            alert('Terminal system is still initializing. Please wait a moment.');
+            useAppStore.getState().addNotification({ type: 'warning', title: 'Sistema não iniciado', message: 'Aguarde a inicialização do terminal.' });
             return;
         }
 
@@ -85,7 +85,7 @@ export function MenuBar({ className, disabled = false }) {
 
         } catch (error) {
             console.error('[Home] Error spawning terminal:', error);
-            alert(`Failed to spawn terminal: ${error.message || error}`);
+            useAppStore.getState().addNotification({ type: 'error', title: 'Falha ao abrir terminal', message: error.message || error });
         }
     };
     const handleToggleTheme = () => {

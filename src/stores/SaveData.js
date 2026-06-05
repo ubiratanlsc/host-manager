@@ -1,6 +1,7 @@
 import { writeFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { create } from "zustand";
 import useConfigStore from './ConfigData';
+import useAppStore from './useAppStore';
 import FontConfig from './FontConfig';
 import ThemeConfig from './ThemeConfig';
 import TerminalConfig from './TerminalConfig';
@@ -64,9 +65,9 @@ const useSaveData = create(() => ({
             const { addCustomer } = useConfigStore.getState();
             addCustomer(id, name, host, port, username, password, group, tag);
             await persistConfig();
-            console.log('Host salvo com sucesso!');
+            useAppStore.getState().addNotification({ type: 'success', title: 'Host salvo', message: `${name} foi adicionado com sucesso.` });
         } catch (error) {
-            console.error('Erro ao salvar host:', error);
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao salvar host', message: error.message || error });
         }
     },
 
@@ -75,9 +76,9 @@ const useSaveData = create(() => ({
             const { addGroup } = useConfigStore.getState();
             addGroup(id, name, username, password);
             await persistConfig();
-            console.log('Grupo salvo com sucesso!');
+            useAppStore.getState().addNotification({ type: 'success', title: 'Grupo salvo', message: `${name} foi salvo com sucesso.` });
         } catch (error) {
-            console.error('Erro ao salvar grupo:', error);
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao salvar grupo', message: error.message || error });
         }
     },
 
@@ -86,9 +87,9 @@ const useSaveData = create(() => ({
             const { addTag } = useConfigStore.getState();
             addTag(id, name, description, color);
             await persistConfig();
-            console.log('Tag salva com sucesso!');
+            useAppStore.getState().addNotification({ type: 'success', title: 'Tag salva', message: `${name} foi salva com sucesso.` });
         } catch (error) {
-            console.error('Erro ao salvar tag:', error);
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao salvar tag', message: error.message || error });
         }
     },
 
@@ -97,9 +98,9 @@ const useSaveData = create(() => ({
             const { addConfig } = useConfigStore.getState();
             addConfig(key, value);
             await persistConfig();
-            console.log('Configuração salva com sucesso!');
+            useAppStore.getState().addNotification({ type: 'success', title: 'Configuração salva', message: `Configuração ${key} atualizada.` });
         } catch (error) {
-            console.error('Erro ao salvar configuração:', error);
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao salvar configuração', message: error.message || error });
         }
     },
 
@@ -108,9 +109,9 @@ const useSaveData = create(() => ({
     persist: async () => {
         try {
             await persistConfig();
-            console.log('Dados persistidos com sucesso!');
+            useAppStore.getState().addNotification({ type: 'success', title: 'Dados salvos', message: 'Configurações persistidas com sucesso.' });
         } catch (error) {
-            console.error('Erro ao persistir dados:', error);
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao persistir', message: error.message || error });
         }
     },
 

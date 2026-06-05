@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { useModalStore, useSSHStore, useConfigStore } from '@/stores';
+import { useModalStore, useSSHStore, useConfigStore, useAppStore } from '@/stores';
 
 const HostCard = ({ host, onEdit, onConnect }) => {
     const { openModal, closeModal } = useModalStore();
@@ -26,7 +26,7 @@ const HostCard = ({ host, onEdit, onConnect }) => {
 
             if (!customer) {
                 console.error('[HostCard] Customer credentials not found');
-                alert('Credenciais não encontradas. Por favor, configure a conexão novamente.');
+                useAppStore.getState().addNotification({ type: 'error', title: 'Credenciais não encontradas', message: 'Configure a conexão novamente antes de conectar.' });
                 return;
             }
 
@@ -44,7 +44,7 @@ const HostCard = ({ host, onEdit, onConnect }) => {
             console.log('[HostCard] SSH session spawned successfully');
         } catch (error) {
             console.error('[HostCard] Error spawning SSH:', error);
-            alert(`Failed to connect: ${error.message || error}`);
+            useAppStore.getState().addNotification({ type: 'error', title: 'Falha na conexão', message: error.message || error });
         }
     };
 

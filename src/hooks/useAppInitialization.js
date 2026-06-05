@@ -1,18 +1,18 @@
 import { useEffect } from 'react';
 import { useTerminalStore, useSSHStore, useLoadData } from '@/stores';
 
-/**
- * Hook customizado para orquestrar a inicialização e o cleanup (teardown)
- * dos stores globais da aplicação no lifecycle principal.
- */
+
+//Hook customizado para orquestrar a inicialização e o cleanup (teardown)
+//  dos stores globais da aplicação no lifecycle principal.
+
 export function useAppInitialization() {
   const initializeTerminal = useTerminalStore((state) => state.initializeListeners);
   const loadShells = useTerminalStore((state) => state.loadSystemShells);
   const cleanupTerminal = useTerminalStore((state) => state.cleanup);
-  
+
   const initializeSSH = useSSHStore((state) => state.initializeListeners);
   const cleanupSSH = useSSHStore((state) => state.cleanup);
-  
+
   const initLoadData = useLoadData((state) => state.initLoadData);
 
   useEffect(() => {

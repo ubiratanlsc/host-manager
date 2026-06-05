@@ -60,13 +60,16 @@ const useAppStore = create(
                 },
 
                 // ========== NOTIFICATIONS ==========
-                addNotification: (notification) => {
+                addNotification: ({ type = 'info', title, message, duration = 4000 }) => {
                     set((state) => ({
                         notifications: [
                             ...state.notifications,
                             {
                                 id: crypto.randomUUID(),
-                                ...notification,
+                                type,
+                                title,
+                                message,
+                                duration,
                                 timestamp: new Date().toISOString(),
                             },
                         ],
