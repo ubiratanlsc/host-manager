@@ -5,7 +5,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEffect, useState, useMemo } from "react";
-import { Terminal, Server, Globe, Edit2, LayoutList, LayoutGrid, Rows3 } from "lucide-react";
+import { Terminal, Server, Globe, Edit2, LayoutList, LayoutGrid, Rows3, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useConfigStore, useModalStore, useSSHStore } from "@/stores";
@@ -100,10 +100,10 @@ function HostDetailCard({ customer, groupName }) {
                     <Globe className="w-3.5 h-3.5" />
                     <span className="font-mono truncate">{customer.host}:{customer.port || 22}</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
+                {/* <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
                     <Server className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">{customer.username}</span>
-                </div>
+                </div> */}
             </div>
         </div>
     );
@@ -113,6 +113,13 @@ export default function DialogListConections() {
     const { customers, groups } = useConfigStore();
     const { modals, closeModal } = useModalStore();
     const [viewMode, setViewMode] = useState('blocks');
+    const [search, setSearch] = useState('');
+
+    const searchFilter = (c) => {
+        if (!search.trim()) return true;
+        const q = search.toLowerCase();
+        return c.name.toLowerCase().includes(q) || c.host.toLowerCase().includes(q);
+    };
 
     const tabs = useMemo(() => {
         const result = [];
@@ -138,13 +145,16 @@ export default function DialogListConections() {
     }, [tabs, defaultTab]);
 
     const getCustomersForTab = (tabId) => {
-        if (tabId === '__all__') return customers;
-        if (tabId === '__ungrouped__') {
-            return customers.filter(c =>
-                !c.groups || c.groups.length === 0 || !groups.some(g => c.groups.includes(g.id))
-            );
-        }
-        return customers.filter(c => c.groups && c.groups.includes(tabId));
+        const base = (() => {
+            if (tabId === '__all__') return customers;
+            if (tabId === '__ungrouped__') {
+                return customers.filter(c =>
+                    !c.groups || c.groups.length === 0 || !groups.some(g => c.groups.includes(g.id))
+                );
+            }
+            return customers.filter(c => c.groups && c.groups.includes(tabId));
+        })();
+        return base.filter(searchFilter);
     };
 
     const handleOpenChange = (open) => {
@@ -213,22 +223,33 @@ export default function DialogListConections() {
                             )}
                         </TabsList>
                         <div className="flex-1 flex flex-col overflow-hidden">
-                            <div className="flex items-center gap-1 p-2 border-b shrink-0">
-                                {viewModes.map(mode => (
-                                    <button
-                                        key={mode.id}
-                                        onClick={() => setViewMode(mode.id)}
-                                        className={cn(
-                                            "p-1 rounded-md transition-colors",
-                                            viewMode === mode.id
-                                                ? "bg-primary text-primary-foreground"
-                                                : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                                        )}
-                                        title={mode.label}
-                                    >
-                                        <mode.icon className="w-3.5 h-3.5" />
-                                    </button>
-                                ))}
+                            <div className="flex items-center gap-2 p-2 border-b shrink-0">
+                                <div className="flex items-center gap-1">
+                                    {viewModes.map(mode => (
+                                        <button
+                                            key={mode.id}
+                                            onClick={() => setViewMode(mode.id)}
+                                            className={cn(
+                                                "p-1 rounded-md transition-colors",
+                                                viewMode === mode.id
+                                                    ? "bg-secondary text-secondary-foreground"
+                                                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                                            )}
+                                            title={mode.label}
+                                        >
+                                            <mode.icon className="w-3.5 h-3.5" />
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="relative flex-1 max-w-md mx-auto">
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                    <input
+                                        value={search}
+                                        onChange={e => setSearch(e.target.value)}
+                                        placeholder="Buscar por nome ou IP... (Ctrl+K)"
+                                        className="w-full h-7 pl-7 pr-2 text-xs rounded-md border bg-background placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
+                                    />
+                                </div>
                             </div>
                             <div className="flex-1 overflow-auto p-4 bg-background">
                                 {tabs.map(({ id, name }) => {
@@ -240,12 +261,15 @@ export default function DialogListConections() {
                                             {content || (
                                                 <div className="flex flex-col items-center justify-center w-full h-64 text-center text-muted-foreground">
                                                     <p className="text-lg font-medium mb-2">
-                                                        Nenhum host encontrado
+                                                        {search ? 'Nenhum resultado' : 'Nenhum host encontrado'}
                                                     </p>
                                                     <p className="text-sm">
-                                                        {id === '__ungrouped__'
-                                                            ? 'Todos os hosts pertencem a um grupo.'
-                                                            : 'Não há hosts neste grupo ainda.'}
+                                                        {search
+                                                            ? `Nenhum host corresponde a "${search}"`
+                                                            : id === '__ungrouped__'
+                                                                ? 'Todos os hosts pertencem a um grupo.'
+                                                                : 'Não há hosts neste grupo ainda.'
+                                                        }
                                                     </p>
                                                 </div>
                                             )}

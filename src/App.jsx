@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { MenuBar } from './components/header/MenuBar';
 import { useAppInitialization } from './hooks/useAppInitialization';
 import useModalStore from './stores/useModalStore';
@@ -13,6 +13,7 @@ import DialogListGroups from './components/Modal/DialogListGroups';
 import DialogListTags from './components/Modal/DialogListTags';
 import MainLayout from '@/components/split/MainLayout';
 import NotificationContainer from '@/components/Notifications/NotificationContainer';
+import QuickSearch from '@/components/Modal/QuickSearch';
 
 
 const App = () => {
@@ -22,6 +23,7 @@ const App = () => {
   const modals = useModalStore((s) => s.modals);
   const overlayCount = useModalStore((s) => s.overlayCount);
   const theme = ThemeConfig((s) => s.theme);
+  const [quickSearchOpen, setQuickSearchOpen] = useState(false);
 
   // Verificar se qualquer sobreposição (Modal ou componente fixo como Select) está aberto
   const isOverlayActive = Object.values(modals).some(Boolean) || overlayCount > 0;
@@ -33,7 +35,20 @@ const App = () => {
     root.classList.add(theme);
   }, [theme]);
 
-
+  // Global keyboard shortcut for quick search
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setQuickSearchOpen(prev => !prev);
+      }
+      if (e.key === 'Escape' && quickSearchOpen) {
+        setQuickSearchOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [quickSearchOpen]);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden text-gray-900 dark:text-gray-100 font-[IBM Plex Sans]">
@@ -52,6 +67,7 @@ const App = () => {
       <DialogGroup onClose={() => closeModal('group')} />
       <DialogSettings onClose={() => closeModal('settings')} />
       <DialogTag onClose={() => closeModal('tag')} />
+      <QuickSearch open={quickSearchOpen} onClose={() => setQuickSearchOpen(false)} />
       <NotificationContainer />
     </div>
   );
