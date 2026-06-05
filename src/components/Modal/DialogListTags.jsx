@@ -51,21 +51,14 @@ export default function DialogListTags() {
         <>
             <Dialog open={modals.tagList} onOpenChange={handleOpenChange}>
                 <DialogContent className="w-[calc(100vw-2rem)] sm:w-[500px] max-h-[88vh] flex flex-col p-6">
-                    <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b">
+                    <DialogHeader className="pb-4 border-b">
                         <DialogTitle className="text-2xl font-bold">Galeria de Tags</DialogTitle>
-                        <Button onClick={handleCreateTag} className="gap-2" variant="default">
-                            <Plus className="w-4 h-4" />
-                            Nova Tag
-                        </Button>
                     </DialogHeader>
 
                     <div className="flex-1 overflow-y-auto py-6 pr-2">
                         {tags.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed rounded-xl">
                                 <p>Nenhuma tag criada ainda.</p>
-                                <Button variant="link" onClick={handleCreateTag}>
-                                    Criar sua primeira tag
-                                </Button>
                             </div>
                         ) : (
                             <div className="flex flex-col gap-1.5">
@@ -79,6 +72,13 @@ export default function DialogListTags() {
                                 ))}
                             </div>
                         )}
+                    </div>
+
+                    <div className="flex justify-end pt-4 border-t">
+                        <Button onClick={handleCreateTag} className="gap-2" variant="default">
+                            <Plus className="w-4 h-4" />
+                            Nova Tag
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>

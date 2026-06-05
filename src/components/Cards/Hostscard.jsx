@@ -1,27 +1,23 @@
 import React, { useState } from 'react';
-import { Terminal, Edit2, Server, Globe, Activity } from 'lucide-react';
-import { Badge } from "@/components/ui/badge";
+import { Terminal, Edit2, Server, Globe } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useModalStore, useSSHStore, useConfigStore, useAppStore } from '@/stores';
 
+const statusDot = {
+    online: 'bg-emerald-500',
+    offline: 'bg-red-500',
+    unknown: 'bg-amber-500',
+};
+
 const HostCard = ({ host, onEdit, onConnect }) => {
-    const { openModal, closeModal } = useModalStore();
+    const { closeModal } = useModalStore();
     const spawnSSH = useSSHStore((state) => state.spawnSSH);
     const { customers } = useConfigStore();
 
-    // Mapping status to colors
-    const statusColor =
-        host.status === 'online'
-            ? 'bg-emerald-500 hover:bg-emerald-600'
-            : host.status === 'offline'
-                ? 'bg-red-500 hover:bg-red-600'
-                : 'bg-amber-500 hover:bg-amber-600';
-
     const handleConnect = async () => {
         try {
-            // Buscar credenciais salvas do customer
             const customer = customers.find(c => c.host === host.ip);
 
             if (!customer) {
@@ -30,10 +26,8 @@ const HostCard = ({ host, onEdit, onConnect }) => {
                 return;
             }
 
-            // Fechar modal de conexões
             closeModal('connections');
 
-            // Spawn SSH session
             await spawnSSH({
                 host: customer.host,
                 port: customer.port || 22,
@@ -49,50 +43,29 @@ const HostCard = ({ host, onEdit, onConnect }) => {
     };
 
     return (
-        <Card className="flex-1 max-h-24 transition-all hover:shadow-lg hover:-translate-y-1 overflow-hidden">
-            <CardContent className="p-2">
-                <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                        <div className="my-1 relative">
-                            <Badge className={cn("rounded-full p-[2.5px] pointer-events-none relative top-0.5 left-2", statusColor)}>
-                                <span className="sr-only">{host.status}</span>
-                            </Badge>
-                            <Button variant="ghost" size="icon" className="h-10 w-10 -ml-2 text-muted-foreground">
-                                <Server size={20} />
-                            </Button>
+        <Card className="transition-all hover:shadow-md hover:-translate-y-0.5">
+            <CardContent className="p-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <div className={cn("w-2 h-2 rounded-full shrink-0", statusDot[host.status] || statusDot.unknown)} />
+                        <Server className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <div className="min-w-0">
+                            <h3 className="font-semibold text-sm truncate">{host.hostname}</h3>
+                            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide truncate block">{host.group}</span>
                         </div>
-                        <div className="mx-1 my-1">
-                            <h3 className="font-bold text-sm leading-tight">{host.hostname}</h3>
-                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{host.group}</span>
-                        </div>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                        <Button variant="secondary" size="icon" className="h-7 w-7" onClick={handleConnect} title="Conectar">
+                            <Terminal className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="secondary" size="icon" className="h-7 w-7" onClick={onEdit} title="Editar">
+                            <Edit2 className="w-3.5 h-3.5" />
+                        </Button>
                     </div>
                 </div>
-
-                <div className="flex gap-2 text-xs text-muted-foreground ml-2 mr-2 mt-1">
-                    <div className="flex flex-1 items-center space-x-2">
-                        <Globe size={14} className="text-muted-foreground" />
-                        <span className="text-center rounded flex-1 py-1 px-2 shadow-sm bg-muted text-muted-foreground font-mono">
-                            {host.ip}
-                        </span>
-                    </div>
-                    <Button
-                        variant="secondary"
-                        size="icon"
-                        className="h-6 w-8 rounded"
-                        onClick={handleConnect}
-                        title="Connect SSH"
-                    >
-                        <Terminal size={14} />
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        size="icon"
-                        className="h-6 w-8 rounded"
-                        onClick={onEdit}
-                        title="Edit Host"
-                    >
-                        <Edit2 size={14} />
-                    </Button>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Globe className="w-3.5 h-3.5 shrink-0" />
+                    <span className="font-mono truncate bg-muted px-1.5 py-0.5 rounded flex-1 min-w-0">{host.ip}:{host.port || 22}</span>
                 </div>
             </CardContent>
         </Card>
