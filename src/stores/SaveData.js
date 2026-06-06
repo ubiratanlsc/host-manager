@@ -71,10 +71,10 @@ const useSaveData = create(() => ({
         }
     },
 
-    saveHost: async (id, name, host, port, username, password, group, tag) => {
+    saveHost: async (id, name, host, port, username, password, group, tag, identityFile) => {
         try {
             const { addCustomer } = useConfigStore.getState();
-            addCustomer(id, name, host, port, username, password, group, tag);
+            addCustomer(id, name, host, port, username, password, group, tag, identityFile);
             await persistConfig();
             useAppStore.getState().addNotification({ type: 'success', title: 'Host salvo', message: `${name} foi adicionado com sucesso.` });
         } catch (error) {

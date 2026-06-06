@@ -7,10 +7,10 @@ const useConfigStore = create((set) => ({
     tags: [],
     colors: {},
     configs: {},
-    addCustomer: (id, name, host, port, username, password, group, tagId) => set((state) => ({
+    addCustomer: (id, name, host, port, username, password, group, tagId, identityFile) => set((state) => ({
         customers: state.customers.some(c => c.id === id) 
             ? state.customers 
-            : [...state.customers, { id, name, host, port, username, password, groups: group ? [group] : [], tagId }],
+            : [...state.customers, { id, name, host, port, username, password, groups: group ? [group] : [], tagId, identityFile }],
     })),
     editCustomer: (id, updatedData) => set((state) => ({
         customers: state.customers.map(customer => customer.id === id ? { ...customer, ...updatedData } : customer),

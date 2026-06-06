@@ -33,6 +33,7 @@ const HostCard = ({ host, onEdit, onConnect }) => {
                 port: customer.port || 22,
                 username: customer.username,
                 password: customer.password,
+                identityFile: customer.identityFile,
             });
 
             console.log('[HostCard] SSH session spawned successfully');

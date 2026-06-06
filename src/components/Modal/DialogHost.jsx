@@ -17,9 +17,12 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { v4 as uuidv4 } from 'uuid';
 import { useSaveData, useConfigStore, useModalStore } from "@/stores";
+import { open } from '@tauri-apps/plugin-dialog';
+import { isTauri } from '@tauri-apps/api/core';
+import { FolderOpen } from "lucide-react";
 
 export default function DialogHost() {
     const { saveHost, updateHost } = useSaveData();
@@ -30,6 +33,22 @@ export default function DialogHost() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [tag, setTag] = useState("");
+    const [identityFile, setIdentityFile] = useState("");
+    const identityFileInputRef = useRef(null);
+
+    const handleSelectIdentityFile = async () => {
+        if (isTauri()) {
+            const selected = await open({
+                multiple: false,
+                filters: [{ name: 'SSH Keys', extensions: ['*'] }],
+            });
+            if (selected) {
+                setIdentityFile(selected);
+            }
+        } else {
+            identityFileInputRef.current?.click();
+        }
+    };
 
     const { modals, closeModal, editingCustomer, setEditingCustomer } = useModalStore();
     const { groups } = useConfigStore();
@@ -45,6 +64,7 @@ export default function DialogHost() {
             setUsername(editingCustomer.username || "");
             setPassword(editingCustomer.password || "");
             setTag(editingCustomer.tagId || "");
+            setIdentityFile(editingCustomer.identityFile || "");
         } else {
             setName("");
             setGroup("");
@@ -53,15 +73,16 @@ export default function DialogHost() {
             setUsername("");
             setPassword("");
             setTag("");
+            setIdentityFile("");
         }
     }, [editingCustomer, modals.host]);
 
     const handleSubmit = (e) => {
         if (e) e.preventDefault();
         if (isEditing) {
-            updateHost(editingCustomer.id, { name: name.trim(), host: host.trim(), port: parseInt(port), username: username.trim(), password, groups: group ? [group] : [], tagId: tag || undefined });
+            updateHost(editingCustomer.id, { name: name.trim(), host: host.trim(), port: parseInt(port), username: username.trim(), password, groups: group ? [group] : [], tagId: tag || undefined, identityFile: identityFile.trim() || undefined });
         } else {
-            saveHost(uuidv4(), name.trim(), host.trim(), parseInt(port), username.trim(), password, group || '', tag);
+            saveHost(uuidv4(), name.trim(), host.trim(), parseInt(port), username.trim(), password, group || '', tag, identityFile.trim() || undefined);
         }
         setEditingCustomer(null);
         closeModal('host');
@@ -159,8 +180,32 @@ export default function DialogHost() {
                             </div>
                         </TabsContent>
                         <TabsContent value="chave">
-                            <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
-                                Inativo por enquanto!
+                            <div className="grid gap-2">
+                                <Label htmlFor="identityFile">Chave privada</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        id="identityFile"
+                                        placeholder="~/.ssh/id_rsa"
+                                        value={identityFile}
+                                        onChange={(e) => setIdentityFile(e.target.value)}
+                                        className="flex-1"
+                                    />
+                                    <Button type="button" variant="outline" size="icon" onClick={handleSelectIdentityFile}>
+                                        <FolderOpen className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                                <input
+                                    ref={identityFileInputRef}
+                                    type="file"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) setIdentityFile(file.name);
+                                    }}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Deixe em branco para usar o agente SSH ou as chaves padrão (~/.ssh/id_ed25519, id_ecdsa, id_rsa).
+                                </p>
                             </div>
                         </TabsContent>
                     </Tabs>

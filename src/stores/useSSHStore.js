@@ -311,13 +311,14 @@ const useSSHStore = create(
 
                         return;
                     }
-                    const { windowId, host, port = 22, username, password } = config;
+                    const { windowId, host, port = 22, username, password, identityFile } = config;
                     await invoke(SSH_SPAWN_COMMAND, {
                         windowId: windowId || crypto.randomUUID(),
                         host,
                         port,
                         username,
                         password,
+                        identityFile: identityFile || null,
                     });
                 } catch (error) {
                     console.error('[SSHStore] Failed to spawn SSH:', error);

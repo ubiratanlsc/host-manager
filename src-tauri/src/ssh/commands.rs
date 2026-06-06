@@ -25,11 +25,16 @@ impl KeyboardInteractivePrompt for PasswordPrompt {
     }
 }
 
-fn get_known_hosts_path() -> Option<std::path::PathBuf> {
+fn get_home_dir() -> Option<String> {
     #[cfg(target_os = "windows")]
     let home = std::env::var("USERPROFILE").ok()?;
     #[cfg(not(target_os = "windows"))]
     let home = std::env::var("HOME").ok()?;
+    Some(home)
+}
+
+fn get_known_hosts_path() -> Option<std::path::PathBuf> {
+    let home = get_home_dir()?;
     let ssh_dir = Path::new(&home).join(".ssh");
     let _ = std::fs::create_dir_all(&ssh_dir);
     Some(ssh_dir.join("known_hosts"))
@@ -51,6 +56,7 @@ fn authenticate(
     sess: &mut Session,
     username: &str,
     password: &Option<String>,
+    identity_file: &Option<String>,
 ) -> Result<(), String> {
     println!("ponto: 2 - Iniciando autenticação");
 
@@ -65,17 +71,71 @@ fn authenticate(
             .map_err(|e| format!("Authentication failed: {}", e))?;
     } else {
         println!("ponto: 5 - Tentando autenticação por chave");
-        sess.userauth_agent(username)
-            .or_else(|_| {
-                println!("ponto: 6 - Tentando caminhos padrão de chaves SSH");
-                let home = std::env::var("HOME")
-                    .map_err(|_| ssh2::Error::from_errno(ssh2::ErrorCode::Session(-1)))?;
-                let private_key = Path::new(&home).join(".ssh/id_rsa");
-                let public_key = private_key.with_extension("pub");
 
-                sess.userauth_pubkey_file(username, Some(&public_key), &private_key, None)
-            })
-            .map_err(|e| format!("Authentication failed: {}", e))?;
+        if let Some(key_path) = identity_file {
+            let key_path = Path::new(key_path);
+            if key_path.exists() {
+                println!("ponto: 5.1 - Tentando chave personalizada: {}", key_path.display());
+                let pub_key = key_path.with_extension("pub");
+                match sess.userauth_pubkey_file(
+                    username,
+                    if pub_key.exists() { Some(&pub_key) } else { None },
+                    key_path,
+                    None,
+                ) {
+                    Ok(_) => {
+                        println!("ponto: 5.2 - Chave personalizada bem-sucedida");
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        println!("ponto: 5.3 - Chave personalizada falhou: {}", e);
+                        return Err(format!("Authentication failed: {}", e));
+                    }
+                }
+            } else {
+                println!("ponto: 5.4 - Chave personalizada não encontrada: {}", key_path.display());
+                return Err(format!("Identity file not found: {}", key_path.display()));
+            }
+        }
+
+        let home = get_home_dir().ok_or("HOME/USERPROFILE not set")?;
+        let ssh_dir = Path::new(&home).join(".ssh");
+
+        let key_types = ["id_ed25519", "id_ecdsa", "id_rsa", "id_dsa"];
+
+        let result = sess.userauth_agent(username);
+        if result.is_ok() {
+            println!("ponto: 6 - Autenticação via agent bem-sucedida");
+            return Ok(());
+        }
+
+        println!("ponto: 7 - Tentando caminhos padrão de chaves SSH");
+        let mut last_err = None;
+        for key_name in &key_types {
+            let private_key = ssh_dir.join(key_name);
+            let public_key = private_key.with_extension("pub");
+
+            if !private_key.exists() {
+                continue;
+            }
+
+            println!("ponto: 7.1 - Tentando chave: {}", key_name);
+            match sess.userauth_pubkey_file(username, Some(&public_key), &private_key, None) {
+                Ok(_) => {
+                    println!("ponto: 7.2 - Autenticação com {} bem-sucedida", key_name);
+                    return Ok(());
+                }
+                Err(e) => {
+                    println!("ponto: 7.3 - {} falhou: {}", key_name, e);
+                    last_err = Some(e);
+                }
+            }
+        }
+
+        return Err(format!(
+            "Authentication failed: {}",
+            last_err.map(|e| e.to_string()).unwrap_or_else(|| "No SSH keys found".to_string())
+        ));
     }
     println!("ponto: 7 - Autenticação bem-sucedida");
     Ok(())
@@ -90,6 +150,7 @@ pub async fn spawn_ssh(
     port: u16,
     username: String,
     password: Option<String>,
+    identity_file: Option<String>,
 ) -> Result<String, String> {
     println!("ponto: 8 - Iniciando spawn_ssh para window: {}", window_id);
 
@@ -171,7 +232,7 @@ pub async fn spawn_ssh(
         }
     }
 
-    authenticate(&mut sess, &username, &password)?;
+    authenticate(&mut sess, &username, &password, &identity_file)?;
 
     let mut channel = sess.channel_session().map_err(|e| e.to_string())?;
 

@@ -32,7 +32,7 @@ function HostListRow({ customer, groupName }) {
 
     const handleConnect = async () => {
         closeModal('connections');
-        await spawnSSH({ host: customer.host, port: customer.port || 22, username: customer.username, password: customer.password });
+        await spawnSSH({ host: customer.host, port: customer.port || 22, username: customer.username, password: customer.password, identityFile: customer.identityFile });
     };
 
     const handleEdit = () => {
@@ -74,7 +74,7 @@ function HostDetailCard({ customer, groupName }) {
 
     const handleConnect = async () => {
         closeModal('connections');
-        await spawnSSH({ host: customer.host, port: customer.port || 22, username: customer.username, password: customer.password });
+        await spawnSSH({ host: customer.host, port: customer.port || 22, username: customer.username, password: customer.password, identityFile: customer.identityFile });
     };
 
     const handleEdit = () => {
