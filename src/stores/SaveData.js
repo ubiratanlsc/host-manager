@@ -1,4 +1,4 @@
-import { writeFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { writeFile, readFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { create } from "zustand";
 import useConfigStore from './ConfigData';
 import useAppStore from './useAppStore';
@@ -123,6 +123,82 @@ const useSaveData = create(() => ({
             useAppStore.getState().addNotification({ type: 'success', title: 'Dados salvos', message: 'Configurações persistidas com sucesso.' });
         } catch (error) {
             useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao persistir', message: error.message || error });
+        }
+    },
+
+    getFullConfig: () => {
+        const { customers, groups, tags, colors } = useConfigStore.getState();
+        const themeState = ThemeConfig.getState();
+        const fontState = FontConfig.getState();
+        const terminalState = TerminalConfig.getState();
+        const clipboardState = ClipboardConfig.getState();
+        const versionState = AppVersionConfig.getState();
+
+        return {
+            customers: [...customers],
+            groups: [...groups],
+            tags: [...tags],
+            colors: { ...colors },
+            configs: {
+                theme: themeState.theme,
+                colorTheme: themeState.colorTheme,
+                font: fontState.font,
+                fontSize: fontState.fontSize,
+                ligatures: fontState.ligatures,
+                cursorBlink: terminalState.cursorBlink,
+                cursorStyle: terminalState.cursorStyle,
+                scrollback: terminalState.scrollback,
+                lineHeight: terminalState.lineHeight,
+                defaultShell: terminalState.defaultShell,
+                pasteRight: clipboardState.pasteRight,
+                copyOnSelect: clipboardState.copyOnSelect,
+                mode: clipboardState.mode,
+                version: versionState.version,
+            },
+        };
+    },
+
+    exportConfig: async (filePath) => {
+        try {
+            const fullConfig = useSaveData.getState().getFullConfig();
+            await writeFile(
+                filePath,
+                new TextEncoder().encode(JSON.stringify(fullConfig, null, 4)),
+            );
+            useAppStore.getState().addNotification({ type: 'success', title: 'Exportado', message: `Configurações exportadas para ${filePath}` });
+        } catch (error) {
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao exportar', message: error.message || error });
+        }
+    },
+
+    importConfig: async (filePath) => {
+        try {
+            const file = await readFile(filePath);
+            const contents = new TextDecoder().decode(file);
+            const data = JSON.parse(contents);
+
+            const { setInitialData } = useConfigStore.getState();
+            setInitialData(data);
+
+            const configs = data.configs || {};
+            if (configs.theme) ThemeConfig.getState().setTheme(configs.theme);
+            if (configs.colorTheme) ThemeConfig.getState().setColorTheme(configs.colorTheme);
+            if (configs.font) FontConfig.setState({ font: configs.font });
+            if (configs.fontSize) FontConfig.getState().setFontSize(configs.fontSize);
+            if (configs.ligatures !== undefined) FontConfig.getState().setLigatures(configs.ligatures);
+            if (configs.cursorBlink !== undefined) TerminalConfig.getState().setCursorBlink(configs.cursorBlink);
+            if (configs.cursorStyle) TerminalConfig.getState().setCursorStyle(configs.cursorStyle);
+            if (configs.scrollback) TerminalConfig.getState().setScrollback(configs.scrollback);
+            if (configs.lineHeight) TerminalConfig.getState().setLineHeight(configs.lineHeight);
+            if (configs.pasteRight !== undefined) ClipboardConfig.getState().setPasteRight(configs.pasteRight);
+            if (configs.copyOnSelect !== undefined) ClipboardConfig.getState().setCopyOnSelect(configs.copyOnSelect);
+            if (configs.mode) ClipboardConfig.getState().setMode(configs.mode);
+            if (configs.version) AppVersionConfig.getState().setVersion(configs.version);
+
+            await persistConfig();
+            useAppStore.getState().addNotification({ type: 'success', title: 'Importado', message: 'Dados importados com sucesso.' });
+        } catch (error) {
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao importar', message: error.message || error });
         }
     },
 

@@ -27,7 +27,8 @@ import {
     useTerminalStore
 } from "@/stores";
 import useThemeStore from "@/stores/useThemeStore";
-import { CheckCircle2 } from "lucide-react";
+import { open, save } from '@tauri-apps/plugin-dialog';
+import { CheckCircle2, Download, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function NumberStepper({ value, onChange, step = 1, min, max }) {
@@ -64,7 +65,7 @@ function NumberStepper({ value, onChange, step = 1, min, max }) {
 }
 
 export default function DialogSettings() {
-    const { persist } = useSaveData();
+    const { persist, exportConfig, importConfig } = useSaveData();
     const { modals, closeModal } = useModalStore();
 
     // Theme Config
@@ -107,6 +108,24 @@ export default function DialogSettings() {
     const clipboardMode = ClipboardConfig((s) => s.mode);
     const setClipboardMode = ClipboardConfig((s) => s.setMode);
 
+    const handleExport = async () => {
+        const filePath = await save({
+            filters: [{ name: 'JSON', extensions: ['json'] }],
+            defaultPath: `host-manager-backup-${new Date().toISOString().slice(0, 10)}.json`,
+        });
+        if (!filePath) return;
+        await exportConfig(filePath);
+    };
+
+    const handleImport = async () => {
+        const filePath = await open({
+            multiple: false,
+            filters: [{ name: 'JSON', extensions: ['json'] }],
+        });
+        if (!filePath) return;
+        await importConfig(filePath);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         await persist();
@@ -132,10 +151,11 @@ export default function DialogSettings() {
 
                     <div className="flex-1 overflow-y-auto p-6 grid gap-6">
                         <Tabs defaultValue="appearance" className="w-full">
-                            <TabsList className="grid w-full grid-cols-3 mb-6">
+                            <TabsList className="grid w-full grid-cols-4 mb-6">
                                 <TabsTrigger value="appearance">Aparência</TabsTrigger>
                                 <TabsTrigger value="terminal">Terminal</TabsTrigger>
                                 <TabsTrigger value="behavior">Comportamento</TabsTrigger>
+                                <TabsTrigger value="data">Dados</TabsTrigger>
                             </TabsList>
 
                             <TabsContent value="appearance" className="grid gap-6">
@@ -327,6 +347,29 @@ export default function DialogSettings() {
                                     <div className="grid gap-2">
                                         <Label>Scrollback (Linhas)</Label>
                                         <NumberStepper value={scrollback} onChange={setScrollback} step={100} min={500} max={50000} />
+                                    </div>
+                                </div>
+                            </TabsContent>
+
+                            <TabsContent value="data" className="grid gap-6">
+                                <div className="grid gap-4">
+                                    <div className="grid gap-2">
+                                        <Label className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Exportar</Label>
+                                        <p className="text-sm text-muted-foreground">
+                                            Baixe toda a configuração (hosts, grupos, tags, cores e preferências) em um arquivo JSON.
+                                        </p>
+                                        <Button type="button" variant="outline" className="w-fit gap-2" onClick={handleExport}>
+                                            <Download className="w-4 h-4" /> Exportar Configuração
+                                        </Button>
+                                    </div>
+                                    <div className="border-t pt-4 grid gap-2">
+                                        <Label className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Importar</Label>
+                                        <p className="text-sm text-muted-foreground">
+                                            Carregue um arquivo JSON de configuração. Isso substituirá todos os dados atuais.
+                                        </p>
+                                        <Button type="button" variant="outline" className="w-fit gap-2" onClick={handleImport}>
+                                            <Upload className="w-4 h-4" /> Importar Configuração
+                                        </Button>
                                     </div>
                                 </div>
                             </TabsContent>

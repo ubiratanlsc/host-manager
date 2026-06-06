@@ -33,6 +33,7 @@
     "system-fonts:default",
     "dialog:default",
     "dialog:allow-open",
+    "dialog:allow-save",
     {
       "identifier": "fs:allow-app-write-recursive",
       "allow": [
