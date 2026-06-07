@@ -391,7 +391,7 @@ const LocalTerminal = ({ terminalId }) => {
 
     return (
         <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative group" style={{ backgroundColor: theme.background }}>
-            <div ref={terminalRef} className="absolute top-0 right-0 bottom-0 left-[2.5px]" />
+            <div ref={terminalRef} className="absolute top-0 right-0 bottom-0 left-1.5" />
             {isInitialized && searchAddonRef.current && (
                 <SearchOverlay searchAddon={searchAddonRef.current} />
             )}
