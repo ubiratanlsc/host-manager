@@ -621,6 +621,7 @@ const useSplitStore = create(
             }),
         }
     )
+    )
 );
 
 export default useSplitStore;
