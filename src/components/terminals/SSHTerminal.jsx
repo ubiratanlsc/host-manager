@@ -138,15 +138,12 @@ const SSHTerminal = ({ sessionId }) => {
         // Função auxiliar para redesenhar a linha do buffer
         // oldCursorPos = posição onde o cursor ESTAVA na tela antes da mudança
         const redrawLine = (xterm, oldCursorPos, newBuffer, newCursorPos) => {
-            // Voltar até o início do comando (usando a posição ANTERIOR real do cursor)
+            if (!newBuffer || typeof oldCursorPos !== 'number') return;
             if (oldCursorPos > 0) {
                 xterm.write('\b'.repeat(oldCursorPos));
             }
-            // Limpar do início do comando até o fim da linha
             xterm.write('\x1b[K');
-            // Escrever o novo buffer
             xterm.write(newBuffer);
-            // Posicionar o cursor na posição correta
             const moveBack = newBuffer.length - newCursorPos;
             if (moveBack > 0) {
                 xterm.write('\b'.repeat(moveBack));
