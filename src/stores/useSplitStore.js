@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const splitStorage = {
     getItem: (name) => {
-        const raw = localStorage.getItem(name);
+        const raw = sessionStorage.getItem(name);
         if (!raw) return null;
         const parsed = JSON.parse(raw);
         parsed.state.splits = new Map(Object.entries(parsed.state.splits || {}));
@@ -18,9 +18,9 @@ const splitStorage = {
                 splits: Object.fromEntries(value.state.splits),
             },
         };
-        localStorage.setItem(name, JSON.stringify(toSave));
+        sessionStorage.setItem(name, JSON.stringify(toSave));
     },
-    removeItem: (name) => localStorage.removeItem(name),
+    removeItem: (name) => sessionStorage.removeItem(name),
 };
 
 /**
@@ -602,7 +602,7 @@ const useSplitStore = create(
             },
 
             resetLayout: () => {
-                localStorage.removeItem('split-layout');
+                sessionStorage.removeItem('split-layout');
                 set({
                     splits: new Map(),
                     rootSplitId: null,
