@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import useSplitStore from '@/stores/useSplitStore';
 
 /**
  * Hook customizado para gerenciar atalhos globais de teclado da aplicação.
@@ -9,6 +10,14 @@ export function useGlobalShortcuts(disabled, openModal) {
     useEffect(() => {
         const handleKeyboard = (e) => {
             if (disabled) return;
+
+            // Ctrl+Shift+R ou Cmd+Shift+R = resetar layout
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
+                e.preventDefault();
+                useSplitStore.getState().resetLayout();
+                return;
+            }
+
             if (e.altKey) {
                 switch (e.key) {
                     case "1":

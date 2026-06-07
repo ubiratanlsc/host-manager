@@ -1,6 +1,27 @@
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
+
+const splitStorage = {
+    getItem: (name) => {
+        const raw = localStorage.getItem(name);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        parsed.state.splits = new Map(Object.entries(parsed.state.splits || {}));
+        return parsed;
+    },
+    setItem: (name, value) => {
+        const toSave = {
+            ...value,
+            state: {
+                ...value.state,
+                splits: Object.fromEntries(value.state.splits),
+            },
+        };
+        localStorage.setItem(name, JSON.stringify(toSave));
+    },
+    removeItem: (name) => localStorage.removeItem(name),
+};
 
 /**
  * Split Store - Gerencia divisões de terminais (split panes)
@@ -8,62 +29,71 @@ import { v4 as uuidv4 } from 'uuid';
 
 const useSplitStore = create(
     devtools(
-        (set, get) => ({
-            // ========== ESTADO ==========
-            splits: new Map(), // Map<splitId, split>
-            rootSplitId: null,
-            activePaneId: null, // ID do painel ativo (split ou terminal)
+        persist(
+            (set, get) => ({
+                // ========== ESTADO ==========
+                splits: new Map(), // Map<splitId, split>
+                rootSplitId: null,
+                activePaneId: null, // ID do painel ativo (split ou terminal)
 
-            // ========== INICIALIZAÇÃO ==========
+                // ========== INICIALIZAÇÃO ==========
 
-            /**
-             * Inicializa o root split com um terminal
-             */
-            initializeWithTerminal: (terminalId) => {
-                const splitId = uuidv4();
-                const split = {
-                    id: splitId,
-                    type: 'single',
-                    terminalIds: [terminalId],
-                    activeTerminalId: terminalId,
-                };
+                /**
+                 * Inicializa o root split com um terminal
+                 */
+                initializeWithTerminal: (terminalId) => {
+                    const splitId = uuidv4();
+                    const split = {
+                        id: splitId,
+                        type: 'single',
+                        terminalIds: [terminalId],
+                        activeTerminalId: terminalId,
+                    };
 
-                set({
-                    splits: new Map([[splitId, split]]),
-                    rootSplitId: splitId,
-                    activePaneId: splitId,
-                });
+                    set({
+                        splits: new Map([[splitId, split]]),
+                        rootSplitId: splitId,
+                        activePaneId: splitId,
+                    });
 
-                return splitId;
-            },
+                    return splitId;
+                },
 
-            addTerminalToActivePane: (terminalId) => {
-                const state = get();
-                const activeSplitId = state.activePaneId;
+                addTerminalToActivePane: (terminalId) => {
+                    const state = get();
 
-                // Se não houver split ativo ou inválido
-                if (!activeSplitId || !state.splits.has(activeSplitId)) {
-                    // Tenta encontrar o primeiro split 'single' disponível
-                    const firstLeafId = Array.from(state.splits.values()).find(s => s.type === 'single')?.id;
-                    if (firstLeafId) {
-                        get().setActivePane(firstLeafId);
-                        // Chama recursivamente com o novo ID ativo
-                        return get().addTerminalToActivePane(terminalId);
+                    // Se o terminal já existe em algum split, apenas ativa esse split
+                    const existingSplitId = get().findSplitByTerminal(terminalId);
+                    if (existingSplitId) {
+                        set({ activePaneId: existingSplitId });
+                        return existingSplitId;
                     }
-                    // Se não houver nenhum, inicializa
-                    return get().initializeWithTerminal(terminalId);
-                }
 
-                const activeSplit = state.splits.get(activeSplitId);
-                if (!activeSplit || activeSplit.type !== 'single') {
-                    // Se o ativo não for single, tenta encontrar um single
-                    const firstLeafId = Array.from(state.splits.values()).find(s => s.type === 'single')?.id;
-                    if (firstLeafId) {
-                        get().setActivePane(firstLeafId);
-                        return get().addTerminalToActivePane(terminalId);
+                    const activeSplitId = state.activePaneId;
+
+                    // Se não houver split ativo ou inválido
+                    if (!activeSplitId || !state.splits.has(activeSplitId)) {
+                        // Tenta encontrar o primeiro split 'single' disponível
+                        const firstLeafId = Array.from(state.splits.values()).find(s => s.type === 'single')?.id;
+                        if (firstLeafId) {
+                            get().setActivePane(firstLeafId);
+                            // Chama recursivamente com o novo ID ativo
+                            return get().addTerminalToActivePane(terminalId);
+                        }
+                        // Se não houver nenhum, inicializa
+                        return get().initializeWithTerminal(terminalId);
                     }
-                    return get().initializeWithTerminal(terminalId);
-                }
+
+                    const activeSplit = state.splits.get(activeSplitId);
+                    if (!activeSplit || activeSplit.type !== 'single') {
+                        // Se o ativo não for single, tenta encontrar um single
+                        const firstLeafId = Array.from(state.splits.values()).find(s => s.type === 'single')?.id;
+                        if (firstLeafId) {
+                            get().setActivePane(firstLeafId);
+                            return get().addTerminalToActivePane(terminalId);
+                        }
+                        return get().initializeWithTerminal(terminalId);
+                    }
 
                 set((state) => {
                     const newSplits = new Map(state.splits);
@@ -570,8 +600,26 @@ const useSplitStore = create(
                     activePaneId: null,
                 });
             },
+
+            resetLayout: () => {
+                localStorage.removeItem('split-layout');
+                set({
+                    splits: new Map(),
+                    rootSplitId: null,
+                    activePaneId: null,
+                });
+                window.dispatchEvent(new Event('terminal:relayout'));
+            },
         }),
-        { name: 'SplitStore' }
+        {
+            name: 'split-layout',
+            storage: splitStorage,
+            partialize: (state) => ({
+                splits: state.splits,
+                rootSplitId: state.rootSplitId,
+                activePaneId: state.activePaneId,
+            }),
+        }
     )
 );
 
