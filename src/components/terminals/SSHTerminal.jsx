@@ -244,11 +244,10 @@ const SSHTerminal = ({ sessionId }) => {
             if (result) {
                 if (result.action === 'enter') {
                     xterm.writeln('');
-                } else if (result.action === 'backspace' || result.action === 'delete' || result.action === 'paste' || result.action === 'interrupt') {
+                } else if (result.action === 'backspace' || result.action === 'delete' || result.action === 'paste') {
                     redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
-                    if (result.action === 'interrupt') {
-                        xterm.write('^C\r\n');
-                    }
+                } else if (result.action === 'interrupt') {
+                    // o servidor SSH ecoa o ^C e nova linha via onStdout
                 } else if (result.action === 'write') {
                     // Se estiver no fim do buffer, apenas escreve. Se estiver no meio, redesenha.
                     if (result.cursorPosition === result.buffer.length) {
