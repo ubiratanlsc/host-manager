@@ -13,6 +13,12 @@ const PTY_SPAWN_COMMAND = 'spawn_pty';
 const PTY_STDIN_COMMAND = 'write_pty';
 const PTY_RESIZE_COMMAND = 'resize_pty';
 const PTY_KILL_COMMAND = 'kill_pty';
+const PTY_KILL_ALL_COMMAND = 'kill_all_ptys';
+const LIST_PTYS_COMMAND = 'list_ptys';
+
+// Module-level dedup guard: previne que spawnPty seja chamado duas vezes
+// em rápida sucessão (ex: React StrictMode double-mount ou Tauri IPC replay).
+let _spawnLastCalled = 0;
 
 /**
  * Terminal Store - Gerencia terminais PTY locais com Xterm.js
@@ -201,6 +207,30 @@ const useTerminalStore = create(
                         isInitialized: true
                     });
 
+                    // Buscar PTYs existentes
+                    try {
+                        const existingPtys = await invoke(LIST_PTYS_COMMAND);
+                        if (existingPtys && existingPtys.length > 0) {
+                            set((state) => {
+                                const newTerminals = new Map(state.terminals);
+                                existingPtys.forEach((pty) => {
+                                    newTerminals.set(pty.id, {
+                                        id: pty.id,
+                                        shell: pty.shell,
+                                        title: pty.shell.name,
+                                        isOpen: true,
+                                        createdAt: new Date().toISOString(),
+                                    });
+                                });
+                                const focused = state.focusedTerminal || existingPtys[existingPtys.length - 1].id;
+                                return { terminals: newTerminals, focusedTerminal: focused };
+                            });
+                            console.log('[TerminalStore] Restored existing PTYs:', existingPtys.length);
+                        }
+                    } catch (e) {
+                        console.error('[TerminalStore] Failed to fetch existing PTYs:', e);
+                    }
+
                     console.log('[TerminalStore] Listeners initialized successfully');
                 } catch (error) {
                     console.error('[TerminalStore] Failed to initialize listeners:', error);
@@ -236,6 +266,15 @@ const useTerminalStore = create(
              * Spawna novo terminal PTY
              */
             spawnPty: async (shell, cols = 80, rows = 24) => {
+                // Dedup: ignora chamadas duplicadas rápidas
+                const now = Date.now();
+                if (now - _spawnLastCalled < 1000) {
+                    console.warn('[TerminalStore] Duplicate spawnPty ignored (dedup)');
+                    return;
+                }
+                _spawnLastCalled = now;
+
+                console.trace('[TerminalStore] spawnPty called');
                 try {
                     if (!isTauri()) {
                         const id = crypto.randomUUID();
@@ -257,7 +296,10 @@ const useTerminalStore = create(
 
                         return;
                     }
-                    await invoke(PTY_SPAWN_COMMAND, { shell, cols, rows });
+                    // Gera um spawn_id único. O Rust rejeita duplicatas deste ID,
+                    // prevenindo phantom invokes (ex: Tauri replay após reload).
+                    const spawn_id = crypto.randomUUID();
+                    await invoke(PTY_SPAWN_COMMAND, { shell, cols, rows, spawnId: spawn_id });
                 } catch (error) {
                     console.error('[TerminalStore] Failed to spawn PTY:', error);
                     throw error;

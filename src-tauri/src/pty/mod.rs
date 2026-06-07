@@ -21,16 +21,18 @@ struct PtyExitPayload {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-struct PtySpawnPayload {
-    id: String,
-    shell: SystemShell,
+pub struct PtySpawnPayload {
+    pub id: String,
+    pub shell: SystemShell,
 }
 
 pub struct PtyProcess {
-    id: String,
-    pty_master: Box<dyn MasterPty + Send>,
-    stdin_tx: Sender<Vec<u8>>,
-    kill_tx: Sender<()>,
-    stdin_task: JoinHandle<()>,
-    stdout_task: JoinHandle<()>,
+    pub id: String,
+    pub spawn_id: String,
+    pub pty_master: Box<dyn MasterPty + Send>,
+    pub stdin_tx: Sender<Vec<u8>>,
+    pub kill_tx: Sender<()>,
+    pub stdin_task: JoinHandle<()>,
+    pub stdout_task: JoinHandle<()>,
+    pub shell: SystemShell,
 }

@@ -6,6 +6,9 @@ use crate::AppState;
 // use cuid2;
 use cuid::cuid;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static SPAWN_CALL_COUNTER: AtomicU64 = AtomicU64::new(0);
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc::channel;
 use tokio::task::spawn_blocking;
@@ -18,7 +21,21 @@ pub async fn spawn_pty(
     shell: SystemShell,
     cols: u16,
     rows: u16,
+    spawn_id: String,
 ) -> Result<(), String> {
+    let call_seq = SPAWN_CALL_COUNTER.fetch_add(1, Ordering::SeqCst);
+    println!("[TAURI]: spawn_pty CALLED (seq={}, spawn_id={})", call_seq, spawn_id);
+
+    // Anti-replay: verifica se este spawn_id já está associado a um PTY vivo.
+    // Tauri reenvia a mesma invoke IPC idêntica após um reload da página.
+    {
+        let ptys = state.ptys.lock().await;
+        if ptys.values().any(|pty| pty.spawn_id == spawn_id) {
+            println!("[TAURI]: Rejected replayed spawn_pty (spawn_id={})", spawn_id);
+            return Err("Duplicate spawn rejected (replayed command).".to_string());
+        }
+    }
+
     let id = cuid().map_err(|_| "Failed to generate cuid.".to_string())?;
     // let id = cuid2::create_id();
 
@@ -102,11 +119,13 @@ pub async fn spawn_pty(
             id.clone(),
             PtyProcess {
                 id: id.clone(),
+                spawn_id: spawn_id.clone(),
                 pty_master,
                 stdin_tx,
                 kill_tx,
                 stdin_task,
                 stdout_task,
+                shell: shell.clone(),
             },
         );
 
@@ -242,4 +261,38 @@ pub async fn kill_pty(state: State<'_, AppState>, id: String) -> Result<(), Stri
     pty.kill_tx.send(()).await.map_err(|x| x.to_string())?;
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn kill_all_ptys(state: State<'_, AppState>) -> Result<(), String> {
+    let ids = {
+        let ptys = state.ptys.lock().await;
+        ptys.keys().cloned().collect::<Vec<_>>()
+    };
+
+    for id in &ids {
+        let mut ptys = state.ptys.lock().await;
+        if let Some(pty) = ptys.get_mut(id) {
+            let _ = pty.kill_tx.send(()).await;
+        }
+    }
+
+    println!("[TAURI]: Killed {} PTY(s).", ids.len());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn list_ptys(state: State<'_, AppState>) -> Result<Vec<PtySpawnPayload>, String> {
+    let ptys = state.ptys.lock().await;
+    let mut result = Vec::new();
+
+    for (_, pty) in ptys.iter() {
+        result.push(PtySpawnPayload {
+            id: pty.id.clone(),
+            shell: pty.shell.clone(),
+        });
+    }
+
+    println!("[TAURI]: list_ptys: {} sessões ativas", result.len());
+    Ok(result)
 }

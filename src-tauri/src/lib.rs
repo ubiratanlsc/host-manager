@@ -48,6 +48,8 @@ pub fn run() {
             pty::commands::write_pty,
             pty::commands::resize_pty,
             pty::commands::kill_pty,
+            pty::commands::kill_all_ptys,
+            pty::commands::list_ptys,
             ssh::commands::spawn_ssh,
             ssh::commands::write_ssh,
             ssh::commands::resize_ssh,
