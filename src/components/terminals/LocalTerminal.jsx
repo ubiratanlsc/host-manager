@@ -78,17 +78,9 @@ const LocalTerminal = ({ terminalId }) => {
         if (!xterm || !fitAddon) return;
 
         try {
-            const dims = fitAddon.proposeDimensions();
-            if (!dims) return;
-            if (!Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return;
-
-            const cols = Math.max(2, Math.floor(dims.cols));
-            const rows = Math.max(1, Math.floor(dims.rows));
-            if (!Number.isFinite(cols) || !Number.isFinite(rows)) return;
-            if (xterm.cols === cols && xterm.rows === rows) return;
-
-            xterm.resize(cols, rows);
-        } catch (_) {
+            fitAddon.fit();
+        } catch (e) {
+            console.warn('[terminal] fit failed:', e);
         }
     }, []);
 
@@ -111,21 +103,13 @@ const LocalTerminal = ({ terminalId }) => {
 
         const xterm = new Terminal({
             theme: {
-                // background: 'transparent',
-                // cursor: '#10B981',
-                // cursorAccent: '#10B98100',
                 ...theme
             },
             fontFamily: font,
             fontSize: fontSize,
             cursorBlink: true,
             cursorStyle: 'bar',
-            // convertEol: true,
             allowTransparency: true,
-            allowProposedApi: true,
-            overviewRulerWidth: 8,
-            rows: 20,
-            cols: 40,
         });
 
         const fitAddon = new FitAddon();
@@ -145,7 +129,8 @@ const LocalTerminal = ({ terminalId }) => {
                 const webglAddon = new WebglAddon();
                 xterm.loadAddon(webglAddon);
                 webglAddonRef.current = webglAddon;
-            } catch (_) {
+            } catch (e) {
+                console.warn('[terminal] WebGL addon failed:', e);
                 releaseWebgl();
             }
         }
@@ -168,7 +153,7 @@ const LocalTerminal = ({ terminalId }) => {
                 if (text) {
                     useTerminalStore.getState().writePty(terminalId, text);
                 }
-            } catch (_) { }
+            } catch (e) { console.warn('[terminal] clipboard read failed:', e); }
         };
         containerRef.current?.addEventListener('contextmenu', handleContextMenu);
 
@@ -239,7 +224,8 @@ const LocalTerminal = ({ terminalId }) => {
                     excludeAltBuffer: false,
                 });
                 useTerminalStore.getState().setSerializedContent(terminalId, content);
-            } catch (_) {
+            } catch (e) {
+                console.warn('[terminal] snapshot serialize failed:', e);
             }
         };
 
@@ -261,19 +247,22 @@ const LocalTerminal = ({ terminalId }) => {
                     });
                     useTerminalStore.getState().setSerializedContent(terminalId, content);
                 }
-            } catch (_) {
+            } catch (e) {
+                console.warn('[terminal] snapshot serialize on dispose failed:', e);
             }
 
             useTerminalStore.getState().detachTerminal(terminalId);
 
             try {
                 xterm.dispose();
-            } catch (_) {
+            } catch (e) {
+                console.warn('[terminal] dispose failed:', e);
             }
 
             try {
                 webglAddonRef.current?.dispose?.();
-            } catch (_) {
+            } catch (e) {
+                console.warn('[terminal] WebGL dispose failed:', e);
             }
             if (webglAddonRef.current) {
                 releaseWebgl();
@@ -379,7 +368,7 @@ const LocalTerminal = ({ terminalId }) => {
             ligaturesAddon = new LigaturesAddon();
             xterm.loadAddon(ligaturesAddon);
         } catch (e) {
-            console.error('Failed to load ligatures addon:', e);
+            console.warn('[terminal] ligatures addon failed:', e);
         }
 
         return () => {
@@ -393,7 +382,7 @@ const LocalTerminal = ({ terminalId }) => {
         return (
             <div className="flex items-center justify-center w-full h-full bg-[#1A1B1E] text-gray-400">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
                     <p className="text-sm">Iniciando terminal...</p>
                 </div>
             </div>
@@ -401,7 +390,7 @@ const LocalTerminal = ({ terminalId }) => {
     }
 
     return (
-        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative group">
+        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative group" style={{ backgroundColor: theme.background }}>
             <div ref={terminalRef} className="absolute inset-0" />
             {isInitialized && searchAddonRef.current && (
                 <SearchOverlay searchAddon={searchAddonRef.current} />

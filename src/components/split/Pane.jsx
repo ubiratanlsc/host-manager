@@ -211,7 +211,7 @@ const Pane = ({ paneId }) => {
         <div
             ref={setDragRef}
             style={style}
-            className={`relative flex flex-col h-full rounded-md overflow-hidden transition-colors
+            className={`relative flex flex-col h-full overflow-hidden transition-colors
                 ${isDragging ? 'z-40' : ''}
             `}
             // mt-1

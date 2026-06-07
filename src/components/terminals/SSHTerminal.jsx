@@ -77,17 +77,9 @@ const SSHTerminal = ({ sessionId }) => {
         if (!xterm || !fitAddon) return;
 
         try {
-            const dims = fitAddon.proposeDimensions();
-            if (!dims) return;
-            if (!Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return;
-
-            const cols = Math.max(2, Math.floor(dims.cols));
-            const rows = Math.max(1, Math.floor(dims.rows));
-            if (!Number.isFinite(cols) || !Number.isFinite(rows)) return;
-            if (xterm.cols === cols && xterm.rows === rows) return;
-
-            xterm.resize(cols, rows);
-        } catch (_) {
+            fitAddon.fit();
+        } catch (e) {
+            console.warn('[ssh-terminal] fit failed:', e);
         }
     }, []);
 
@@ -119,9 +111,7 @@ const SSHTerminal = ({ sessionId }) => {
             fontSize: fontSize,
             lineHeight: 1.2,
             cursorBlink: true,
-            allowTransparency: false,
-            allowProposedApi: true,
-            overviewRulerWidth: 8,
+            allowTransparency: true,
         });
 
         const fitAddon = new FitAddon();
@@ -139,7 +129,8 @@ const SSHTerminal = ({ sessionId }) => {
                 const webglAddon = new WebglAddon();
                 xterm.loadAddon(webglAddon);
                 webglAddonRef.current = webglAddon;
-            } catch (_) {
+            } catch (e) {
+                console.warn('[ssh-terminal] WebGL addon failed:', e);
                 releaseWebgl();
             }
         }
@@ -183,7 +174,7 @@ const SSHTerminal = ({ sessionId }) => {
                         redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
                     }
                 }
-            } catch (_) { }
+            } catch (e) { console.warn('[ssh-terminal] clipboard read failed:', e); }
         };
         terminalRef.current?.addEventListener('contextmenu', handleContextMenu);
 
@@ -308,7 +299,8 @@ const SSHTerminal = ({ sessionId }) => {
                     excludeAltBuffer: false,
                 });
                 useSSHStore.getState().setSerializedContent(sessionId, content);
-            } catch (_) {
+            } catch (e) {
+                console.warn('[ssh-terminal] snapshot serialize failed:', e);
             }
         };
 
@@ -329,7 +321,7 @@ const SSHTerminal = ({ sessionId }) => {
                         sessionStorage.setItem(`ssh_content_${sessionId}`, content);
                     }
                 }
-            } catch (_) { }
+            } catch (e) { console.warn('[ssh-terminal] beforeunload serialize failed:', e); }
         };
         window.addEventListener('beforeunload', handleBeforeUnload);
 
@@ -349,19 +341,22 @@ const SSHTerminal = ({ sessionId }) => {
                     });
                     useSSHStore.getState().setSerializedContent(sessionId, content);
                 }
-            } catch (_) {
+            } catch (e) {
+                console.warn('[ssh-terminal] snapshot serialize on dispose failed:', e);
             }
 
             useSSHStore.getState().detachSession(sessionId);
 
             try {
                 xterm.dispose();
-            } catch (_) {
+            } catch (e) {
+                console.warn('[ssh-terminal] dispose failed:', e);
             }
 
             try {
                 webglAddonRef.current?.dispose?.();
-            } catch (_) {
+            } catch (e) {
+                console.warn('[ssh-terminal] WebGL dispose failed:', e);
             }
             if (webglAddonRef.current) {
                 releaseWebgl();
@@ -466,6 +461,7 @@ const SSHTerminal = ({ sessionId }) => {
     useEffect(() => {
         if (!isInitialized) return;
         const handler = () => scheduleResize();
+        window.addEventListener('terminal:relayout', handler);
         return () => window.removeEventListener('terminal:relayout', handler);
     }, [isInitialized, scheduleResize]);
 
@@ -495,7 +491,7 @@ const SSHTerminal = ({ sessionId }) => {
     }
 
     return (
-        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative group">
+        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative group" style={{ backgroundColor: theme.background }}>
             <div ref={terminalRef} className="absolute inset-0" />
             {isInitialized && searchAddonRef.current && (
                 <SearchOverlay searchAddon={searchAddonRef.current} />

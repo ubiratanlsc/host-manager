@@ -22,14 +22,9 @@ const CustomResizeHandle = ({ direction }) => {
         <ResizableHandle
             className={cn(
                 "group relative flex items-center justify-center transition-colors",
-                direction === 'vertical' ? "h-1 w-full cursor-row-resize" : "w-1 h-full cursor-col-resize"
+                direction === 'vertical' ? "h-1 w-full cursor-row-resize" : "w-px h-full cursor-col-resize"
             )}
-        >
-            <div className={cn(
-                "absolute  transition-colors rounded-full",
-                direction === 'vertical' ? "w-8 h-1" : "h-8 w-1"
-            )} />
-        </ResizableHandle>
+        />
     );
 };
 
