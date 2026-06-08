@@ -16,10 +16,6 @@ const PTY_KILL_COMMAND = 'kill_pty';
 const PTY_KILL_ALL_COMMAND = 'kill_all_ptys';
 const LIST_PTYS_COMMAND = 'list_ptys';
 
-// Module-level dedup guard: previne que spawnPty seja chamado duas vezes
-// em rápida sucessão (ex: React StrictMode double-mount ou Tauri IPC replay).
-let _spawnLastCalled = 0;
-
 /**
  * Terminal Store - Gerencia terminais PTY locais com Xterm.js
  * 
@@ -266,15 +262,6 @@ const useTerminalStore = create(
              * Spawna novo terminal PTY
              */
             spawnPty: async (shell, cols = 80, rows = 24) => {
-                // Dedup: ignora chamadas duplicadas rápidas
-                const now = Date.now();
-                if (now - _spawnLastCalled < 1000) {
-                    console.warn('[TerminalStore] Duplicate spawnPty ignored (dedup)');
-                    return;
-                }
-                _spawnLastCalled = now;
-
-                console.trace('[TerminalStore] spawnPty called');
                 try {
                     if (!isTauri()) {
                         const id = crypto.randomUUID();

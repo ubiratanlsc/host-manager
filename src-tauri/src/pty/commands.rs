@@ -3,8 +3,7 @@ use super::{PtyExitPayload, PtyProcess, PtySpawnPayload, PtyStdoutPayload};
 use crate::pty::constants::{PTY_EXIT_EVENT, PTY_SPAWN_EVENT, PTY_STDOUT_EVENT};
 use crate::shell::SystemShell;
 use crate::AppState;
-// use cuid2;
-use cuid::cuid;
+use cuid2;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -36,8 +35,7 @@ pub async fn spawn_pty(
         }
     }
 
-    let id = cuid().map_err(|_| "Failed to generate cuid.".to_string())?;
-    // let id = cuid2::create_id();
+    let id = cuid2::create_id();
 
     // Establish our new pty for the given size
     let pty_system = native_pty_system();

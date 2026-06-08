@@ -172,7 +172,7 @@ export function MenuBar({ className, disabled = false }) {
                                 <TerminalTag className="mr-2 h-4 w-4" />
                                 <span>Nova Conexão</span>
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openModal("connect")}>
+                            <DropdownMenuItem onClick={() => handleSpawnTerminal()}>
                                 <TerminalTag className="mr-2 h-4 w-4" />
                                 <span>Novo Terminal Local</span>
                             </DropdownMenuItem>

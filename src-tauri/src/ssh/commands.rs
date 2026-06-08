@@ -1,6 +1,6 @@
 use super::*;
 use crate::AppState;
-use cuid::cuid;
+use cuid2;
 use portable_pty::PtySize;
 use ssh2::{CheckResult, HashType, HostKeyType, KeyboardInteractivePrompt, KnownHostFileKind, KnownHostKeyFormat};
 use std::sync::Arc;
@@ -164,7 +164,7 @@ pub async fn spawn_ssh(
         }
     }
 
-    let id = cuid().map_err(|_| "Failed to generate ID")?;
+    let id = cuid2::create_id();
 
     let tcp = TcpStream::connect((host.as_str(), port)).map_err(|e| e.to_string())?;
 
@@ -202,7 +202,7 @@ pub async fn spawn_ssh(
 
     if needs_prompt {
         println!("ponto: 8.6 - Host key desconhecido, solicitando confirmação");
-        let prompt_id = cuid().map_err(|_| "Failed to generate prompt ID")?;
+        let prompt_id = cuid2::create_id();
         let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
         {
             let mut pending = state.pending_hostkey.lock().await;
