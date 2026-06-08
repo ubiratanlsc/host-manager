@@ -8,8 +8,8 @@ const useConfigStore = create((set) => ({
     colors: {},
     configs: {},
     addCustomer: (id, name, host, port, username, password, group, tagId, identityFile) => set((state) => ({
-        customers: state.customers.some(c => c.id === id) 
-            ? state.customers 
+        customers: state.customers.some(c => c.id === id || c.host === host)
+            ? state.customers
             : [...state.customers, { id, name, host, port, username, password, groups: group ? [group] : [], tagId, identityFile }],
     })),
     editCustomer: (id, updatedData) => set((state) => ({
