@@ -435,8 +435,10 @@ const SSHTerminal = ({ sessionId }) => {
         const container = containerRef.current;
         if (!container || !isInitialized) return;
 
-        const handleMouseDown = () => {
+        const handleMouseDown = (e) => {
             if (hasModalOpen) return;
+            // Não rouba o foco de inputs (ex: busca)
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
             // Força o foco no xterm e sincroniza o store
             if (useSSHStore.getState().focusedSession !== sessionId) {
                 useSSHStore.getState().setFocused(sessionId);
@@ -480,6 +482,13 @@ const SSHTerminal = ({ sessionId }) => {
             }
         };
     }, [isInitialized, ligatures]);
+
+    // Atualiza as cores do terminal quando o tema muda
+    useEffect(() => {
+        const xterm = xtermRef.current;
+        if (!xterm || !isInitialized) return;
+        xterm.options.theme = { ...theme };
+    }, [theme, isInitialized]);
 
     // Se sessão não existe, não renderizar nada
     if (!session) {

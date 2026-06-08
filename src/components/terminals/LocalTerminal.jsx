@@ -332,8 +332,10 @@ const LocalTerminal = ({ terminalId }) => {
         const container = containerRef.current;
         if (!container || !isInitialized) return;
 
-        const handleMouseDown = () => {
+        const handleMouseDown = (e) => {
             if (hasModalOpen) return;
+            // Não rouba o foco de inputs (ex: busca)
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
             // Força o foco no xterm e sincroniza o store
             if (useTerminalStore.getState().focusedTerminal !== terminalId) {
                 useTerminalStore.getState().setFocused(terminalId);
@@ -377,6 +379,13 @@ const LocalTerminal = ({ terminalId }) => {
             }
         };
     }, [isInitialized, ligatures]);
+
+    // Atualiza as cores do terminal quando o tema muda
+    useEffect(() => {
+        const xterm = xtermRef.current;
+        if (!xterm || !isInitialized) return;
+        xterm.options.theme = { ...theme };
+    }, [theme, isInitialized]);
 
     if (!terminalMeta) {
         return (
