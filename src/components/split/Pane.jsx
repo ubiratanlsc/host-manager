@@ -8,7 +8,7 @@ import LocalTerminal from '../terminals/LocalTerminal';
 import SSHTerminal from '../terminals/SSHTerminal';
 import DraggableTab from '../Tab/DraggableTab';
 import { useSplitStore, useTerminalStore, useSSHStore } from '@/stores';
-import { useEffect } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 
 /**
  * Pane - Container arrastável que contém terminais/SSH
@@ -57,6 +57,43 @@ const Pane = ({ paneId }) => {
             return () => clearTimeout(timer);
         }
     }, [activePane, paneId, activeTerminalId, setFocusedTerminal, setFocusedSession]);
+
+    // Scroll detection para o carrossel de abas
+    const tabListRef = useRef(null);
+    const [canScrollLeft, setCanScrollLeft] = useState(false);
+    const [canScrollRight, setCanScrollRight] = useState(false);
+
+    const checkScroll = useCallback(() => {
+        const el = tabListRef.current;
+        if (el) {
+            setCanScrollLeft(el.scrollLeft > 2);
+            setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
+        }
+    }, []);
+
+    useEffect(() => {
+        const el = tabListRef.current;
+        if (!el) return;
+        checkScroll();
+        el.addEventListener('scroll', checkScroll);
+        const observer = new ResizeObserver(checkScroll);
+        observer.observe(el);
+
+        // Converte scroll vertical do mouse em scroll horizontal nas abas
+        const handleWheel = (e) => {
+            if (e.deltaY !== 0) {
+                e.preventDefault();
+                el.scrollLeft += e.deltaY;
+            }
+        };
+        el.addEventListener('wheel', handleWheel, { passive: false });
+
+        return () => {
+            el.removeEventListener('scroll', checkScroll);
+            el.removeEventListener('wheel', handleWheel);
+            observer.disconnect();
+        };
+    }, [terminalIds.length, checkScroll]);
 
     // Tornar o pane inteiro arrastável
     const {
@@ -223,7 +260,7 @@ const Pane = ({ paneId }) => {
                 className="flex flex-col h-full"
             >
                 {/* 1d1d1d */}
-                <div className="flex items-center gap-2 px-2 py-0 dark:bg-[#121212] bg-[#D7D7D7] rounded-t-md">
+                <div className="flex items-center gap-2 px-2 dark:bg-[#121212] bg-[#D7D7D7] rounded-t-md h-9 flex-shrink-0">
                     <div
                         className="flex items-center gap-2 cursor-grab active:cursor-grabbing"
                         {...attributes}
@@ -232,35 +269,47 @@ const Pane = ({ paneId }) => {
                         <GripVertical className="h-4 w-4 text-gray-500" />
                     </div>
 
-                    <div
-                        ref={setTabListDropRef}
-                        className={`flex-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent ${isOverTabList ? 'bg-blue-500/10 rounded' : ''}`}
-                    >
-                        <TabsList className="inline-flex flex-nowrap h-8 items-center justify-start rounded-md p-0 gap-1 w-auto bg-inherit">
-                            <SortableContext items={terminalIds} strategy={horizontalListSortingStrategy}>
-                                {terminalIds.map((terminalId) => {
-                                    const terminal = terminals.get(terminalId);
-                                    const session = sessions.get(terminalId);
+                    <div className="relative flex-1 overflow-hidden h-full">
+                        {canScrollLeft && (
+                            <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r dark:from-[#121212] from-[#D7D7D7] to-transparent z-10 pointer-events-none" />
+                        )}
+                        {canScrollRight && (
+                            <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l dark:from-[#121212] from-[#D7D7D7] to-transparent z-10 pointer-events-none" />
+                        )}
+                        <div
+                            ref={(node) => {
+                                tabListRef.current = node;
+                                setTabListDropRef(node);
+                            }}
+                            className={`h-full overflow-x-auto [&::-webkit-scrollbar]:hidden ${isOverTabList ? 'bg-blue-500/10 rounded' : ''}`}
+                            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                        >
+                            <TabsList className="inline-flex flex-nowrap h-full items-center justify-start rounded-md p-0 gap-1 w-auto bg-inherit">
+                                <SortableContext items={terminalIds} strategy={horizontalListSortingStrategy}>
+                                    {terminalIds.map((terminalId) => {
+                                        const terminal = terminals.get(terminalId);
+                                        const session = sessions.get(terminalId);
 
-                                    const label = terminal
-                                        ? (terminal.shell?.name || 'Terminal')
-                                        : (session?.title || (session?.config ? `${session.config.username}@${session.config.host}` : 'SSH'));
+                                        const label = terminal
+                                            ? (terminal.shell?.name || 'Terminal')
+                                            : (session?.title || (session?.config ? `${session.config.username}@${session.config.host}` : 'SSH'));
 
-                                    const type = terminal ? 'terminal' : 'ssh';
+                                        const type = terminal ? 'terminal' : 'ssh';
 
-                                    return (
-                                        <DraggableTab
-                                            key={terminalId}
-                                            terminalId={terminalId}
-                                            paneId={paneId}
-                                            type={type}
-                                            label={label}
-                                            onClose={() => handleCloseTerminal(terminalId)}
-                                        />
-                                    );
-                                })}
-                            </SortableContext>
-                        </TabsList>
+                                        return (
+                                            <DraggableTab
+                                                key={terminalId}
+                                                terminalId={terminalId}
+                                                paneId={paneId}
+                                                type={type}
+                                                label={label}
+                                                onClose={() => handleCloseTerminal(terminalId)}
+                                            />
+                                        );
+                                    })}
+                                </SortableContext>
+                            </TabsList>
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-1">
