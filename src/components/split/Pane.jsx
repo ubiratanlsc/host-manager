@@ -29,6 +29,7 @@ const Pane = ({ paneId }) => {
     const closePane = useSplitStore(state => state.closePane);
     const removeTerminalFromSplit = useSplitStore(state => state.removeTerminalFromSplit);
     const setActivePane = useSplitStore(state => state.setActivePane);
+    const groupTerminalIds = useSplitStore(state => state.groupTerminalIds);
 
     // Terminal Store
     const terminals = useTerminalStore(state => state.terminals);
@@ -153,11 +154,31 @@ const Pane = ({ paneId }) => {
     // Desestruturar já feito acima do useEffect
 
     const handleActivateTerminal = (terminalId) => {
-        setActiveTerminal(paneId, terminalId);
-        setActivePane(paneId);
+        const splitState = useSplitStore.getState();
+        const root = splitState.splits.get(splitState.rootSplitId);
+        const isSplit = root && root.type !== 'single';
 
-        if (terminals.has(terminalId)) setFocusedTerminal(terminalId);
-        if (sessions.has(terminalId)) setFocusedSession(terminalId);
+        if (isSplit && !splitState.isActiveInSplit(terminalId)) {
+            // Clicou numa aba não visível no split → colapsa para full screen
+            splitState.collapseToSingle(terminalId);
+            setActivePane(splitState.rootSplitId);
+        } else if (!isSplit && splitState.savedSplitLayout && splitState.isInSavedLayout(terminalId)) {
+            // Clicou numa aba do grupo salvo → restaura o split
+            splitState.restoreSplit(terminalId);
+            const afterState = useSplitStore.getState();
+            if (afterState.activePaneId) {
+                setActivePane(afterState.activePaneId);
+                if (terminals.has(terminalId)) setFocusedTerminal(terminalId);
+                if (sessions.has(terminalId)) setFocusedSession(terminalId);
+            }
+        } else {
+            // Comportamento normal: troca a aba no painel atual
+            setActiveTerminal(paneId, terminalId);
+            setActivePane(paneId);
+
+            if (terminals.has(terminalId)) setFocusedTerminal(terminalId);
+            if (sessions.has(terminalId)) setFocusedSession(terminalId);
+        }
     };
 
     const handleCloseTerminal = async (terminalId) => {
@@ -303,6 +324,7 @@ const Pane = ({ paneId }) => {
                                                 paneId={paneId}
                                                 type={type}
                                                 label={label}
+                                                isGroupTerminal={groupTerminalIds.length > 0 && groupTerminalIds.includes(terminalId)}
                                                 onClose={() => handleCloseTerminal(terminalId)}
                                             />
                                         );

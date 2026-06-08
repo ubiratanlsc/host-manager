@@ -15,6 +15,7 @@ const DraggableTab = React.forwardRef(({
     paneId,
     type = 'terminal',
     label,
+    isGroupTerminal,
     onClose,
     ...props
 }, ref) => {
@@ -59,7 +60,8 @@ const DraggableTab = React.forwardRef(({
                     "data-[state=active]:dark:bg-[#1A1B1E] data-[state=active]:dark:text-white data-[state=active]:dark:border-gray-700",
                     "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                     "hover:bg-[#2C2D32] hover:text-gray-100 transition-all cursor-pointer",
-                    isDragging && "z-50 cursor-grabbing opacity-50"
+                    isDragging && "z-50 cursor-grabbing opacity-50",
+                    isGroupTerminal && "border-l-2 border-l-blue-400/60 rounded-l-none"
                 )}
                 {...attributes}
                 {...props}

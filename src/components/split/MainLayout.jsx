@@ -20,6 +20,7 @@ const MainLayout = () => {
     const removeTerminalFromSplit = useSplitStore((state) => state.removeTerminalFromSplit);
     const initializeWithTerminal = useSplitStore((state) => state.initializeWithTerminal);
     const rootSplitId = useSplitStore((state) => state.rootSplitId);
+    const collapseToSingle = useSplitStore((state) => state.collapseToSingle);
 
     // Memoized arrays
     const terminals = useMemo(() => Array.from(terminalsMap.values()), [terminalsMap]);
@@ -49,8 +50,13 @@ const MainLayout = () => {
 
         // Adicionar novos terminais/sessões
         const addNewIdToLayout = (id, kind) => {
-            // Se não houver root, inicializar com este
-            if (!rootSplitId && !useSplitStore.getState().rootSplitId) {
+            const store = useSplitStore.getState();
+            const root = store.splits.get(store.rootSplitId);
+
+            // Se estiver em split, colapsa para mostrar o novo terminal full screen
+            if (root && root.type !== 'single') {
+                collapseToSingle(id);
+            } else if (!rootSplitId && !store.rootSplitId) {
                 initializeWithTerminal(id);
             } else {
                 addTerminalToActivePane(id);

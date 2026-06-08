@@ -35,6 +35,8 @@ const useSplitStore = create(
                 splits: new Map(), // Map<splitId, split>
                 rootSplitId: null,
                 activePaneId: null, // ID do painel ativo (split ou terminal)
+                savedSplitLayout: null, // { rootId, splits } para restaurar split ao clicar em aba do grupo
+                groupTerminalIds: [], // IDs dos terminais que estavam no split (para indicador visual)
 
                 // ========== INICIALIZAÇÃO ==========
 
@@ -199,6 +201,176 @@ const useSplitStore = create(
                     newSplits.set(splitId, { ...split, activeTerminalId: terminalId });
                     return { splits: newSplits, activePaneId: splitId };
                 });
+            },
+
+            /**
+             * Salva o layout atual e colapsa tudo em um único painel.
+             * Usado quando o usuário clica numa aba fora do split.
+             */
+            collapseToSingle: (terminalId) => {
+                const state = get();
+                if (state.splits.size === 0) return;
+
+                // Coleta todos os terminalIds da árvore
+                const allIds = [];
+                const collect = (nodeId) => {
+                    const node = state.splits.get(nodeId);
+                    if (!node) return;
+                    if (node.type === 'single') {
+                        for (const id of node.terminalIds || []) {
+                            if (!allIds.includes(id)) allIds.push(id);
+                        }
+                    } else if (node.children) {
+                        node.children.forEach(collect);
+                    }
+                };
+                collect(state.rootSplitId);
+
+                // Garante que o terminal alvo está na lista mesmo se não estava no split
+                if (!allIds.includes(terminalId)) {
+                    allIds.push(terminalId);
+                }
+
+                // Salva o layout atual para restauração futura
+                const savedSplits = [];
+                for (const [id, node] of state.splits) {
+                    savedSplits.push([id, { ...node }]);
+                }
+
+                // Guarda os IDs do grupo para indicador visual nas abas
+                const groupIds = [];
+                for (const [, node] of savedSplits) {
+                    if (node.type === 'single' && node.terminalIds) {
+                        for (const id of node.terminalIds) {
+                            if (!groupIds.includes(id)) groupIds.push(id);
+                        }
+                    }
+                }
+
+                // Cria novo painel único com todos os terminais
+                const newId = `pane_${Date.now()}`;
+                const newSplits = new Map();
+                newSplits.set(newId, {
+                    id: newId,
+                    type: 'single',
+                    terminalIds: allIds,
+                    activeTerminalId: terminalId,
+                });
+
+                set({
+                    rootSplitId: newId,
+                    splits: newSplits,
+                    activePaneId: newId,
+                    savedSplitLayout: { rootId: state.rootSplitId, splits: savedSplits },
+                    groupTerminalIds: groupIds,
+                });
+            },
+
+            /**
+             * Restaura o layout split salvo.
+             * Usado quando o usuário clica numa aba que faz parte do grupo.
+             */
+            restoreSplit: (terminalId) => {
+                const state = get();
+                if (!state.savedSplitLayout) return;
+
+                // Coleta os terminalIds do painel colapsado atual
+                const currentIds = [];
+                const collect = (nodeId) => {
+                    const node = state.splits.get(nodeId);
+                    if (!node) return;
+                    if (node.type === 'single') {
+                        for (const id of node.terminalIds || []) {
+                            if (!currentIds.includes(id)) currentIds.push(id);
+                        }
+                    }
+                };
+                if (state.rootSplitId) {
+                    collect(state.rootSplitId);
+                }
+
+                const { rootId, splits: savedSplits } = state.savedSplitLayout;
+                const restored = new Map();
+
+                for (const [id, node] of savedSplits) {
+                    const newNode = { ...node };
+                    if (newNode.type === 'single' && (newNode.terminalIds || []).includes(terminalId)) {
+                        newNode.activeTerminalId = terminalId;
+                    }
+                    restored.set(id, newNode);
+                }
+
+                // Descobre em qual painel o terminal foi ativado
+                let targetPaneId = rootId;
+                const findPane = (nodeId) => {
+                    const node = restored.get(nodeId);
+                    if (!node) return;
+                    if (node.type === 'single' && node.terminalIds?.includes(terminalId)) {
+                        targetPaneId = nodeId;
+                        return;
+                    }
+                    if (node.children) {
+                        for (const childId of node.children) {
+                            findPane(childId);
+                        }
+                    }
+                };
+                findPane(rootId);
+
+                // Reintegra terminais que foram criados fora do split
+                // (estavam no colapsado mas não no layout salvo)
+                const savedIds = new Set();
+                for (const [, node] of savedSplits) {
+                    if (node.type === 'single' && node.terminalIds) {
+                        for (const id of node.terminalIds) savedIds.add(id);
+                    }
+                }
+                const missingIds = currentIds.filter((id) => !savedIds.has(id));
+                if (missingIds.length > 0 && targetPaneId) {
+                    const targetPane = restored.get(targetPaneId);
+                    if (targetPane && targetPane.type === 'single') {
+                        restored.set(targetPaneId, {
+                            ...targetPane,
+                            terminalIds: [...targetPane.terminalIds, ...missingIds],
+                        });
+                    }
+                }
+
+                set({
+                    rootSplitId: rootId,
+                    splits: restored,
+                    activePaneId: targetPaneId,
+                    savedSplitLayout: null,
+                    groupTerminalIds: [],
+                });
+            },
+
+            /**
+             * Verifica se um terminal é o ativo em algum painel do split atual.
+             */
+            isActiveInSplit: (terminalId) => {
+                const state = get();
+                const walk = (nodeId) => {
+                    const node = state.splits.get(nodeId);
+                    if (!node) return false;
+                    if (node.type === 'single') return node.activeTerminalId === terminalId;
+                    return node.children?.some(walk) ?? false;
+                };
+                return walk(state.rootSplitId);
+            },
+
+            /**
+             * Verifica se um terminal faz parte do layout salvo (grupo do split).
+             */
+            isInSavedLayout: (terminalId) => {
+                const state = get();
+                if (!state.savedSplitLayout) return false;
+                for (const [, node] of state.savedSplitLayout.splits) {
+                    if (node.type === 'single' && (node.terminalIds || []).includes(terminalId)) {
+                        return true;
+                    }
+                }
+                return false;
             },
 
             setSplitTerminalIds: (splitId, terminalIds) => {
@@ -598,6 +770,8 @@ const useSplitStore = create(
                     splits: new Map(),
                     rootSplitId: null,
                     activePaneId: null,
+                    savedSplitLayout: null,
+                    groupTerminalIds: [],
                 });
             },
 
@@ -607,6 +781,8 @@ const useSplitStore = create(
                     splits: new Map(),
                     rootSplitId: null,
                     activePaneId: null,
+                    savedSplitLayout: null,
+                    groupTerminalIds: [],
                 });
                 window.dispatchEvent(new Event('terminal:relayout'));
             },
