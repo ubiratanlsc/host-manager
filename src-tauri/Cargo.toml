@@ -1,8 +1,8 @@
 [package]
-name = "jext"
+name = "host-manager"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Cross-platform host manager with embedded terminal"
+authors = ["ubiratanlsc"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +11,7 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "jext_lib"
+name = "host_manager_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -28,7 +28,7 @@ cuid = { version = "1.2.0" }
 cuid2 = "0.1.4"
 portable-pty = { git = "https://github.com/wez/wezterm.git", features = ["serde_support"] }
 phf = { version = "0.11.1", features = ["macros"] }
-ssh2 = "0.9"
+ssh2 = "0.9.5"
 rusqlite = { version = "0.29.0", features = ["bundled"] }
 thiserror = "1.0"
 uuid = { version = "1.4", features = ["v4", "serde"] }
@@ -37,6 +37,10 @@ base64 = "0.21.0"
 rand = "0.8.5"
 once_cell = "1.18.0"
 tauri-plugin-fs = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-system-fonts = "2.0.2"
+tauri-plugin-playwright = { version = "0.1", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.10.1"
@@ -48,6 +52,7 @@ default = ["custom-protocol"]
 # this feature is used used for production builds where `devPath` points to the filesystem
 # DO NOT remove this
 custom-protocol = ["tauri/custom-protocol"]
+e2e-testing = ["tauri-plugin-playwright"]
 
 [profile.release]
 panic = "abort"

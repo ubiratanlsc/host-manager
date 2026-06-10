@@ -1,62 +1,76 @@
-import React, { use, useEffect } from 'react';
-import TerminalProvider from './Terminal/Terminal';
-import Home from './Home';
-import SSHProvider from './ssh/Ssh';
+import { useEffect, useState } from 'react';
+import { MenuBar } from './components/header/MenuBar';
+import { useAppInitialization } from './hooks/useAppInitialization';
+import useModalStore from './stores/useModalStore';
+import ThemeConfig from './stores/ThemeConfig';
+import DialogConection from './components/Modal/DialogConection';
+import DialogHost from './components/Modal/DialogHost';
+import DialogGroup from './components/Modal/DialogGroup';
+import DialogSettings from './components/Modal/DialogSettings';
+import DialogTag from './components/Modal/DialogTag';
+import DialogListConections from './components/Modal/DialogListConections';
+import DialogListGroups from './components/Modal/DialogListGroups';
+import DialogListTags from './components/Modal/DialogListTags';
+import MainLayout from '@/components/split/MainLayout';
+import NotificationContainer from '@/components/Notifications/NotificationContainer';
+import QuickSearch from '@/components/Modal/QuickSearch';
+import HostKeyDialog from '@/components/Modal/HostKeyDialog';
 
-import { create, BaseDirectory } from '@tauri-apps/plugin-fs'
-import * as path from '@tauri-apps/api/path';
-import FileProvider from './file/File';
-import Grid from './components/grid/grid';
-import Sidebar from './components/sidebar/Sidebar';
 
 const App = () => {
-  // useEffect(() => {
-  // const init = async () => {
-  // const fs = await create();
-  // const home = await path.homeDir();
-  // const dir = await path.join(home, '.terminal-manager');
-  // const exists = await fs.exists(dir);
-  // if (!exists) {
-  //   await fs.createDir(dir);
-  // }
-  // const home = await path.appLogDir();
-  // console.log(home);
-  //     const obj = {
-  //       "name": "Terminal Manager",
-  //       "version": "0.1.0",
-  //       "description": "A terminal manager for managing multiple terminals",
-  //     }
-  //     console.log(JSON.stringify(obj, null, 1));
+  // Inicializar a aplicação via hook customizado
+  useAppInitialization();
+  const { closeModal } = useModalStore();
+  const modals = useModalStore((s) => s.modals);
+  const overlayCount = useModalStore((s) => s.overlayCount);
+  const theme = ThemeConfig((s) => s.theme);
+  const [quickSearchOpen, setQuickSearchOpen] = useState(false);
 
-  //     const file = await create('bar.txt', { baseDir: BaseDirectory.Desktop });
-  //     await file.write(new TextEncoder().encode(JSON.stringify(obj, null, 0)));
-  //     await file.close();
-  //     console.log('file written');
+  // Verificar se qualquer sobreposição (Modal ou componente fixo como Select) está aberto
+  const isOverlayActive = Object.values(modals).some(Boolean) || overlayCount > 0;
 
-  //   }
-  //   init();
-  // }, []);
+  // Update HTML class for global dark mode (covers Portals/Modals)
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
+  }, [theme]);
+
+  // Global keyboard shortcut for quick search
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setQuickSearchOpen(prev => !prev);
+      }
+      if (e.key === 'Escape' && quickSearchOpen) {
+        setQuickSearchOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [quickSearchOpen]);
 
   return (
-
-    <div className="h-screen bg-[#09090b] text-gray-100">
-      <FileProvider>
-        <TerminalProvider>
-          <SSHProvider>
-            <div className="">
-              <nav className="">
-                <div className="">
-                  {/* <h1 className="text-xl font-semibold text-gray-800">Terminal Manager</h1> */}
-                </div>
-              </nav>
-
-              <main className="">
-                
-              </main>
-            </div>
-          </SSHProvider >
-        </TerminalProvider >
-      </FileProvider>
+    <div className="h-screen flex flex-col overflow-hidden text-gray-900 dark:text-gray-100 font-[IBM Plex Sans]">
+      <MenuBar />
+      <div
+        className="flex-1 flex flex-col overflow-hidden bg-background transition-colors duration-300"
+        inert={isOverlayActive ? "" : undefined}
+      >
+        <MainLayout />
+      </div>
+      <DialogListConections onClose={() => closeModal('connections')} />
+      <DialogListGroups onClose={() => closeModal('groupsList')} />
+      <DialogListTags onClose={() => closeModal('tagList')} />
+      <DialogConection onClose={() => closeModal('connect')} />
+      <DialogHost onClose={() => closeModal('host')} />
+      <DialogGroup onClose={() => closeModal('group')} />
+      <DialogSettings onClose={() => closeModal('settings')} />
+      <DialogTag onClose={() => closeModal('tag')} />
+      <QuickSearch open={quickSearchOpen} onClose={() => setQuickSearchOpen(false)} />
+      <HostKeyDialog />
+      <NotificationContainer />
     </div>
   );
 };

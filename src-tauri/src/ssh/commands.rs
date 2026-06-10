@@ -1,15 +1,15 @@
 use super::*;
-use crate::JexpeState;
-use cuid::cuid;
-use ssh2::KeyboardInteractivePrompt;
-use std::collections::HashMap;
+use crate::AppState;
+use cuid2;
+use portable_pty::PtySize;
+use ssh2::{CheckResult, HashType, HostKeyType, KeyboardInteractivePrompt, KnownHostFileKind, KnownHostKeyFormat};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::thread;
+use std::time::Duration;
 use std::{io::Read, path::Path};
 use tauri::Emitter;
 use tokio::sync::mpsc;
-use tokio::time::{timeout, Duration};
 
 struct PasswordPrompt(String);
 
@@ -25,10 +25,38 @@ impl KeyboardInteractivePrompt for PasswordPrompt {
     }
 }
 
+fn get_home_dir() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    let home = std::env::var("USERPROFILE").ok()?;
+    #[cfg(not(target_os = "windows"))]
+    let home = std::env::var("HOME").ok()?;
+    Some(home)
+}
+
+fn get_known_hosts_path() -> Option<std::path::PathBuf> {
+    let home = get_home_dir()?;
+    let ssh_dir = Path::new(&home).join(".ssh");
+    let _ = std::fs::create_dir_all(&ssh_dir);
+    Some(ssh_dir.join("known_hosts"))
+}
+
+fn base64_encode_sha256(hash: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(hash)
+}
+
+fn hex_encode_md5(hash: &[u8]) -> String {
+    hash.iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<Vec<_>>()
+        .join(":")
+}
+
 fn authenticate(
     sess: &mut Session,
     username: &str,
     password: &Option<String>,
+    identity_file: &Option<String>,
 ) -> Result<(), String> {
     println!("ponto: 2 - Iniciando autenticação");
 
@@ -43,17 +71,71 @@ fn authenticate(
             .map_err(|e| format!("Authentication failed: {}", e))?;
     } else {
         println!("ponto: 5 - Tentando autenticação por chave");
-        sess.userauth_agent(username)
-            .or_else(|_| {
-                println!("ponto: 6 - Tentando caminhos padrão de chaves SSH");
-                let home = std::env::var("HOME")
-                    .map_err(|_| ssh2::Error::from_errno(ssh2::ErrorCode::Session(-1)))?;
-                let private_key = Path::new(&home).join(".ssh/id_rsa");
-                let public_key = private_key.with_extension("pub");
 
-                sess.userauth_pubkey_file(username, Some(&public_key), &private_key, None)
-            })
-            .map_err(|e| format!("Authentication failed: {}", e))?;
+        if let Some(key_path) = identity_file {
+            let key_path = Path::new(key_path);
+            if key_path.exists() {
+                println!("ponto: 5.1 - Tentando chave personalizada: {}", key_path.display());
+                let pub_key = key_path.with_extension("pub");
+                match sess.userauth_pubkey_file(
+                    username,
+                    if pub_key.exists() { Some(&pub_key) } else { None },
+                    key_path,
+                    None,
+                ) {
+                    Ok(_) => {
+                        println!("ponto: 5.2 - Chave personalizada bem-sucedida");
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        println!("ponto: 5.3 - Chave personalizada falhou: {}", e);
+                        return Err(format!("Authentication failed: {}", e));
+                    }
+                }
+            } else {
+                println!("ponto: 5.4 - Chave personalizada não encontrada: {}", key_path.display());
+                return Err(format!("Identity file not found: {}", key_path.display()));
+            }
+        }
+
+        let home = get_home_dir().ok_or("HOME/USERPROFILE not set")?;
+        let ssh_dir = Path::new(&home).join(".ssh");
+
+        let key_types = ["id_ed25519", "id_ecdsa", "id_rsa", "id_dsa"];
+
+        let result = sess.userauth_agent(username);
+        if result.is_ok() {
+            println!("ponto: 6 - Autenticação via agent bem-sucedida");
+            return Ok(());
+        }
+
+        println!("ponto: 7 - Tentando caminhos padrão de chaves SSH");
+        let mut last_err = None;
+        for key_name in &key_types {
+            let private_key = ssh_dir.join(key_name);
+            let public_key = private_key.with_extension("pub");
+
+            if !private_key.exists() {
+                continue;
+            }
+
+            println!("ponto: 7.1 - Tentando chave: {}", key_name);
+            match sess.userauth_pubkey_file(username, Some(&public_key), &private_key, None) {
+                Ok(_) => {
+                    println!("ponto: 7.2 - Autenticação com {} bem-sucedida", key_name);
+                    return Ok(());
+                }
+                Err(e) => {
+                    println!("ponto: 7.3 - {} falhou: {}", key_name, e);
+                    last_err = Some(e);
+                }
+            }
+        }
+
+        return Err(format!(
+            "Authentication failed: {}",
+            last_err.map(|e| e.to_string()).unwrap_or_else(|| "No SSH keys found".to_string())
+        ));
     }
     println!("ponto: 7 - Autenticação bem-sucedida");
     Ok(())
@@ -62,12 +144,13 @@ fn authenticate(
 #[tauri::command]
 pub async fn spawn_ssh(
     app_handle: AppHandle,
-    state: State<'_, JexpeState>,
+    state: State<'_, AppState>,
     window_id: String,
     host: String,
     port: u16,
     username: String,
     password: Option<String>,
+    identity_file: Option<String>,
 ) -> Result<String, String> {
     println!("ponto: 8 - Iniciando spawn_ssh para window: {}", window_id);
 
@@ -81,7 +164,7 @@ pub async fn spawn_ssh(
         }
     }
 
-    let id = cuid().map_err(|_| "Failed to generate ID")?;
+    let id = cuid2::create_id();
 
     let tcp = TcpStream::connect((host.as_str(), port)).map_err(|e| e.to_string())?;
 
@@ -90,18 +173,85 @@ pub async fn spawn_ssh(
     sess.set_tcp_stream(tcp);
     sess.handshake().map_err(|e| e.to_string())?;
 
-    authenticate(&mut sess, &username, &password)?;
+    // Verificação de host key
+    let (hostkey, hostkey_type) = sess.host_key().ok_or("Failed to get host key")?;
+    let hostkey_type_str = format!("{:?}", hostkey_type);
+    let hash_sha256 = sess.host_key_hash(HashType::Sha256).ok_or("Failed to get SHA256 hash")?;
+    let hash_md5 = sess.host_key_hash(HashType::Md5).ok_or("Failed to get MD5 hash")?;
+    let fingerprint_sha256 = base64_encode_sha256(hash_sha256);
+    let fingerprint_md5 = hex_encode_md5(hash_md5);
+
+    let known_hosts_path = get_known_hosts_path();
+    let hostname = format!("[{}]:{}", host, port);
+
+    let (needs_prompt, known_hosts_path2) = {
+        let mut known = sess.known_hosts().map_err(|e| e.to_string())?;
+        if let Some(ref path) = known_hosts_path {
+            let _ = known.read_file(path, KnownHostFileKind::OpenSSH);
+        }
+        let check_result = known.check(&hostname, hostkey);
+        let needs = match check_result {
+            CheckResult::Match => {
+                println!("ponto: 8.5 - Host key conhecido");
+                false
+            }
+            _ => true,
+        };
+        (needs, known_hosts_path.clone())
+    };
+
+    if needs_prompt {
+        println!("ponto: 8.6 - Host key desconhecido, solicitando confirmação");
+        let prompt_id = cuid2::create_id();
+        let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
+        {
+            let mut pending = state.pending_hostkey.lock().await;
+            pending.insert(prompt_id.clone(), tx);
+        }
+            let _ = app_handle.emit("hostkey-prompt", serde_json::json!({
+                "prompt_id": prompt_id,
+                "host": host,
+                "port": port,
+                "fingerprint_sha256": fingerprint_sha256,
+                "fingerprint_md5": fingerprint_md5,
+                "key_type": hostkey_type_str,
+            }));
+        let accepted = rx.await.map_err(|_| "Host key verification timed out".to_string())?;
+        if !accepted {
+            return Err("Conexão rejeitada pelo usuário".to_string());
+        }
+        println!("ponto: 8.7 - Host key aceito pelo usuário");
+        // Adicionar ao known_hosts (precisa de um novo KnownHosts pois o anterior foi dropado)
+        if let Some(ref path) = known_hosts_path2 {
+            if let Ok(mut known2) = sess.known_hosts() {
+                let _ = known2.read_file(path, KnownHostFileKind::OpenSSH);
+                let fmt: KnownHostKeyFormat = hostkey_type.into();
+                let _ = known2.add(&hostname, hostkey, &host, fmt);
+                let _ = known2.write_file(path, KnownHostFileKind::OpenSSH);
+            }
+        }
+    }
+
+    authenticate(&mut sess, &username, &password, &identity_file)?;
 
     let mut channel = sess.channel_session().map_err(|e| e.to_string())?;
 
     // Configurar o canal apropriadamente
     let mut term_modes = ssh2::PtyModes::new();
     term_modes.set_u32(ssh2::PtyModeOpcode::ECHO, 0); // Desabilita echo
-                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHONL, 0); // Desabilita echo de nova linha
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHOE, 0); // Desabilita erase
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHOK, 0); // Desabilita kill
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHONL, 0); // Desabilita newline echo
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHOCTL, 0); // Desabilita echo de controles
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ICRNL, 1); // Converte CR para NL na entrada
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ONLCR, 1); // Mapeia NL para CR-NL na saída
+                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::OPOST, 1);
 
     channel
         // .request_pty("xterm", None, None)
-        .request_pty("xterm", Some(term_modes), None)
+        // .request_pty("xterm", Some(term_modes), None)
+        // .map_err(|e| e.to_string())?;
+        .request_pty("xterm-256color", Some(term_modes), None)
         .map_err(|e| e.to_string())?;
 
     channel.shell().map_err(|e| e.to_string())?;
@@ -205,6 +355,7 @@ pub async fn spawn_ssh(
                 Ok(n) => {
                     if n > 0 {
                         println!("ponto: 23 - Dados recebidos ({} bytes)", n);
+
                         let _ = app_handle_clone.emit(
                             SSH_STDOUT_EVENT,
                             SshStdoutPayload {
@@ -237,6 +388,10 @@ pub async fn spawn_ssh(
     let session = SshSession {
         id: id.clone(),
         window_id: window_id.clone(),
+        host: host.clone(),
+        port,
+        username: username.clone(),
+        channel: Arc::clone(&channel),
         stdin_tx,
         stdin_task,
         stdout_task,
@@ -281,34 +436,40 @@ pub async fn spawn_ssh(
 
 #[tauri::command]
 pub async fn write_ssh(
-    state: State<'_, JexpeState>,
+    state: State<'_, AppState>,
     id: String,
     data: String,
 ) -> Result<usize, String> {
-    let ssh_sessions = state.ssh_sessions.lock().await;
-    let session = ssh_sessions
-        .get(&id)
-        .ok_or_else(|| "SSH session not found".to_string())?
-        .clone();
+    let (stdin_tx, connected, last_activity) = {
+        let ssh_sessions = state.ssh_sessions.lock().await;
+        let session = ssh_sessions
+            .get(&id)
+            .ok_or_else(|| "SSH session not found".to_string())?;
+        (
+            session.stdin_tx.clone(),
+            Arc::clone(&session.connected),
+            Arc::clone(&session.last_activity),
+        )
+    };
 
     // Verificar se a sessão está conectada
-    if let Ok(connected) = session.connected.lock() {
+    if let Ok(connected) = connected.lock() {
         if !*connected {
             return Err("Sessão desconectada".to_string());
         }
     }
 
     // Atualizar timestamp de última atividade
-    if let Ok(mut last_activity) = session.last_activity.lock() {
+    if let Ok(mut last_activity) = last_activity.lock() {
         *last_activity = SystemTime::now();
     }
 
-    let data_with_newline = format!("{}\r\n", data);
+    // let data_with_newline = format!("{}\r\n", data); isso aqui tava duplucando a saida
+    let data_with_newline = format!("{}\n", data);
     let bytes = data_with_newline.into_bytes();
     let len = bytes.len();
 
-    session
-        .stdin_tx
+    stdin_tx
         .send(bytes)
         .await
         .map_err(|e| format!("Failed to send data: {}", e))?;
@@ -317,7 +478,49 @@ pub async fn write_ssh(
 }
 
 #[tauri::command]
-pub async fn kill_ssh(state: State<'_, JexpeState>, id: String) -> Result<(), String> {
+pub async fn resize_ssh(
+    state: State<'_, AppState>,
+    id: String,
+    size: PtySize,
+) -> Result<(), String> {
+    let channel = {
+        let ssh_sessions = state.ssh_sessions.lock().await;
+        let session = ssh_sessions
+            .get(&id)
+            .ok_or_else(|| "SSH session not found".to_string())?;
+        Arc::clone(&session.channel)
+    };
+
+    tokio::task::spawn_blocking(move || {
+        let mut channel_guard = channel
+            .lock()
+            .map_err(|_| "Failed to lock SSH channel".to_string())?;
+
+        let width_px = if size.pixel_width > 0 {
+            Some(size.pixel_width as u32)
+        } else {
+            None
+        };
+        let height_px = if size.pixel_height > 0 {
+            Some(size.pixel_height as u32)
+        } else {
+            None
+        };
+
+        channel_guard
+            .request_pty_size(size.cols as u32, size.rows as u32, width_px, height_px)
+            .map_err(|e| e.to_string())?;
+
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn kill_ssh(state: State<'_, AppState>, id: String) -> Result<(), String> {
     println!("ponto: 43 - Iniciando kill_ssh para ID: {}", id);
 
     let mut ssh_sessions = state.ssh_sessions.lock().await;
@@ -332,7 +535,29 @@ pub async fn kill_ssh(state: State<'_, JexpeState>, id: String) -> Result<(), St
 }
 
 #[tauri::command]
-pub async fn cleanup_inactive_sessions(state: State<'_, JexpeState>) -> Result<(), String> {
+pub async fn list_ssh_sessions(state: State<'_, AppState>) -> Result<Vec<SshSpawnPayload>, String> {
+    let ssh_sessions = state.ssh_sessions.lock().await;
+    let mut result = Vec::new();
+
+    for (_, session) in ssh_sessions.iter() {
+        let is_connected = session.connected.lock().map(|c| *c).unwrap_or(false);
+        if is_connected {
+            result.push(SshSpawnPayload {
+                id: session.id.clone(),
+                host: session.host.clone(),
+                port: session.port,
+                username: session.username.clone(),
+                password: None,
+            });
+        }
+    }
+
+    println!("[SSH] list_ssh_sessions: {} sessões ativas", result.len());
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn cleanup_inactive_sessions(state: State<'_, AppState>) -> Result<(), String> {
     let mut ssh_sessions = state.ssh_sessions.lock().await;
     let now = SystemTime::now();
 
@@ -371,8 +596,22 @@ pub async fn cleanup_inactive_sessions(state: State<'_, JexpeState>) -> Result<(
     Ok(())
 }
 #[tauri::command]
+pub async fn respond_hostkey(
+    state: State<'_, AppState>,
+    prompt_id: String,
+    accept: bool,
+) -> Result<(), String> {
+    let mut pending = state.pending_hostkey.lock().await;
+    if let Some(sender) = pending.remove(&prompt_id) {
+        sender.send(accept).map_err(|_| "Failed to send response".to_string())
+    } else {
+        Err("Prompt not found or already responded".to_string())
+    }
+}
+
+#[tauri::command]
 pub async fn heartbeat(
-    state: State<'_, JexpeState>,
+    state: State<'_, AppState>,
     id: String,
     window_id: String,
 ) -> Result<(), String> {
@@ -389,7 +628,7 @@ pub async fn heartbeat(
 }
 
 #[tauri::command]
-pub async fn shutdown_all_sessions(state: State<'_, JexpeState>) -> Result<(), String> {
+pub async fn shutdown_all_sessions(state: State<'_, AppState>) -> Result<(), String> {
     let mut ssh_sessions = state.ssh_sessions.lock().await;
     for (id, session) in ssh_sessions.drain() {
         println!("ponto: 60 - Encerrando sessão: {} (shutdown)", id);
@@ -398,25 +637,4 @@ pub async fn shutdown_all_sessions(state: State<'_, JexpeState>) -> Result<(), S
     }
     Ok(())
 }
-#[tauri::command]
-pub async fn reconnect_session(
-    state: State<'_, JexpeState>,
-    window_id: String,
-) -> Result<String, String> {
-    let ssh_sessions = state.ssh_sessions.lock().await;
 
-    // Procurar sessão existente para esta janela
-    for (id, session) in ssh_sessions.iter() {
-        if session.window_id == window_id {
-            if let Ok(mut connected) = session.connected.lock() {
-                *connected = true;
-            }
-            if let Ok(mut last_heartbeat) = session.heartbeat.lock() {
-                *last_heartbeat = SystemTime::now();
-            }
-            return Ok(id.clone());
-        }
-    }
-
-    Err("Nenhuma sessão encontrada para esta janela".to_string())
-}

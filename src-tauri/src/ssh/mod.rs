@@ -4,9 +4,9 @@ use std::io::Write;
 use std::net::TcpStream;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 use tauri::{AppHandle, State};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 pub mod commands;
 mod constants;
@@ -49,6 +49,10 @@ pub struct SshExitPayload {
 pub struct SshSession {
     pub id: String,
     window_id: String,
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    channel: Arc<StdMutex<Channel>>,
     stdin_tx: mpsc::Sender<Vec<u8>>,
     stdin_task: JoinHandle<()>,
     stdout_task: JoinHandle<()>,
