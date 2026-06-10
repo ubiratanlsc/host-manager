@@ -286,9 +286,15 @@ const LocalTerminal = ({ terminalId }) => {
         if (!isReady || openedRef.current) return;
         const xterm = xtermRef.current;
         if (!xterm || !terminalRef.current) return;
+        if (!initOk) return;
 
         terminalRef.current.innerHTML = '';
-        xterm.open(terminalRef.current);
+        try {
+            xterm.open(terminalRef.current);
+        } catch (e) {
+            console.warn('[terminal] xterm.open failed (container may be hidden):', e);
+            return;
+        }
         openedRef.current = true;
         setIsInitialized(true);
 
@@ -303,7 +309,7 @@ const LocalTerminal = ({ terminalId }) => {
                 xterm.write(chunk);
             }
         }
-    }, [isReady, terminalId]);
+    }, [isReady, terminalId, initOk]);
 
     useEffect(() => {
         if (!isInitialized || !initOk) return;

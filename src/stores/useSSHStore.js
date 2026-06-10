@@ -185,15 +185,7 @@ const useSSHStore = create(
                         });
                     });
 
-                    // Armazenar unlisteners
-                    set({
-                        listeners: { spawnListener, stdoutListener, exitListener },
-                        isInitialized: true
-                    });
-
-                    console.log('[SSHStore] Listeners initialized successfully');
-
-                    // Restaurar sessões ativas do backend (sobrevivem ao F5/reload)
+                    // Restaurar sessões ativas do backend ANTES de marcar como inicializado
                     try {
                         const activeSessions = await invoke(SSH_LIST_COMMAND);
                         if (activeSessions && activeSessions.length > 0) {
@@ -234,6 +226,14 @@ const useSSHStore = create(
                     } catch (listError) {
                         console.warn('[SSHStore] Failed to list active sessions:', listError);
                     }
+
+                    // Armazenar unlisteners e marcar como inicializado
+                    set({
+                        listeners: { spawnListener, stdoutListener, exitListener },
+                        isInitialized: true
+                    });
+
+                    console.log('[SSHStore] Listeners initialized successfully');
                 } catch (error) {
                     console.error('[SSHStore] Failed to initialize listeners:', error);
                 }
@@ -540,44 +540,44 @@ const useSSHStore = create(
              * Mata sessão SSH
              */
             killSSH: async (id) => {
-                try {
-                    if (!isTauri()) {
-                        set((state) => {
-                            const newSessions = new Map(state.sessions);
-                            newSessions.delete(id);
+                set((state) => {
+                    const newSessions = new Map(state.sessions);
+                    newSessions.delete(id);
 
-                            const newBuffers = new Map(state.commandBuffers);
-                            newBuffers.delete(id);
+                    const newBuffers = new Map(state.commandBuffers);
+                    newBuffers.delete(id);
 
-                            const newSerialized = new Map(state.serializedContent);
-                            newSerialized.delete(id);
+                    const newSerialized = new Map(state.serializedContent);
+                    newSerialized.delete(id);
 
-                            const newPending = new Map(state.pendingStdout);
-                            newPending.delete(id);
+                    const newPending = new Map(state.pendingStdout);
+                    newPending.delete(id);
 
-                            const newRecentlyClosed = new Map(state.recentlyClosed);
-                            newRecentlyClosed.set(id, Date.now());
+                    const newRecentlyClosed = new Map(state.recentlyClosed);
+                    newRecentlyClosed.set(id, Date.now());
 
-                            const newAttached = new Map(state.attachedSessions);
-                            newAttached.delete(id);
+                    const newAttached = new Map(state.attachedSessions);
+                    newAttached.delete(id);
 
-                            const nextFocused = state.focusedSession === id ? null : state.focusedSession;
+                    const nextFocused = state.focusedSession === id ? null : state.focusedSession;
 
-                            return {
-                                sessions: newSessions,
-                                commandBuffers: newBuffers,
-                                focusedSession: nextFocused,
-                                serializedContent: newSerialized,
-                                pendingStdout: newPending,
-                                recentlyClosed: newRecentlyClosed,
-                                attachedSessions: newAttached,
-                            };
-                        });
-                        return;
+                    return {
+                        sessions: newSessions,
+                        commandBuffers: newBuffers,
+                        focusedSession: nextFocused,
+                        serializedContent: newSerialized,
+                        pendingStdout: newPending,
+                        recentlyClosed: newRecentlyClosed,
+                        attachedSessions: newAttached,
+                    };
+                });
+
+                if (isTauri()) {
+                    try {
+                        await invoke(SSH_KILL_COMMAND, { id });
+                    } catch (error) {
+                        console.error(`[SSHStore] Failed to kill SSH ${id}:`, error);
                     }
-                    await invoke(SSH_KILL_COMMAND, { id });
-                } catch (error) {
-                    console.error(`[SSHStore] Failed to kill SSH ${id}:`, error);
                 }
             },
 

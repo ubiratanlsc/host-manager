@@ -1,472 +1,198 @@
-import { useDroppable } from '@dnd-kit/core';
-import { useDraggable, useDndContext } from '@dnd-kit/core';
-import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
+import React, { useEffect } from 'react';
+import { useDroppable, useDraggable, useDndContext } from '@dnd-kit/core';
 import { GripVertical, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsList } from '@/components/ui/tabs';
 import LocalTerminal from '../terminals/LocalTerminal';
 import SSHTerminal from '../terminals/SSHTerminal';
-import DraggableTab from '../Tab/DraggableTab';
 import { useSplitStore, useTerminalStore, useSSHStore } from '@/stores';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 /**
- * Pane - Container arrastável que contém terminais/SSH
- * Estilo Termius: arrasta o pane inteiro, não apenas tabs
+ * Pane - Container de terminal. Suporta cabeçalho arrastável (em split) e zonas de drop para divisão.
  */
-const Pane = ({ paneId }) => {
-    // Detectar quando está acontecendo um drag
+const Pane = ({ tabId, paneId, terminalId, isSplitLayout }) => {
     const { active } = useDndContext();
-    const isDraggingPane = active?.data?.current?.type === 'pane';
     const isDraggingTab = active?.data?.current?.type === 'terminal-tab';
-    const isDraggingThisPane = isDraggingPane && active?.id === paneId;
-    const showDropZones = (isDraggingPane && !isDraggingThisPane) || isDraggingTab;
+    const isDraggingPane = active?.data?.current?.type === 'pane';
+    const showDropZones = isDraggingTab || isDraggingPane;
 
-    // Split Store
-    const pane = useSplitStore(state => state.splits.get(paneId));
-    const activePane = useSplitStore(state => state.activePaneId);
-    const setActiveTerminal = useSplitStore(state => state.setActiveTerminal);
-    const closePane = useSplitStore(state => state.closePane);
-    const removeTerminalFromSplit = useSplitStore(state => state.removeTerminalFromSplit);
-    const setActivePane = useSplitStore(state => state.setActivePane);
-    const groupTerminalIds = useSplitStore(state => state.groupTerminalIds);
+    const terminals = useTerminalStore((s) => s.terminals);
+    const sessions = useSSHStore((s) => s.sessions);
+    const killPty = useTerminalStore((s) => s.killPty);
+    const killSSH = useSSHStore((s) => s.killSSH);
 
-    // Terminal Store
-    const terminals = useTerminalStore(state => state.terminals);
-    const killPty = useTerminalStore(state => state.killPty);
-    const setFocusedTerminal = useTerminalStore(state => state.setFocused);
+    const activeTab = useSplitStore((s) => s.getActiveTab());
+    const closePaneInSplit = useSplitStore((s) => s.closePaneInSplit);
+    const setActivePaneInTab = useSplitStore((s) => s.setActivePaneInTab);
 
-    // SSH Store
-    const sessions = useSSHStore(state => state.sessions);
-    const killSSH = useSSHStore(state => state.killSSH);
-    const setFocusedSession = useSSHStore(state => state.setFocused);
+    const isFocusedPane = activeTab?.type === 'split' && activeTab.activePaneId === paneId;
 
-    const terminalIds = pane?.terminalIds || [];
-    const activeTerminalId = pane?.activeTerminalId || terminalIds[0] || null;
+    // Resolve name/title of terminal
+    const terminal = terminals.get(terminalId);
+    const session = sessions.get(terminalId);
+    const name = terminal
+        ? (terminal.shell?.name || 'Terminal')
+        : session
+            ? (session.title || (session.config ? `${session.config.username}@${session.config.host}` : 'SSH'))
+            : 'Terminal';
 
-    // Sincronizar foco global quando o pane ou terminal ativo muda
+    // Sincronizar foco global do xterm quando o painel fica ativo
     useEffect(() => {
-        if (activePane === paneId && activeTerminalId) {
-            // Pequeno delay para garantir que o DOM está pronto e o xterm existe
+        if ((!isSplitLayout || isFocusedPane) && terminalId) {
             const timer = setTimeout(() => {
-                if (useTerminalStore.getState().terminals.has(activeTerminalId)) {
-                    setFocusedTerminal(activeTerminalId);
-                } else if (useSSHStore.getState().sessions.has(activeTerminalId)) {
-                    setFocusedSession(activeTerminalId);
+                if (useTerminalStore.getState().terminals.has(terminalId)) {
+                    useTerminalStore.getState().setFocused(terminalId);
+                } else if (useSSHStore.getState().sessions.has(terminalId)) {
+                    useSSHStore.getState().setFocused(terminalId);
                 }
             }, 50);
             return () => clearTimeout(timer);
         }
-    }, [activePane, paneId, activeTerminalId, setFocusedTerminal, setFocusedSession]);
+    }, [isFocusedPane, isSplitLayout, terminalId]);
 
-    // Scroll detection para o carrossel de abas
-    const tabListRef = useRef(null);
-    const [canScrollLeft, setCanScrollLeft] = useState(false);
-    const [canScrollRight, setCanScrollRight] = useState(false);
-
-    const checkScroll = useCallback(() => {
-        const el = tabListRef.current;
-        if (el) {
-            setCanScrollLeft(el.scrollLeft > 2);
-            setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
-        }
-    }, []);
-
-    useEffect(() => {
-        const el = tabListRef.current;
-        if (!el) return;
-        checkScroll();
-        el.addEventListener('scroll', checkScroll);
-        const observer = new ResizeObserver(checkScroll);
-        observer.observe(el);
-
-        // Converte scroll vertical do mouse em scroll horizontal nas abas
-        const handleWheel = (e) => {
-            if (e.deltaY !== 0) {
-                e.preventDefault();
-                el.scrollLeft += e.deltaY;
-            }
-        };
-        el.addEventListener('wheel', handleWheel, { passive: false });
-
-        return () => {
-            el.removeEventListener('scroll', checkScroll);
-            el.removeEventListener('wheel', handleWheel);
-            observer.disconnect();
-        };
-    }, [terminalIds.length, checkScroll]);
-
-    // Tornar o pane inteiro arrastável
-    const {
-        attributes,
-        listeners,
-        setNodeRef: setDragRef,
-        transform,
-        isDragging,
-    } = useDraggable({
-        id: paneId,
+    // Draggable hook para o cabeçalho do painel
+    const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
+        id: `pane-drag-${paneId}`,
         data: {
             type: 'pane',
+            tabId,
             paneId,
-            terminalIds: pane?.terminalIds || [],
-        }
+            terminalId,
+            label: name,
+        },
+        disabled: !isSplitLayout,
     });
 
-    // Drop zones para as bordas e centro
+    // Drop zones para divisão
     const { setNodeRef: setDropCenterRef, isOver: isOverCenter } = useDroppable({
         id: `${paneId}-center`,
-        data: { type: 'drop-zone', zone: 'center', paneId }
+        data: { type: 'drop-zone', zone: 'center', paneId },
     });
 
     const { setNodeRef: setDropTopRef, isOver: isOverTop } = useDroppable({
         id: `${paneId}-top`,
-        data: { type: 'drop-zone', zone: 'top', paneId }
+        data: { type: 'drop-zone', zone: 'top', paneId },
     });
 
     const { setNodeRef: setDropBottomRef, isOver: isOverBottom } = useDroppable({
         id: `${paneId}-bottom`,
-        data: { type: 'drop-zone', zone: 'bottom', paneId }
+        data: { type: 'drop-zone', zone: 'bottom', paneId },
     });
 
     const { setNodeRef: setDropLeftRef, isOver: isOverLeft } = useDroppable({
         id: `${paneId}-left`,
-        data: { type: 'drop-zone', zone: 'left', paneId }
+        data: { type: 'drop-zone', zone: 'left', paneId },
     });
 
     const { setNodeRef: setDropRightRef, isOver: isOverRight } = useDroppable({
         id: `${paneId}-right`,
-        data: { type: 'drop-zone', zone: 'right', paneId }
+        data: { type: 'drop-zone', zone: 'right', paneId },
     });
 
-    const { setNodeRef: setTabListDropRef, isOver: isOverTabList } = useDroppable({
-        id: `tablist-${paneId}`,
-        data: { type: 'pane-tablist', paneId },
-    });
-
-    if (!pane) {
-        return (
-            <div className="flex items-center justify-center h-full bg-[#1A1B1E] rounded-lg border border-gray-800">
-                <p className="text-gray-500">Pane not found</p>
-            </div>
-        );
-    }
-
-    // Desestruturar já feito acima do useEffect
-
-    const handleActivateTerminal = (terminalId) => {
-        const splitState = useSplitStore.getState();
-        const root = splitState.splits.get(splitState.rootSplitId);
-        const isSplit = root && root.type !== 'single';
-
-        if (isSplit && !splitState.isActiveInSplit(terminalId)) {
-            // Clicou numa aba não visível no split → colapsa para full screen
-            splitState.collapseToSingle(terminalId);
-            setActivePane(splitState.rootSplitId);
-        } else if (!isSplit && splitState.savedSplitLayout && splitState.isInSavedLayout(terminalId)) {
-            // Clicou numa aba do grupo salvo → restaura o split
-            splitState.restoreSplit(terminalId);
-            const afterState = useSplitStore.getState();
-            if (afterState.activePaneId) {
-                setActivePane(afterState.activePaneId);
-                if (terminals.has(terminalId)) setFocusedTerminal(terminalId);
-                if (sessions.has(terminalId)) setFocusedSession(terminalId);
-            }
-        } else {
-            // Comportamento normal: troca a aba no painel atual
-            setActiveTerminal(paneId, terminalId);
-            setActivePane(paneId);
-
-            if (terminals.has(terminalId)) setFocusedTerminal(terminalId);
-            if (sessions.has(terminalId)) setFocusedSession(terminalId);
-        }
-    };
-
-    const handleCloseTerminal = async (terminalId) => {
-        removeTerminalFromSplit(paneId, terminalId);
-
+    const handleClose = async (e) => {
+        e.stopPropagation();
+        closePaneInSplit(tabId, paneId);
         if (terminals.has(terminalId)) {
             await killPty(terminalId);
-            return;
-        }
-
-        if (sessions.has(terminalId)) {
+        } else if (sessions.has(terminalId)) {
             await killSSH(terminalId);
         }
     };
 
-    const handleClosePane = () => {
-        // Fechar todos os terminais do pane antes de removê-lo
-        terminalIds.forEach(id => {
-            const terminal = terminals.get(id);
-            const session = sessions.get(id);
-            if (terminal) killPty(id);
-            if (session) killSSH(id);
-        });
-        closePane(paneId);
-    };
-
-    // Renderizar todos os terminais, mas mostrar apenas o ativo
-    const renderTerminals = () => {
-        if (terminalIds.length === 0) {
-            return (
-                <div className="flex-1 flex items-center justify-center text-gray-500">
-                    <p>No terminals</p>
-                </div>
-            );
-        }
-
-        return (
-            <>
-                {terminalIds.map((terminalId) => {
-                    const terminal = terminals.get(terminalId);
-                    const session = sessions.get(terminalId);
-                    const isActive = terminalId === activeTerminalId;
-
-                    // Renderizar terminal, mas ocultar se não estiver ativo
-                    // IMPORTANTE: Usar visibility ao invés de display para preservar xterm.js
-                    if (terminal) {
-                        return (
-                            <div
-                                key={terminalId}
-                                className="absolute inset-0"
-                                style={{
-                                    visibility: isActive ? 'visible' : 'hidden',
-                                    pointerEvents: isActive ? 'auto' : 'none'
-                                }}
-                            >
-                                <LocalTerminal terminalId={terminalId} />
-                            </div>
-                        );
-                    }
-
-                    if (session) {
-                        return (
-                            <div
-                                key={terminalId}
-                                className="absolute inset-0"
-                                style={{
-                                    visibility: isActive ? 'visible' : 'hidden',
-                                    pointerEvents: isActive ? 'auto' : 'none'
-                                }}
-                            >
-                                <SSHTerminal sessionId={terminalId} />
-                            </div>
-                        );
-                    }
-
-                    return null;
-                })}
-            </>
-        );
-    };
-
-    const style = transform ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        opacity: isDragging ? 0.5 : 1,
-    } : undefined;
+    const style = transform
+        ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, opacity: isDragging ? 0.5 : 1 }
+        : undefined;
 
     return (
         <div
-            ref={setDragRef}
+            onClick={() => isSplitLayout && setActivePaneInTab(tabId, paneId)}
+            className={cn(
+                "relative flex flex-col h-full overflow-hidden transition-colors duration-150 bg-[#1A1B1E]",
+                isSplitLayout && "border dark:border-[#2C2D32]/80 border-gray-300",
+                isFocusedPane && isSplitLayout && "border-blue-500/80 ring-1 ring-blue-500/20"
+            )}
             style={style}
-            className={`relative flex flex-col h-full overflow-hidden transition-colors
-                ${isDragging ? 'z-40' : ''}
-            `}
-            // mt-1
-            onClick={() => setActivePane(paneId)}
         >
-            <Tabs
-                value={activeTerminalId || terminalIds[0] || ''}
-                onValueChange={handleActivateTerminal}
-                className="flex flex-col h-full"
-            >
-                {/* 1d1d1d */}
-                <div className="flex items-center gap-2 px-2 dark:bg-[#121212] bg-[#D7D7D7] rounded-t-md h-9 flex-shrink-0">
-                    <div
-                        className="flex items-center gap-2 cursor-grab active:cursor-grabbing"
-                        {...attributes}
-                        {...listeners}
-                    >
-                        <GripVertical className="h-4 w-4 text-gray-500" />
-                    </div>
-
-                    <div className="relative flex-1 overflow-hidden h-full">
-                        {canScrollLeft && (
-                            <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r dark:from-[#121212] from-[#D7D7D7] to-transparent z-10 pointer-events-none" />
-                        )}
-                        {canScrollRight && (
-                            <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l dark:from-[#121212] from-[#D7D7D7] to-transparent z-10 pointer-events-none" />
-                        )}
+            {/* Slim Premium Header for split layouts */}
+            {isSplitLayout && (
+                <div
+                    ref={setDragRef}
+                    className="h-7 flex items-center justify-between px-2 bg-[#202124] border-b dark:border-gray-900 border-gray-300 text-gray-400 select-none text-[11px] font-semibold flex-shrink-0"
+                >
+                    <div className="flex items-center gap-1.5 truncate">
                         <div
-                            ref={(node) => {
-                                tabListRef.current = node;
-                                setTabListDropRef(node);
-                            }}
-                            className={`h-full overflow-x-auto [&::-webkit-scrollbar]:hidden ${isOverTabList ? 'bg-blue-500/10 rounded' : ''}`}
-                            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                            {...attributes}
+                            {...listeners}
+                            className="cursor-grab active:cursor-grabbing hover:text-gray-200 p-0.5"
                         >
-                            <TabsList className="inline-flex flex-nowrap h-full items-center justify-start rounded-md p-0 gap-1 w-auto bg-inherit">
-                                <SortableContext items={terminalIds} strategy={horizontalListSortingStrategy}>
-                                    {terminalIds.map((terminalId) => {
-                                        const terminal = terminals.get(terminalId);
-                                        const session = sessions.get(terminalId);
-
-                                        const label = terminal
-                                            ? (terminal.shell?.name || 'Terminal')
-                                            : (session?.title || (session?.config ? `${session.config.username}@${session.config.host}` : 'SSH'));
-
-                                        const type = terminal ? 'terminal' : 'ssh';
-
-                                        return (
-                                            <DraggableTab
-                                                key={terminalId}
-                                                terminalId={terminalId}
-                                                paneId={paneId}
-                                                type={type}
-                                                label={label}
-                                                isGroupTerminal={groupTerminalIds.length > 0 && groupTerminalIds.includes(terminalId)}
-                                                onClose={() => handleCloseTerminal(terminalId)}
-                                            />
-                                        );
-                                    })}
-                                </SortableContext>
-                            </TabsList>
+                            <GripVertical className="h-3 w-3 flex-shrink-0" />
                         </div>
+                        <span className="truncate">{name}</span>
                     </div>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-4 w-4 hover:bg-destructive/20 hover:text-destructive p-0 flex items-center justify-center transition-colors"
+                        onClick={handleClose}
+                    >
+                        <X className="h-2.5 w-2.5" />
+                    </Button>
+                </div>
+            )}
 
-                    <div className="flex items-center gap-1">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-red-700 hover:text-red-700"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleClosePane();
-                            }}
-                            title="Close Pane"
-                        >
-                            <X className="h-3 w-3" />
-                        </Button>
-                    </div>
+            {/* Terminal area */}
+            <div className="flex-1 relative overflow-hidden">
+                <div className="absolute inset-0">
+                    {terminal && <LocalTerminal terminalId={terminalId} />}
+                    {session && <SSHTerminal sessionId={terminalId} />}
                 </div>
 
-                {/* Conteúdo do terminal ativo */}
-                <div className="flex-1 flex flex-col overflow-hidden">
-                    <div className="flex-1 relative">
-                        {renderTerminals()}
-
-                        {/* Drop Zones - aparecem durante drag */}
-                        {showDropZones && (
-                            <>
-                                {/* Centro - Merge */}
-                                <div
-                                    ref={setDropCenterRef}
-                                    className={`
-                                absolute inset-[20%] 
-                                border-2 border-dashed rounded-lg
-                                flex items-center justify-center
-                                transition-all pointer-events-auto
-                                ${isOverCenter
-                                            ? 'bg-blue-500/20 border-blue-500'
-                                            : 'bg-transparent border-gray-600/50'
-                                        }
-                            `}
-                                >
-                                    {isOverCenter && (
-                                        <span className="text-sm text-blue-400 font-medium">
-                                            Merge aqui
-                                        </span>
-                                    )}
-                                </div>
-
-                                {/* Top - Split Vertical */}
-                                <div
-                                    ref={setDropTopRef}
-                                    className={`
-                                absolute top-0 left-0 right-0 h-[20%]
-                                border-2 border-dashed
-                                flex items-center justify-center
-                                transition-all pointer-events-auto
-                                ${isOverTop
-                                            ? 'bg-green-500/20 border-green-500'
-                                            : 'bg-transparent border-gray-600/50'
-                                        }
-                            `}
-                                >
-                                    {isOverTop && (
-                                        <span className="text-sm text-green-400 font-medium">
-                                            Split acima
-                                        </span>
-                                    )}
-                                </div>
-
-                                {/* Bottom - Split Vertical */}
-                                <div
-                                    ref={setDropBottomRef}
-                                    className={`
-                                absolute bottom-0 left-0 right-0 h-[20%]
-                                border-2 border-dashed
-                                flex items-center justify-center
-                                transition-all pointer-events-auto
-                                ${isOverBottom
-                                            ? 'bg-green-500/20 border-green-500'
-                                            : 'bg-transparent border-gray-600/50'
-                                        }
-                            `}
-                                >
-                                    {isOverBottom && (
-                                        <span className="text-sm text-green-400 font-medium">
-                                            Split abaixo
-                                        </span>
-                                    )}
-                                </div>
-
-                                {/* Left - Split Horizontal */}
-                                <div
-                                    ref={setDropLeftRef}
-                                    className={`
-                                absolute top-0 left-0 bottom-0 w-[20%]
-                                border-2 border-dashed
-                                flex items-center justify-center
-                                transition-all pointer-events-auto
-                                ${isOverLeft
-                                            ? 'bg-green-500/20 border-green-500'
-                                            : 'bg-transparent border-gray-600/50'
-                                        }
-                            `}
-                                >
-                                    {isOverLeft && (
-                                        <span className="text-sm text-green-400 font-medium rotate-[-90deg]">
-                                            Split esquerda
-                                        </span>
-                                    )}
-                                </div>
-
-                                {/* Right - Split Horizontal */}
-                                <div
-                                    ref={setDropRightRef}
-                                    className={`
-                                absolute top-0 right-0 bottom-0 w-[20%]
-                                border-2 border-dashed
-                                flex items-center justify-center
-                                transition-all pointer-events-auto
-                                ${isOverRight
-                                            ? 'bg-green-500/20 border-green-500'
-                                            : 'bg-transparent border-gray-600/50'
-                                        }
-                            `}
-                                >
-                                    {isOverRight && (
-                                        <span className="text-sm text-green-400 font-medium rotate-90">
-                                            Split direita
-                                        </span>
-                                    )}
-                                </div>
-                            </>
-                        )}
+                {/* Split Drop Zones */}
+                {showDropZones && (
+                    <div className="absolute inset-0 z-50 pointer-events-none grid grid-cols-[25%_1fr_25%] grid-rows-[25%_1fr_25%] transition-opacity duration-200">
+                        {/* Top Zone */}
+                        <div
+                            ref={setDropTopRef}
+                            className={cn(
+                                "col-start-1 col-end-4 row-start-1 border-transparent transition-all pointer-events-auto",
+                                isOverTop ? "bg-blue-500/35 border-b-2 border-blue-500" : ""
+                            )}
+                        />
+                        {/* Left Zone */}
+                        <div
+                            ref={setDropLeftRef}
+                            className={cn(
+                                "col-start-1 col-end-2 row-start-2 border-transparent transition-all pointer-events-auto",
+                                isOverLeft ? "bg-blue-500/35 border-r-2 border-blue-500" : ""
+                            )}
+                        />
+                        {/* Center Zone */}
+                        <div
+                            ref={setDropCenterRef}
+                            className={cn(
+                                "col-start-2 col-end-3 row-start-2 transition-all pointer-events-auto",
+                                isOverCenter ? "bg-blue-500/25 border border-dashed border-blue-400 rounded-md m-2" : ""
+                            )}
+                        />
+                        {/* Right Zone */}
+                        <div
+                            ref={setDropRightRef}
+                            className={cn(
+                                "col-start-3 col-end-4 row-start-2 border-transparent transition-all pointer-events-auto",
+                                isOverRight ? "bg-blue-500/35 border-l-2 border-blue-500" : ""
+                            )}
+                        />
+                        {/* Bottom Zone */}
+                        <div
+                            ref={setDropBottomRef}
+                            className={cn(
+                                "col-start-1 col-end-4 row-start-3 border-transparent transition-all pointer-events-auto",
+                                isOverBottom ? "bg-blue-500/35 border-t-2 border-blue-500" : ""
+                            )}
+                        />
                     </div>
-                </div>
-            </Tabs>
+                )}
+            </div>
         </div>
     );
 };

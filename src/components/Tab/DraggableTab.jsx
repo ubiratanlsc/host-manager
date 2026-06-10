@@ -6,10 +6,6 @@ import { TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import React from 'react';
 
-/**
- * DraggableTab - Tab arrastável para terminais/SSH
- * Usa useSortable do dnd-kit para combinar drag + sort
- */
 const DraggableTab = React.forwardRef(({
     terminalId,
     paneId,
@@ -64,12 +60,10 @@ const DraggableTab = React.forwardRef(({
                     isGroupTerminal && "border-l-2 border-l-blue-400/60 rounded-l-none"
                 )}
                 {...attributes}
+                {...listeners}
                 {...props}
             >
-                <div
-                    className="flex items-center gap-2 min-w-0 h-full flex-1 cursor-pointer"
-                    {...listeners}
-                >
+                <div className="flex items-center gap-2 min-w-0 h-full flex-1 cursor-pointer">
                     <div className={`w-2 h-2 rounded-full ${type === 'ssh' ? 'bg-blue-500' : 'bg-green-500'}`} />
                     <span className="text-xs font-medium select-none truncate max-w-[160px]">{label}</span>
                 </div>

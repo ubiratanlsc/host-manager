@@ -11,6 +11,7 @@
     "fs:scope",
     "fs:allow-app-write",
     "fs:allow-exists",
+    "fs:allow-mkdir",
     "fs:write-all",
     "fs:allow-read",
     "fs:allow-read-dir",
@@ -38,6 +39,9 @@
       "identifier": "fs:allow-app-write-recursive",
       "allow": [
         {
+          "path": "$APPCONFIG/*"
+        },
+        {
           "path": "$APPDATA/*"
         },
         {
@@ -57,6 +61,9 @@
     {
       "identifier": "fs:allow-app-read-recursive",
       "allow": [
+        {
+          "path": "$APPCONFIG/*"
+        },
         {
           "path": "$APPDATA/*"
         },

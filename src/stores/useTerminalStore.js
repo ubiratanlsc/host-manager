@@ -174,6 +174,7 @@ const useTerminalStore = create(
                             newAttached.delete(id);
 
                             // Determinar próximo foco
+                            console.log('[TerminalStore] exitListener focus check:', { focusedTerminal: state.focusedTerminal, exitedId: id, idMatch: state.focusedTerminal === id });
                             let newFocused = state.focusedTerminal;
                             if (state.focusedTerminal === id) {
                                 if (newTerminals.size > 0) {
@@ -197,13 +198,7 @@ const useTerminalStore = create(
                         });
                     });
 
-                    // Armazenar unlisteners
-                    set({
-                        listeners: { spawnListener, stdoutListener, exitListener },
-                        isInitialized: true
-                    });
-
-                    // Buscar PTYs existentes
+                    // Buscar PTYs existentes ANTES de marcar como inicializado
                     try {
                         const existingPtys = await invoke(LIST_PTYS_COMMAND);
                         if (existingPtys && existingPtys.length > 0) {
@@ -226,6 +221,12 @@ const useTerminalStore = create(
                     } catch (e) {
                         console.error('[TerminalStore] Failed to fetch existing PTYs:', e);
                     }
+
+                    // Armazenar unlisteners e marcar como inicializado
+                    set({
+                        listeners: { spawnListener, stdoutListener, exitListener },
+                        isInitialized: true
+                    });
 
                     console.log('[TerminalStore] Listeners initialized successfully');
                 } catch (error) {
@@ -321,40 +322,42 @@ const useTerminalStore = create(
              * Mata terminal PTY
              */
             killPty: async (id) => {
-                try {
-                    if (!isTauri()) {
-                        set((state) => {
-                            const newTerminals = new Map(state.terminals);
-                            newTerminals.delete(id);
+                // Remove terminal from store immediately to prevent
+                // the MainLayout sync effect from re-creating a tab for it.
+                set((state) => {
+                    const newTerminals = new Map(state.terminals);
+                    newTerminals.delete(id);
 
-                            const newSerialized = new Map(state.serializedContent);
-                            newSerialized.delete(id);
+                    const newSerialized = new Map(state.serializedContent);
+                    newSerialized.delete(id);
 
-                            const newPending = new Map(state.pendingStdout);
-                            newPending.delete(id);
+                    const newPending = new Map(state.pendingStdout);
+                    newPending.delete(id);
 
-                            const newRecentlyClosed = new Map(state.recentlyClosed);
-                            newRecentlyClosed.set(id, Date.now());
+                    const newRecentlyClosed = new Map(state.recentlyClosed);
+                    newRecentlyClosed.set(id, Date.now());
 
-                            const newAttached = new Map(state.attachedTerminals);
-                            newAttached.delete(id);
+                    const newAttached = new Map(state.attachedTerminals);
+                    newAttached.delete(id);
 
-                            const nextFocused = state.focusedTerminal === id ? null : state.focusedTerminal;
+                    const nextFocused = state.focusedTerminal === id ? null : state.focusedTerminal;
 
-                            return {
-                                terminals: newTerminals,
-                                focusedTerminal: nextFocused,
-                                serializedContent: newSerialized,
-                                pendingStdout: newPending,
-                                recentlyClosed: newRecentlyClosed,
-                                attachedTerminals: newAttached,
-                            };
-                        });
-                        return;
+                    return {
+                        terminals: newTerminals,
+                        focusedTerminal: nextFocused,
+                        serializedContent: newSerialized,
+                        pendingStdout: newPending,
+                        recentlyClosed: newRecentlyClosed,
+                        attachedTerminals: newAttached,
+                    };
+                });
+
+                if (isTauri()) {
+                    try {
+                        await invoke(PTY_KILL_COMMAND, { id });
+                    } catch (error) {
+                        console.error(`[TerminalStore] Failed to kill PTY ${id}:`, error);
                     }
-                    await invoke(PTY_KILL_COMMAND, { id });
-                } catch (error) {
-                    console.error(`[TerminalStore] Failed to kill PTY ${id}:`, error);
                 }
             },
 
