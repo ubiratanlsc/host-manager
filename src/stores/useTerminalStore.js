@@ -3,6 +3,7 @@ import { devtools } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import useAppStore from './useAppStore';
 
 // Constants
 const PTY_SPAWN_EVENT = 'EVENTS:PTY:SPAWN';
@@ -146,6 +147,18 @@ const useTerminalStore = create(
                     // Listener para exit do terminal
                     const exitListener = await listen(PTY_EXIT_EVENT, ({ payload }) => {
                         const { id, success, code } = payload;
+
+                        // Saída anormal do shell (crash) → notifica. Saída normal
+                        // (digitar `exit`, success=true) fecha a aba silenciosamente.
+                        if (success === false) {
+                            const term = get().terminals.get(id);
+                            useAppStore.getState().addNotification({
+                                type: 'error',
+                                title: 'Terminal encerrado',
+                                message: `${term?.title || term?.shell?.name || 'Terminal'} terminou de forma inesperada.`,
+                                duration: 5000,
+                            });
+                        }
 
                         set((state) => {
                             const newTerminals = new Map(state.terminals);

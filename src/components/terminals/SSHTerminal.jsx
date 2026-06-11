@@ -10,7 +10,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { isTauri } from '@tauri-apps/api/core';
 import { useSSHStore, FontConfig, TerminalConfig, ClipboardConfig, useThemeStore, useModalStore } from '@/stores';
 import SearchOverlay from '@/components/Search/SearchOverlay';
-import ContextMenu from '@/components/ui/context-menu';
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import '@xterm/xterm/css/xterm.css';
 
@@ -69,7 +69,6 @@ const SSHTerminal = ({ sessionId }) => {
     const pasteRight = ClipboardConfig((s) => s.pasteRight);
     const { theme } = useThemeStore();
 
-    const [contextMenuPos, setContextMenuPos] = useState(null);
     const modals = useModalStore((s) => s.modals);
     const hasModalOpen = Object.values(modals).some(Boolean);
 
@@ -153,22 +152,6 @@ const SSHTerminal = ({ sessionId }) => {
                 }
             }
         });
-
-        // Botão direito do mouse para colar
-        const handleContextMenu = async (e) => {
-            e.preventDefault();
-            if (pasteRight) {
-                try {
-                    const text = await readText();
-                    if (text) {
-                        useSSHStore.getState().writeSSH(sessionId, text);
-                    }
-                } catch (e) { console.warn('[ssh-terminal] clipboard read failed:', e); }
-            } else {
-                setContextMenuPos({ x: e.clientX, y: e.clientY });
-            }
-        };
-        terminalRef.current?.addEventListener('contextmenu', handleContextMenu);
 
         xterm.attachCustomKeyEventHandler((event) => {
             // Ctrl+C para copiar se houver seleção
@@ -270,7 +253,6 @@ const SSHTerminal = ({ sessionId }) => {
 
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
-            terminalRef.current?.removeEventListener('contextmenu', handleContextMenu);
             window.removeEventListener('ssh:stdout', onStdout);
             window.removeEventListener('terminal:snapshot', onSnapshot);
 
@@ -466,6 +448,16 @@ const SSHTerminal = ({ sessionId }) => {
         xterm.options.theme = { ...theme };
     }, [theme, isInitialized]);
 
+    // Em desconexão inesperada, mostra um aviso no próprio terminal (uma vez),
+    // mantendo o scrollback visível para o usuário.
+    const disconnectNoticeRef = useRef(false);
+    useEffect(() => {
+        if (session?.disconnected && !disconnectNoticeRef.current && isInitialized && xtermRef.current) {
+            disconnectNoticeRef.current = true;
+            xtermRef.current.write('\r\n\x1b[1;31m── Conexão encerrada ──\x1b[0m\r\n');
+        }
+    }, [session?.disconnected, isInitialized]);
+
     const handleCopy = () => {
         const xterm = xtermRef.current;
         if (xterm && xterm.hasSelection()) {
@@ -482,28 +474,41 @@ const SSHTerminal = ({ sessionId }) => {
         } catch (e) { console.warn('[ssh-terminal] clipboard read failed:', e); }
     };
 
+    // Modo "colar com botão direito": cola direto, sem abrir o menu de contexto.
+    const handleRightClickPaste = useCallback(async (e) => {
+        e.preventDefault();
+        try {
+            const text = await readText();
+            if (text) {
+                useSSHStore.getState().writeSSH(sessionId, text);
+            }
+        } catch (err) { console.warn('[ssh-terminal] clipboard read failed:', err); }
+    }, [sessionId]);
+
     if (!session) {
         return null;
     }
 
     return (
-        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative group" style={{ backgroundColor: theme.background }}>
-            <div ref={terminalRef} className="absolute top-0 right-0 bottom-0 left-1.5" />
-            {isInitialized && searchAddonRef.current && (
-                <SearchOverlay searchAddon={searchAddonRef.current} />
-            )}
-            {contextMenuPos && (
-                <ContextMenu
-                    x={contextMenuPos.x}
-                    y={contextMenuPos.y}
-                    items={[
-                        { label: 'Copiar', onClick: handleCopy },
-                        { label: 'Colar', onClick: handlePaste },
-                    ]}
-                    onClose={() => setContextMenuPos(null)}
-                />
-            )}
-        </div>
+        <ContextMenu>
+            <ContextMenuTrigger asChild disabled={pasteRight}>
+                <div
+                    ref={containerRef}
+                    className="w-full h-full overflow-hidden flex flex-col relative group"
+                    style={{ backgroundColor: theme.background }}
+                    onContextMenu={pasteRight ? handleRightClickPaste : undefined}
+                >
+                    <div ref={terminalRef} className="absolute top-0 right-0 bottom-0 left-1.5" />
+                    {isInitialized && searchAddonRef.current && (
+                        <SearchOverlay searchAddon={searchAddonRef.current} />
+                    )}
+                </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-40">
+                <ContextMenuItem onSelect={handleCopy}>Copiar</ContextMenuItem>
+                <ContextMenuItem onSelect={handlePaste}>Colar</ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
     );
 };
 

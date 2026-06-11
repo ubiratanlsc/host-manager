@@ -157,6 +157,9 @@ pub async fn spawn_pty(
             }
 
             (_, Ok(_)) => {
+                // Mata o processo filho explicitamente (não confia só no drop do
+                // pty_master) para garantir que o shell não fique órfão.
+                let _ = child.kill();
                 app_handle
                     .emit(
                         PTY_EXIT_EVENT,

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
+import { toast } from 'sonner';
 
 /**
  * App Store - Estado global da aplicação
@@ -59,31 +60,20 @@ const useAppStore = create(
                     set({ activeView: view });
                 },
 
-                // ========== NOTIFICATIONS ==========
+                // ========== NOTIFICATIONS (via sonner) ==========
                 addNotification: ({ type = 'info', title, message, duration = 4000 }) => {
-                    set((state) => ({
-                        notifications: [
-                            ...state.notifications,
-                            {
-                                id: crypto.randomUUID(),
-                                type,
-                                title,
-                                message,
-                                duration,
-                                timestamp: new Date().toISOString(),
-                            },
-                        ],
-                    }));
+                    const text = title || message || '';
+                    const description = title ? message : undefined;
+                    const fn = typeof toast[type] === 'function' ? toast[type] : toast;
+                    return fn(text, { description, duration });
                 },
 
                 removeNotification: (id) => {
-                    set((state) => ({
-                        notifications: state.notifications.filter(n => n.id !== id),
-                    }));
+                    toast.dismiss(id);
                 },
 
                 clearNotifications: () => {
-                    set({ notifications: [] });
+                    toast.dismiss();
                 },
 
                 // ========== SETTINGS ==========

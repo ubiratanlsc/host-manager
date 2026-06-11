@@ -1,10 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDroppable, useDraggable, useDndContext } from '@dnd-kit/core';
 import { GripVertical, X } from 'lucide-react';
 import LocalTerminal from '../terminals/LocalTerminal';
 import SSHTerminal from '../terminals/SSHTerminal';
 import { useSplitStore, useTerminalStore, useSSHStore } from '@/stores';
 import { Button } from '@/components/ui/button';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { cn } from '@/lib/utils';
 
 /**
@@ -89,8 +90,21 @@ const Pane = ({ tabId, paneId, terminalId, isSplitLayout }) => {
         data: { type: 'drop-zone', zone: 'right', paneId },
     });
 
-    const handleClose = async (e) => {
+    const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+
+    const requestClose = (e) => {
         e.stopPropagation();
+        // Só confirma se a sessão estiver conectada (shell local vivo, ou SSH
+        // presente e não desconectado). Caso contrário, fecha direto.
+        const connected = terminals.has(terminalId) || (!!session && !session.disconnected);
+        if (connected) {
+            setConfirmCloseOpen(true);
+        } else {
+            handleClose();
+        }
+    };
+
+    const handleClose = async () => {
         closePaneInSplit(tabId, paneId);
         if (terminals.has(terminalId)) {
             await killPty(terminalId);
@@ -133,12 +147,22 @@ const Pane = ({ tabId, paneId, terminalId, isSplitLayout }) => {
                         variant="ghost"
                         size="icon"
                         className="h-4 w-4 hover:bg-destructive/20 hover:text-destructive p-0 flex items-center justify-center transition-colors"
-                        onClick={handleClose}
+                        onClick={requestClose}
                     >
                         <X className="h-2.5 w-2.5" />
                     </Button>
                 </div>
             )}
+
+            <ConfirmDialog
+                open={confirmCloseOpen}
+                onOpenChange={setConfirmCloseOpen}
+                title="Fechar terminal?"
+                description={`A sessão "${name}" será encerrada.`}
+                confirmLabel="Fechar"
+                cancelLabel="Cancelar"
+                onConfirm={handleClose}
+            />
 
             {/* Terminal area */}
             <div className="flex-1 relative overflow-hidden">

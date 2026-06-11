@@ -8,7 +8,7 @@ import { LigaturesAddon } from '@xterm/addon-ligatures';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
 import SearchOverlay from '@/components/Search/SearchOverlay';
-import ContextMenu from '@/components/ui/context-menu';
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu';
 import { isTauri } from '@tauri-apps/api/core';
 import { useTerminalStore } from '@/stores';
 import { FontConfig, TerminalConfig, ClipboardConfig } from '@/stores';
@@ -70,7 +70,6 @@ const LocalTerminal = ({ terminalId }) => {
     const pasteRight = ClipboardConfig((s) => s.pasteRight);
     const { theme } = useThemeStore();
 
-    const [contextMenuPos, setContextMenuPos] = useState(null);
     const modals = useModalStore((s) => s.modals);
     const hasModalOpen = Object.values(modals).some(Boolean);
 
@@ -154,21 +153,6 @@ const LocalTerminal = ({ terminalId }) => {
             }
         });
 
-        const handleContextMenu = async (e) => {
-            e.preventDefault();
-            if (pasteRight) {
-                try {
-                    const text = await readText();
-                    if (text) {
-                        useTerminalStore.getState().writePty(terminalId, text);
-                    }
-                } catch (e) { console.warn('[terminal] clipboard read failed:', e); }
-            } else {
-                setContextMenuPos({ x: e.clientX, y: e.clientY });
-            }
-        };
-        containerRef.current?.addEventListener('contextmenu', handleContextMenu);
-
         xterm.attachCustomKeyEventHandler((event) => {
             // Ctrl+C para copiar se houver seleção
             if (event.ctrlKey && event.key === 'c' && event.type === 'keydown') {
@@ -245,7 +229,6 @@ const LocalTerminal = ({ terminalId }) => {
         window.addEventListener('terminal:snapshot', onSnapshot);
 
         return () => {
-            containerRef.current?.removeEventListener('contextmenu', handleContextMenu);
             window.removeEventListener('pty:stdout', onStdout);
             window.removeEventListener('terminal:snapshot', onSnapshot);
 
@@ -446,6 +429,17 @@ const LocalTerminal = ({ terminalId }) => {
         } catch (e) { console.warn('[terminal] clipboard read failed:', e); }
     };
 
+    // Modo "colar com botão direito": cola direto, sem abrir o menu de contexto.
+    const handleRightClickPaste = useCallback(async (e) => {
+        e.preventDefault();
+        try {
+            const text = await readText();
+            if (text) {
+                useTerminalStore.getState().writePty(terminalId, text);
+            }
+        } catch (err) { console.warn('[terminal] clipboard read failed:', err); }
+    }, [terminalId]);
+
     if (!terminalMeta) {
         return (
             <div className="flex items-center justify-center w-full h-full bg-[#1A1B1E] text-gray-400">
@@ -458,23 +452,25 @@ const LocalTerminal = ({ terminalId }) => {
     }
 
     return (
-        <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col relative group" style={{ backgroundColor: theme.background }}>
-            <div ref={terminalRef} className="absolute top-0 right-0 bottom-0 left-1.5" />
-            {isInitialized && searchAddonRef.current && (
-                <SearchOverlay searchAddon={searchAddonRef.current} />
-            )}
-            {contextMenuPos && (
-                <ContextMenu
-                    x={contextMenuPos.x}
-                    y={contextMenuPos.y}
-                    items={[
-                        { label: 'Copiar', onClick: handleCopy },
-                        { label: 'Colar', onClick: handlePaste },
-                    ]}
-                    onClose={() => setContextMenuPos(null)}
-                />
-            )}
-        </div>
+        <ContextMenu>
+            <ContextMenuTrigger asChild disabled={pasteRight}>
+                <div
+                    ref={containerRef}
+                    className="w-full h-full overflow-hidden flex flex-col relative group"
+                    style={{ backgroundColor: theme.background }}
+                    onContextMenu={pasteRight ? handleRightClickPaste : undefined}
+                >
+                    <div ref={terminalRef} className="absolute top-0 right-0 bottom-0 left-1.5" />
+                    {isInitialized && searchAddonRef.current && (
+                        <SearchOverlay searchAddon={searchAddonRef.current} />
+                    )}
+                </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-40">
+                <ContextMenuItem onSelect={handleCopy}>Copiar</ContextMenuItem>
+                <ContextMenuItem onSelect={handlePaste}>Colar</ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
     );
 };
 

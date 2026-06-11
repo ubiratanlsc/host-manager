@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import useAppStore from './useAppStore';
 
 // Constants
 const SSH_SPAWN_EVENT = 'EVENTS:SSH:SPAWN';
@@ -130,57 +131,39 @@ const useSSHStore = create(
                         set({ pendingStdout: pending });
                     });
 
-                    // Listener para exit do SSH
+                    // Listener para exit do SSH (desconexão inesperada)
                     const exitListener = await listen(SSH_EXIT_EVENT, ({ payload }) => {
-                        const { id, success, code } = payload;
+                        const { id } = payload;
+                        const session = get().sessions.get(id);
 
+                        // Sem sessão no store = fechamento intencional (killSSH já
+                        // removeu). Ou já marcada como desconectada: ignora (evita
+                        // toast duplicado).
+                        if (!session || session.disconnected) return;
+
+                        // Desconexão inesperada: mantém a aba, marca como
+                        // desconectada e notifica o usuário.
                         set((state) => {
                             const newSessions = new Map(state.sessions);
-                            const sessionArray = Array.from(newSessions.keys());
-                            const currentIndex = sessionArray.indexOf(id);
-
-                            // Remover sessão
-                            newSessions.delete(id);
-
-                            // Remover buffer
-                            const newBuffers = new Map(state.commandBuffers);
-                            newBuffers.delete(id);
-
-                            const newSerialized = new Map(state.serializedContent);
-                            newSerialized.delete(id);
-
-                            const newPending = new Map(state.pendingStdout);
-                            newPending.delete(id);
-
-                            const newRecentlyClosed = new Map(state.recentlyClosed);
-                            newRecentlyClosed.set(id, Date.now());
-
-                            const newAttached = new Map(state.attachedSessions);
-                            newAttached.delete(id);
-
-                            // Determinar próximo foco
-                            let newFocused = state.focusedSession;
-                            if (state.focusedSession === id) {
-                                if (newSessions.size > 0) {
-                                    const nextIndex = currentIndex < sessionArray.length - 1
-                                        ? currentIndex + 1
-                                        : currentIndex - 1;
-                                    newFocused = sessionArray[nextIndex] || Array.from(newSessions.keys())[0];
-                                } else {
-                                    newFocused = null;
-                                }
+                            const cur = newSessions.get(id);
+                            if (cur) {
+                                newSessions.set(id, { ...cur, disconnected: true, isOpen: false });
                             }
-
-                            return {
-                                sessions: newSessions,
-                                commandBuffers: newBuffers,
-                                focusedSession: newFocused,
-                                serializedContent: newSerialized,
-                                pendingStdout: newPending,
-                                recentlyClosed: newRecentlyClosed,
-                                attachedSessions: newAttached,
-                            };
+                            return { sessions: newSessions };
                         });
+
+                        useAppStore.getState().addNotification({
+                            type: 'warning',
+                            title: 'SSH desconectado',
+                            message: `${session.title || 'Sessão'} foi encerrada (servidor, timeout ou rede).`,
+                            duration: 6000,
+                        });
+
+                        // Limpa os restos no backend (task de escrita + registro),
+                        // mantendo a aba visível com o scrollback.
+                        if (isTauri()) {
+                            invoke(SSH_KILL_COMMAND, { id }).catch(() => { });
+                        }
                     });
 
                     // Restaurar sessões ativas do backend ANTES de marcar como inicializado
@@ -386,28 +369,6 @@ const useSSHStore = create(
                     await invoke(SSH_RESIZE_COMMAND, { id, size });
                 } catch (error) {
                     console.error(`[SSHStore] Failed to resize SSH ${id}:`, error);
-                }
-            },
-
-            /**
-             * Envia heartbeat para sessão
-             */
-            heartbeat: async (id) => {
-                try {
-                    await invoke('heartbeat', { id });
-                } catch (error) {
-                    console.error(`[SSHStore] Failed to send heartbeat to ${id}:`, error);
-                }
-            },
-
-            /**
-             * Limpa sessões inativas
-             */
-            cleanupInactiveSessions: async () => {
-                try {
-                    await invoke('cleanup_inactive_sessions');
-                } catch (error) {
-                    console.error('[SSHStore] Failed to cleanup inactive sessions:', error);
                 }
             },
 

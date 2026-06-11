@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useSplitStore, useTerminalStore, useSSHStore } from '@/stores';
 import { useDraggable, useDroppable, useDndContext } from '@dnd-kit/core';
-import ContextMenu from '@/components/ui/context-menu';
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu';
 import RenameDialog from '@/components/ui/RenameDialog';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 const getTabLabel = (tab, terminals, sessions) => {
     if (tab.type === 'single') {
@@ -29,7 +30,7 @@ const countTerminals = (tab) => {
     return count;
 };
 
-const TabItem = ({ tab, isActive, terminals, sessions, onTabClick, onClose, onContextMenu }) => {
+const TabItem = ({ tab, isActive, terminals, sessions, onTabClick, onRequestClose, onRename }) => {
     const label = getTabLabel(tab, terminals, sessions);
     const count = tab.type === 'split' ? countTerminals(tab) : 1;
     const tabText = tab.type === 'split' ? `${tab.label || 'Split'} (${count})` : label;
@@ -79,57 +80,64 @@ const TabItem = ({ tab, isActive, terminals, sessions, onTabClick, onClose, onCo
     const isSplitTarget = tab.type === 'split';
 
     return (
-        <div
-            id={`tab-el-${tab.id}`}
-            ref={setRefs}
-            style={style}
-            onClick={onTabClick}
-            onContextMenu={(e) => onContextMenu(e, tab)}
-            className={cn(
-                "group relative flex items-center gap-2 h-7 rounded-md px-2.5 cursor-pointer whitespace-nowrap select-none transition-all duration-150",
-                "border border-transparent dark:bg-[#25262B] dark:text-gray-400 text-gray-700 bg-gray-200",
-                "hover:bg-[#2C2D32] dark:hover:text-gray-100 hover:text-gray-900",
-                isActive && "dark:bg-[#1A1B1E] dark:text-white dark:border-gray-800 bg-white text-gray-900 border-gray-300 shadow-sm",
-                !showDropHint && isOver && "border-blue-500 bg-blue-500/10 scale-[1.02] shadow-[0_0_10px_rgba(59,130,246,0.3)]",
-                showDropHint && !isSplitTarget && "border-blue-500 bg-blue-500/15 scale-[1.02] shadow-[0_0_12px_rgba(59,130,246,0.4)]",
-                showDropHint && isSplitTarget && "border-amber-500 bg-amber-500/15 scale-[1.02] shadow-[0_0_12px_rgba(245,158,11,0.4)]",
-                isDragging && "z-50 opacity-40 border-dashed border-gray-600"
-            )}
-            {...attributes}
-            {...listeners}
-        >
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />
-            <span className="text-xs font-semibold truncate max-w-[100px]">{tabText}</span>
-
-            {showDropHint && (
-                <div className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider flex-shrink-0">
-                    {isSplitTarget ? (
-                        <>
-                            <Plus className="h-2.5 w-2.5 text-amber-400" />
-                            <span className="text-amber-400">Split</span>
-                        </>
-                    ) : (
-                        <>
-                            <SplitSquareVertical className="h-2.5 w-2.5 text-blue-400" />
-                            <span className="text-blue-400">Split</span>
-                        </>
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <div
+                    id={`tab-el-${tab.id}`}
+                    ref={setRefs}
+                    style={style}
+                    onClick={onTabClick}
+                    className={cn(
+                        "group relative flex items-center gap-2 h-7 rounded-md px-2.5 cursor-pointer whitespace-nowrap select-none transition-all duration-150",
+                        "border border-transparent dark:bg-[#25262B] dark:text-gray-400 text-gray-700 bg-gray-200",
+                        "hover:bg-[#2C2D32] dark:hover:text-gray-100 hover:text-gray-900",
+                        isActive && "dark:bg-[#1A1B1E] dark:text-white dark:border-gray-800 bg-white text-gray-900 border-gray-300 shadow-sm",
+                        !showDropHint && isOver && "border-blue-500 bg-blue-500/10 scale-[1.02] shadow-[0_0_10px_rgba(59,130,246,0.3)]",
+                        showDropHint && !isSplitTarget && "border-blue-500 bg-blue-500/15 scale-[1.02] shadow-[0_0_12px_rgba(59,130,246,0.4)]",
+                        showDropHint && isSplitTarget && "border-amber-500 bg-amber-500/15 scale-[1.02] shadow-[0_0_12px_rgba(245,158,11,0.4)]",
+                        isDragging && "z-50 opacity-40 border-dashed border-gray-600"
                     )}
-                </div>
-            )}
+                    {...attributes}
+                    {...listeners}
+                >
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />
+                    <span className="text-xs font-semibold truncate max-w-[100px]">{tabText}</span>
 
-            <Button
-                variant="ghost"
-                size="icon"
-                className="h-4 w-4 ml-auto opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive p-0 flex items-center justify-center flex-shrink-0 transition-opacity"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onClose();
-                }}
-                title="Fechar Aba"
-            >
-                <X className="h-2.5 w-2.5" />
-            </Button>
-        </div>
+                    {showDropHint && (
+                        <div className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider flex-shrink-0">
+                            {isSplitTarget ? (
+                                <>
+                                    <Plus className="h-2.5 w-2.5 text-amber-400" />
+                                    <span className="text-amber-400">Split</span>
+                                </>
+                            ) : (
+                                <>
+                                    <SplitSquareVertical className="h-2.5 w-2.5 text-blue-400" />
+                                    <span className="text-blue-400">Split</span>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-4 w-4 ml-auto opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive p-0 flex items-center justify-center flex-shrink-0 transition-opacity"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onRequestClose();
+                        }}
+                        title="Fechar Aba"
+                    >
+                        <X className="h-2.5 w-2.5" />
+                    </Button>
+                </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-44">
+                <ContextMenuItem onSelect={onRename}>Renomear Aba</ContextMenuItem>
+                <ContextMenuItem onSelect={onRequestClose}>Fechar Aba</ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
     );
 };
 
@@ -141,17 +149,12 @@ const GlobalTabBar = () => {
     const closePaneInSplit = useSplitStore((s) => s.closePaneInSplit);
     const renameTab = useSplitStore((s) => s.renameTab);
 
-    const [contextMenuPos, setContextMenuPos] = useState(null);
-    const [contextMenuTab, setContextMenuTab] = useState(null);
     const [renameOpen, setRenameOpen] = useState(false);
+    const [tabToRename, setTabToRename] = useState(null);
+    const [tabToClose, setTabToClose] = useState(null);
 
-    const handleContextMenu = (e, tab) => {
-        e.preventDefault();
-        setContextMenuPos({ x: e.clientX, y: e.clientY });
-        setContextMenuTab(tab);
-    };
-
-    const handleRenameTab = () => {
+    const handleRename = (tab) => {
+        setTabToRename(tab);
         setRenameOpen(true);
     };
 
@@ -184,6 +187,31 @@ const GlobalTabBar = () => {
         }
     };
 
+    // terminalId relevante para a aba (no split, o painel ativo)
+    const getTabTerminalId = (tab) => {
+        if (tab.type === 'single') return tab.terminalId;
+        const leaf = tab.nodes?.[tab.activePaneId];
+        return leaf?.type === 'leaf' ? leaf.terminalId : null;
+    };
+
+    // Conectado = shell local vivo, ou SSH presente e não marcado como desconectado.
+    const isConnected = (terminalId) => {
+        if (!terminalId) return false;
+        if (terminals.has(terminalId)) return true;
+        const s = sessions.get(terminalId);
+        if (s) return !s.disconnected;
+        return false;
+    };
+
+    // Só pede confirmação se a sessão estiver conectada; senão fecha direto.
+    const requestTabClose = (tab) => {
+        if (isConnected(getTabTerminalId(tab))) {
+            setTabToClose(tab);
+        } else {
+            handleTabClose(tab);
+        }
+    };
+
     // Droppable tab bar for pane extraction
     const { setNodeRef: setTabBarRef, isOver } = useDroppable({
         id: 'tab-bar',
@@ -210,26 +238,29 @@ const GlobalTabBar = () => {
                     terminals={terminals}
                     sessions={sessions}
                     onTabClick={() => setActiveTab(tab.id)}
-                    onClose={() => handleTabClose(tab)}
-                    onContextMenu={handleContextMenu}
+                    onRequestClose={() => requestTabClose(tab)}
+                    onRename={() => handleRename(tab)}
                 />
             ))}
-            {contextMenuPos && contextMenuTab && (
-                <ContextMenu
-                    x={contextMenuPos.x}
-                    y={contextMenuPos.y}
-                    items={[
-                        { label: 'Renomear Aba', onClick: handleRenameTab },
-                    ]}
-                    onClose={() => { setContextMenuPos(null); setContextMenuTab(null); }}
-                />
-            )}
             <RenameDialog
                 open={renameOpen}
                 onOpenChange={setRenameOpen}
-                currentLabel={contextMenuTab?.label}
+                currentLabel={tabToRename?.label}
                 onConfirm={(label) => {
-                    if (contextMenuTab) renameTab(contextMenuTab.id, label);
+                    if (tabToRename) renameTab(tabToRename.id, label);
+                }}
+            />
+            <ConfirmDialog
+                open={!!tabToClose}
+                onOpenChange={(o) => { if (!o) setTabToClose(null); }}
+                title="Fechar aba?"
+                description={`A sessão "${tabToClose ? getTabLabel(tabToClose, terminals, sessions) : ''}" será encerrada.`}
+                confirmLabel="Fechar"
+                cancelLabel="Cancelar"
+                onConfirm={() => {
+                    const t = tabToClose;
+                    setTabToClose(null);
+                    if (t) handleTabClose(t);
                 }}
             />
         </div>

@@ -2,6 +2,7 @@ use super::*;
 use crate::AppState;
 use cuid2;
 use portable_pty::PtySize;
+use socket2::{SockRef, TcpKeepalive};
 use ssh2::{CheckResult, HashType, HostKeyType, KeyboardInteractivePrompt, KnownHostFileKind, KnownHostKeyFormat};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -168,6 +169,16 @@ pub async fn spawn_ssh(
 
     let tcp = TcpStream::connect((host.as_str(), port)).map_err(|e| e.to_string())?;
 
+    // TCP keepalive em nível de SO: detecta peer morto (servidor caiu, rede
+    // sumiu) sem depender de tráfego da aplicação. Quando as sondas falham, o
+    // socket entra em erro e o loop de leitura encerra emitindo SSH_EXIT.
+    {
+        let keepalive = TcpKeepalive::new()
+            .with_time(Duration::from_secs(20))
+            .with_interval(Duration::from_secs(10));
+        let _ = SockRef::from(&tcp).set_tcp_keepalive(&keepalive);
+    }
+
     let mut sess = Session::new().map_err(|e| e.to_string())?;
 
     sess.set_tcp_stream(tcp);
@@ -252,8 +263,6 @@ pub async fn spawn_ssh(
     let channel = Arc::new(StdMutex::new(channel));
     let (stdin_tx, mut stdin_rx) = mpsc::channel::<Vec<u8>>(100);
 
-    let last_activity = Arc::new(StdMutex::new(SystemTime::now()));
-    let heartbeat = Arc::new(StdMutex::new(SystemTime::now()));
     let connected = Arc::new(StdMutex::new(true));
 
     // Task dedicada para escrita
@@ -325,6 +334,7 @@ pub async fn spawn_ssh(
 
     // Task dedicada para leitura
     let channel_read = Arc::clone(&channel);
+    let connected_read = Arc::clone(&connected);
     let app_handle_clone = app_handle.clone();
     let id_clone = id.clone();
     let stdout_task = tokio::task::spawn_blocking(move || {
@@ -332,6 +342,11 @@ pub async fn spawn_ssh(
         let mut buf = vec![0; 16384];
 
         loop {
+            // Encerramento gracioso: kill_ssh/shutdown setam `connected = false`.
+            if !connected_read.lock().map(|c| *c).unwrap_or(false) {
+                break;
+            }
+
             let mut channel_guard = match channel_read.lock() {
                 Ok(guard) => guard,
                 Err(e) => {
@@ -342,22 +357,26 @@ pub async fn spawn_ssh(
             };
 
             match channel_guard.read(&mut buf) {
-                Ok(n) => {
-                    if n > 0 {
-                        println!("ponto: 23 - Dados recebidos ({} bytes)", n);
-
-                        let _ = app_handle_clone.emit(
-                            SSH_STDOUT_EVENT,
-                            SshStdoutPayload {
-                                id: id_clone.clone(),
-                                bytes: buf[..n].to_vec(),
-                            },
-                        );
-                    } else {
-                        drop(channel_guard);
-                        thread::sleep(Duration::from_millis(10));
-                        continue;
+                Ok(0) => {
+                    // 0 bytes pode ser EOF real (canal fechado / `exit` remoto)
+                    // ou apenas ausência momentânea de dados.
+                    let eof = channel_guard.eof();
+                    drop(channel_guard);
+                    if eof {
+                        println!("ponto: 25 - Canal SSH em EOF (fechado pelo remoto)");
+                        break;
                     }
+                    thread::sleep(Duration::from_millis(10));
+                    continue;
+                }
+                Ok(n) => {
+                    let _ = app_handle_clone.emit(
+                        SSH_STDOUT_EVENT,
+                        SshStdoutPayload {
+                            id: id_clone.clone(),
+                            bytes: buf[..n].to_vec(),
+                        },
+                    );
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     drop(channel_guard);
@@ -372,7 +391,20 @@ pub async fn spawn_ssh(
 
             drop(channel_guard);
         }
-        println!("ponto: 27 - Task de leitura finalizada");
+
+        // Marca como desconectado e avisa o frontend (emitido uma única vez).
+        if let Ok(mut c) = connected_read.lock() {
+            *c = false;
+        }
+        let _ = app_handle_clone.emit(
+            SSH_EXIT_EVENT,
+            SshExitPayload {
+                id: id_clone.clone(),
+                success: true,
+                code: None,
+            },
+        );
+        println!("ponto: 27 - Task de leitura finalizada (SSH_EXIT emitido)");
     });
 
     let session = SshSession {
@@ -385,8 +417,6 @@ pub async fn spawn_ssh(
         stdin_tx,
         stdin_task,
         stdout_task,
-        last_activity,
-        heartbeat,
         connected,
     };
 
@@ -430,7 +460,7 @@ pub async fn write_ssh(
     id: String,
     data: String,
 ) -> Result<usize, String> {
-    let (stdin_tx, connected, last_activity) = {
+    let (stdin_tx, connected) = {
         let ssh_sessions = state.ssh_sessions.lock().await;
         let session = ssh_sessions
             .get(&id)
@@ -438,7 +468,6 @@ pub async fn write_ssh(
         (
             session.stdin_tx.clone(),
             Arc::clone(&session.connected),
-            Arc::clone(&session.last_activity),
         )
     };
 
@@ -447,11 +476,6 @@ pub async fn write_ssh(
         if !*connected {
             return Err("Sessão desconectada".to_string());
         }
-    }
-
-    // Atualizar timestamp de última atividade
-    if let Ok(mut last_activity) = last_activity.lock() {
-        *last_activity = SystemTime::now();
     }
 
     // Pass-through cru: enviamos exatamente os bytes que o usuário digitou
@@ -513,9 +537,34 @@ pub async fn resize_ssh(
 pub async fn kill_ssh(state: State<'_, AppState>, id: String) -> Result<(), String> {
     println!("ponto: 43 - Iniciando kill_ssh para ID: {}", id);
 
-    let mut ssh_sessions = state.ssh_sessions.lock().await;
-    if let Some(session) = ssh_sessions.remove(&id) {
-        println!("ponto: 44 - Sessão encontrada, encerrando tasks");
+    let session = {
+        let mut ssh_sessions = state.ssh_sessions.lock().await;
+        ssh_sessions.remove(&id)
+    };
+
+    if let Some(session) = session {
+        println!("ponto: 44 - Sessão encontrada, encerrando graciosamente");
+
+        // 1) Sinaliza o loop de leitura a parar (sem isto, a thread bloqueante
+        //    continuaria girando para sempre segurando o canal).
+        if let Ok(mut c) = session.connected.lock() {
+            *c = false;
+        }
+
+        // 2) Fecha o canal de forma limpa no servidor (best-effort) numa thread
+        //    bloqueante, para o sshd liberar a sessão imediatamente em vez de
+        //    esperar o timeout de TCP.
+        let channel = Arc::clone(&session.channel);
+        let _ = tokio::task::spawn_blocking(move || {
+            if let Ok(mut ch) = channel.lock() {
+                let _ = ch.send_eof();
+                let _ = ch.close();
+            }
+        })
+        .await;
+
+        // 3) Dropar a SshSession fecha o stdin_tx (encerra a task de escrita) e
+        //    libera o último Arc do canal. abort como salvaguarda.
         session.stdin_task.abort();
         session.stdout_task.abort();
     }
@@ -547,45 +596,6 @@ pub async fn list_ssh_sessions(state: State<'_, AppState>) -> Result<Vec<SshSpaw
 }
 
 #[tauri::command]
-pub async fn cleanup_inactive_sessions(state: State<'_, AppState>) -> Result<(), String> {
-    let mut ssh_sessions = state.ssh_sessions.lock().await;
-    let now = SystemTime::now();
-
-    let inactive_sessions: Vec<String> = ssh_sessions
-        .iter()
-        .filter_map(|(id, session)| {
-            let inactive = {
-                let last_activity = session.last_activity.lock().ok()?;
-                now.duration_since(*last_activity).ok()? > INACTIVE_TIMEOUT
-            };
-
-            let disconnected = {
-                let last_heartbeat = session.heartbeat.lock().ok()?;
-                now.duration_since(*last_heartbeat).ok()? > HEARTBEAT_TIMEOUT
-            };
-
-            if inactive || disconnected {
-                Some(id.clone())
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    for id in inactive_sessions {
-        if let Some(session) = ssh_sessions.remove(&id) {
-            println!(
-                "ponto: 50 - Encerrando sessão: {} (inativa ou desconectada)",
-                id
-            );
-            session.stdin_task.abort();
-            session.stdout_task.abort();
-        }
-    }
-
-    Ok(())
-}
-#[tauri::command]
 pub async fn respond_hostkey(
     state: State<'_, AppState>,
     prompt_id: String,
@@ -600,30 +610,15 @@ pub async fn respond_hostkey(
 }
 
 #[tauri::command]
-pub async fn heartbeat(
-    state: State<'_, AppState>,
-    id: String,
-    window_id: String,
-) -> Result<(), String> {
-    let ssh_sessions = state.ssh_sessions.lock().await;
-    if let Some(session) = ssh_sessions.get(&id) {
-        if let Ok(mut last_heartbeat) = session.heartbeat.lock() {
-            *last_heartbeat = SystemTime::now();
-        }
-        if let Ok(mut connected) = session.connected.lock() {
-            *connected = true;
-        }
-    }
-    Ok(())
-}
-
-#[tauri::command]
 pub async fn shutdown_all_sessions(state: State<'_, AppState>) -> Result<(), String> {
-    let mut ssh_sessions = state.ssh_sessions.lock().await;
-    for (id, session) in ssh_sessions.drain() {
-        println!("ponto: 60 - Encerrando sessão: {} (shutdown)", id);
-        session.stdin_task.abort();
-        session.stdout_task.abort();
+    let sessions: Vec<SshSession> = {
+        let mut ssh_sessions = state.ssh_sessions.lock().await;
+        ssh_sessions.drain().map(|(_, s)| s).collect()
+    };
+
+    for session in sessions {
+        println!("ponto: 60 - Encerrando sessão: {} (shutdown)", session.id);
+        let _ = tokio::task::spawn_blocking(move || session.shutdown()).await;
     }
     Ok(())
 }

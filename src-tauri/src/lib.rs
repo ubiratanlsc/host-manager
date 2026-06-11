@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 use std::collections::HashMap;
+use tauri::Manager;
 use tokio::sync::Mutex;
 
 use crate::pty::PtyProcess;
@@ -56,10 +57,32 @@ pub fn run() {
             ssh::commands::kill_ssh,
             ssh::commands::list_ssh_sessions,
             ssh::commands::respond_hostkey,
-            ssh::commands::cleanup_inactive_sessions,
-            ssh::commands::heartbeat,
             ssh::commands::shutdown_all_sessions,
         ])
+        .on_window_event(|window, event| {
+            // Ao fechar a janela: encerra PTYs locais e desconecta as sessões SSH
+            // de forma graciosa (envia EOF/close ao servidor) para o sshd liberar
+            // os recursos imediatamente, em vez de esperar o timeout de TCP.
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                let state = window.state::<AppState>();
+                tauri::async_runtime::block_on(async move {
+                    {
+                        let ptys = state.ptys.lock().await;
+                        for (_, pty) in ptys.iter() {
+                            let _ = pty.kill_tx.send(()).await;
+                        }
+                    }
+
+                    let sessions: Vec<ssh::SshSession> = {
+                        let mut ssh_sessions = state.ssh_sessions.lock().await;
+                        ssh_sessions.drain().map(|(_, s)| s).collect()
+                    };
+                    for session in sessions {
+                        session.shutdown();
+                    }
+                });
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
