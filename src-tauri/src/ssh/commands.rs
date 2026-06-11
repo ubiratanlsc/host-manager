@@ -236,22 +236,12 @@ pub async fn spawn_ssh(
 
     let mut channel = sess.channel_session().map_err(|e| e.to_string())?;
 
-    // Configurar o canal apropriadamente
-    let mut term_modes = ssh2::PtyModes::new();
-    term_modes.set_u32(ssh2::PtyModeOpcode::ECHO, 0); // Desabilita echo
-                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHOE, 0); // Desabilita erase
-                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHOK, 0); // Desabilita kill
-                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHONL, 0); // Desabilita newline echo
-                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ECHOCTL, 0); // Desabilita echo de controles
-                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ICRNL, 1); // Converte CR para NL na entrada
-                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::ONLCR, 1); // Mapeia NL para CR-NL na saída
-                                                      // term_modes.set_u32(ssh2::PtyModeOpcode::OPOST, 1);
-
+    // PTY interativo real: usamos os modos padrão do servidor (echo ligado,
+    // line discipline, etc). Assim o shell remoto cuida do echo, edição de
+    // linha, histórico (setas) E autocompletar com Tab nativamente. Cada tecla
+    // é encaminhada crua pelo frontend (pass-through), igual ao terminal local.
     channel
-        // .request_pty("xterm", None, None)
-        // .request_pty("xterm", Some(term_modes), None)
-        // .map_err(|e| e.to_string())?;
-        .request_pty("xterm-256color", Some(term_modes), None)
+        .request_pty("xterm-256color", None, None)
         .map_err(|e| e.to_string())?;
 
     channel.shell().map_err(|e| e.to_string())?;
@@ -464,8 +454,9 @@ pub async fn write_ssh(
         *last_activity = SystemTime::now();
     }
 
-    let data_with_newline = format!("{}\n", data);
-    let bytes = data_with_newline.into_bytes();
+    // Pass-through cru: enviamos exatamente os bytes que o usuário digitou
+    // (incluindo \r, \t, \x7f, sequências de escape). O shell remoto interpreta.
+    let bytes = data.into_bytes();
     let len = bytes.len();
 
     stdin_tx

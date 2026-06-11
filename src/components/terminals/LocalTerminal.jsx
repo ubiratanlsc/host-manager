@@ -118,6 +118,7 @@ const LocalTerminal = ({ terminalId }) => {
             lineHeight,
             scrollback: scrollbackLines,
             allowTransparency: true,
+            allowProposedApi: true,
         });
 
         const fitAddon = new FitAddon();

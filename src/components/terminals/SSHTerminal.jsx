@@ -144,21 +144,6 @@ const SSHTerminal = ({ sessionId }) => {
             }
         }
 
-        // Função auxiliar para redesenhar a linha do buffer
-        // oldCursorPos = posição onde o cursor ESTAVA na tela antes da mudança
-        const redrawLine = (xterm, oldCursorPos, newBuffer, newCursorPos) => {
-            if (!newBuffer || typeof oldCursorPos !== 'number') return;
-            if (oldCursorPos > 0) {
-                xterm.write('\b'.repeat(oldCursorPos));
-            }
-            xterm.write('\x1b[K');
-            xterm.write(newBuffer);
-            const moveBack = newBuffer.length - newCursorPos;
-            if (moveBack > 0) {
-                xterm.write('\b'.repeat(moveBack));
-            }
-        };
-
         // Auto-copiar ao selecionar texto
         xterm.onSelectionChange(() => {
             if (xterm.hasSelection()) {
@@ -176,10 +161,7 @@ const SSHTerminal = ({ sessionId }) => {
                 try {
                     const text = await readText();
                     if (text) {
-                        const result = await useSSHStore.getState().writeSSH(sessionId, text);
-                        if (result) {
-                            redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
-                        }
+                        useSSHStore.getState().writeSSH(sessionId, text);
                     }
                 } catch (e) { console.warn('[ssh-terminal] clipboard read failed:', e); }
             } else {
@@ -199,12 +181,9 @@ const SSHTerminal = ({ sessionId }) => {
             }
             // Ctrl+V para colar
             if (event.ctrlKey && event.key === 'v' && event.type === 'keydown') {
-                readText().then(async (text) => {
+                readText().then((text) => {
                     if (text) {
-                        const result = await useSSHStore.getState().writeSSH(sessionId, text);
-                        if (result) {
-                            redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
-                        }
+                        useSSHStore.getState().writeSSH(sessionId, text);
                     }
                 });
                 return false;
@@ -212,7 +191,7 @@ const SSHTerminal = ({ sessionId }) => {
             return true;
         });
 
-        xterm.onData(async (data) => {
+        xterm.onData((data) => {
             if (!isTauri() || isWebModeRef.current) {
                 if (data === '\r') {
                     xterm.writeln('');
@@ -221,67 +200,10 @@ const SSHTerminal = ({ sessionId }) => {
                 }
                 return;
             }
-
-            // Backspace - usa \b \b para apagar visualmente (mais confiável que redrawLine)
-            if (data === '\x7f' || data === '\b') {
-                const result = await useSSHStore.getState().writeSSH(sessionId, data);
-                if (result) {
-                    xterm.write('\b \b');
-                }
-                return;
-            }
-
-            // Capturar setas (Séquencias de escape ANSI)
-            if (data === '\x1b[A') { // Cima
-                const result = useSSHStore.getState().navigateSSHHistory(sessionId, 'up');
-                if (result) {
-                    redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
-                }
-                return;
-            }
-            if (data === '\x1b[B') { // Baixo
-                const result = useSSHStore.getState().navigateSSHHistory(sessionId, 'down');
-                if (result) {
-                    redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
-                }
-                return;
-            }
-            if (data === '\x1b[C') { // Direita
-                const result = useSSHStore.getState().moveSSHCursor(sessionId, 'right');
-                if (result) {
-                    xterm.write('\x1b[C');
-                }
-                return;
-            }
-            if (data === '\x1b[D') { // Esquerda
-                const result = useSSHStore.getState().moveSSHCursor(sessionId, 'left');
-                if (result) {
-                    xterm.write('\b');
-                }
-                return;
-            }
-
-            // Ctrl+C
-            if (data === '\x03') {
-                await useSSHStore.getState().writeSSH(sessionId, data);
-                return;
-            }
-
-            const result = await useSSHStore.getState().writeSSH(sessionId, data);
-
-            if (result) {
-                if (result.action === 'enter') {
-                    xterm.writeln('');
-                } else if (result.action === 'delete' || result.action === 'paste') {
-                    redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
-                } else if (result.action === 'write') {
-                    if (result.cursorPosition === result.buffer.length) {
-                        xterm.write(data);
-                    } else {
-                        redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
-                    }
-                }
-            }
+            // Pass-through cru: o shell remoto faz o echo e a edição de linha.
+            // Não escrevemos nada localmente (Tab, setas, backspace, etc. são
+            // tratados pelo shell e refletidos via stdout).
+            useSSHStore.getState().writeSSH(sessionId, data);
         });
 
         xterm.onResize((size) => {
@@ -303,9 +225,9 @@ const SSHTerminal = ({ sessionId }) => {
         const onStdout = (event) => {
             const detail = event?.detail;
             if (!detail || detail.id !== sessionId) return;
-            const text = String.fromCharCode(...detail.bytes);
-            const fixedData = text.replace(/\r?\n/g, "\r\n");
-            xterm.write(fixedData);
+            // Bytes crus: o xterm decodifica UTF-8 e sequências ANSI corretamente
+            // (essencial para acentos e apps TUI como vim/htop/less).
+            xterm.write(new Uint8Array(detail.bytes));
         };
 
         const onSnapshot = (event) => {
@@ -428,9 +350,7 @@ const SSHTerminal = ({ sessionId }) => {
         const pending = useSSHStore.getState().drainPendingStdout(sessionId);
         if (pending?.length) {
             for (const bytes of pending) {
-                const text = String.fromCharCode(...bytes);
-                const fixedData = text.replace(/\r?\n/g, "\r\n");
-                xterm.write(fixedData);
+                xterm.write(new Uint8Array(bytes));
             }
         }
 
