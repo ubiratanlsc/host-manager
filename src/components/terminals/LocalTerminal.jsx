@@ -8,9 +8,10 @@ import { LigaturesAddon } from '@xterm/addon-ligatures';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
 import SearchOverlay from '@/components/Search/SearchOverlay';
+import ContextMenu from '@/components/ui/context-menu';
 import { isTauri } from '@tauri-apps/api/core';
 import { useTerminalStore } from '@/stores';
-import { FontConfig } from '@/stores';
+import { FontConfig, TerminalConfig, ClipboardConfig } from '@/stores';
 import { useThemeStore } from '@/stores';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useModalStore } from '@/stores';
@@ -62,7 +63,14 @@ const LocalTerminal = ({ terminalId }) => {
     const font = FontConfig((s) => s.font);
     const fontSize = FontConfig((s) => s.fontSize);
     const ligatures = FontConfig((s) => s.ligatures);
+    const cursorBlink = TerminalConfig((s) => s.cursorBlink);
+    const cursorStyle = TerminalConfig((s) => s.cursorStyle);
+    const lineHeight = TerminalConfig((s) => s.lineHeight);
+    const scrollbackLines = TerminalConfig((s) => s.scrollback);
+    const pasteRight = ClipboardConfig((s) => s.pasteRight);
     const { theme } = useThemeStore();
+
+    const [contextMenuPos, setContextMenuPos] = useState(null);
     const modals = useModalStore((s) => s.modals);
     const hasModalOpen = Object.values(modals).some(Boolean);
 
@@ -102,13 +110,13 @@ const LocalTerminal = ({ terminalId }) => {
         if (!isReady || xtermRef.current) return;
 
         const xterm = new Terminal({
-            theme: {
-                ...theme
-            },
+            theme: { ...theme },
             fontFamily: font,
             fontSize: fontSize,
-            cursorBlink: true,
-            cursorStyle: 'bar',
+            cursorBlink,
+            cursorStyle,
+            lineHeight,
+            scrollback: scrollbackLines,
             allowTransparency: true,
         });
 
@@ -145,15 +153,18 @@ const LocalTerminal = ({ terminalId }) => {
             }
         });
 
-        // Botão direito do mouse para colar
         const handleContextMenu = async (e) => {
             e.preventDefault();
-            try {
-                const text = await readText();
-                if (text) {
-                    useTerminalStore.getState().writePty(terminalId, text);
-                }
-            } catch (e) { console.warn('[terminal] clipboard read failed:', e); }
+            if (pasteRight) {
+                try {
+                    const text = await readText();
+                    if (text) {
+                        useTerminalStore.getState().writePty(terminalId, text);
+                    }
+                } catch (e) { console.warn('[terminal] clipboard read failed:', e); }
+            } else {
+                setContextMenuPos({ x: e.clientX, y: e.clientY });
+            }
         };
         containerRef.current?.addEventListener('contextmenu', handleContextMenu);
 
@@ -219,7 +230,7 @@ const LocalTerminal = ({ terminalId }) => {
             if (!addon) return;
             try {
                 const content = addon.serialize({
-                    scrollback: 2000,
+                    scrollback: TerminalConfig.getState().scrollback,
                     excludeModes: false,
                     excludeAltBuffer: false,
                 });
@@ -241,7 +252,7 @@ const LocalTerminal = ({ terminalId }) => {
                 const addon = serializeAddonRef.current;
                 if (addon) {
                     const content = addon.serialize({
-                        scrollback: 2000,
+                        scrollback: TerminalConfig.getState().scrollback,
                         excludeModes: false,
                         excludeAltBuffer: false,
                     });
@@ -386,12 +397,53 @@ const LocalTerminal = ({ terminalId }) => {
         };
     }, [isInitialized, ligatures]);
 
-    // Atualiza as cores do terminal quando o tema muda
+    useEffect(() => {
+        const xterm = xtermRef.current;
+        if (!xterm || !isInitialized) return;
+        xterm.options.cursorBlink = cursorBlink;
+        xterm.options.cursorStyle = cursorStyle;
+    }, [cursorBlink, cursorStyle, isInitialized]);
+
+    useEffect(() => {
+        const xterm = xtermRef.current;
+        if (!xterm || !isInitialized) return;
+        xterm.options.lineHeight = lineHeight;
+    }, [lineHeight, isInitialized]);
+
+    useEffect(() => {
+        const xterm = xtermRef.current;
+        if (!xterm || !isInitialized) return;
+        xterm.options.scrollback = scrollbackLines;
+    }, [scrollbackLines, isInitialized]);
+
+    useEffect(() => {
+        const xterm = xtermRef.current;
+        if (!xterm || !isInitialized) return;
+        xterm.options.fontFamily = font;
+        xterm.options.fontSize = fontSize;
+    }, [font, fontSize, isInitialized]);
+
     useEffect(() => {
         const xterm = xtermRef.current;
         if (!xterm || !isInitialized) return;
         xterm.options.theme = { ...theme };
     }, [theme, isInitialized]);
+
+    const handleCopy = () => {
+        const xterm = xtermRef.current;
+        if (xterm && xterm.hasSelection()) {
+            writeText(xterm.getSelection());
+        }
+    };
+
+    const handlePaste = async () => {
+        try {
+            const text = await readText();
+            if (text) {
+                useTerminalStore.getState().writePty(terminalId, text);
+            }
+        } catch (e) { console.warn('[terminal] clipboard read failed:', e); }
+    };
 
     if (!terminalMeta) {
         return (
@@ -409,6 +461,17 @@ const LocalTerminal = ({ terminalId }) => {
             <div ref={terminalRef} className="absolute top-0 right-0 bottom-0 left-1.5" />
             {isInitialized && searchAddonRef.current && (
                 <SearchOverlay searchAddon={searchAddonRef.current} />
+            )}
+            {contextMenuPos && (
+                <ContextMenu
+                    x={contextMenuPos.x}
+                    y={contextMenuPos.y}
+                    items={[
+                        { label: 'Copiar', onClick: handleCopy },
+                        { label: 'Colar', onClick: handlePaste },
+                    ]}
+                    onClose={() => setContextMenuPos(null)}
+                />
             )}
         </div>
     );

@@ -8,8 +8,9 @@ import { LigaturesAddon } from '@xterm/addon-ligatures';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { isTauri } from '@tauri-apps/api/core';
-import { useSSHStore, FontConfig, useThemeStore, useModalStore } from '@/stores';
+import { useSSHStore, FontConfig, TerminalConfig, ClipboardConfig, useThemeStore, useModalStore } from '@/stores';
 import SearchOverlay from '@/components/Search/SearchOverlay';
+import ContextMenu from '@/components/ui/context-menu';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import '@xterm/xterm/css/xterm.css';
 
@@ -61,7 +62,14 @@ const SSHTerminal = ({ sessionId }) => {
     const font = FontConfig((s) => s.font);
     const fontSize = FontConfig((s) => s.fontSize);
     const ligatures = FontConfig((s) => s.ligatures);
+    const cursorBlink = TerminalConfig((s) => s.cursorBlink);
+    const cursorStyle = TerminalConfig((s) => s.cursorStyle);
+    const lineHeight = TerminalConfig((s) => s.lineHeight);
+    const scrollbackLines = TerminalConfig((s) => s.scrollback);
+    const pasteRight = ClipboardConfig((s) => s.pasteRight);
     const { theme } = useThemeStore();
+
+    const [contextMenuPos, setContextMenuPos] = useState(null);
     const modals = useModalStore((s) => s.modals);
     const hasModalOpen = Object.values(modals).some(Boolean);
 
@@ -104,14 +112,15 @@ const SSHTerminal = ({ sessionId }) => {
         if (!session || xtermRef.current) return;
 
         const xterm = new Terminal({
-            theme: {
-                ...theme,
-            },
+            theme: { ...theme },
             fontFamily: font,
             fontSize: fontSize,
-            lineHeight: 1.2,
-            cursorBlink: true,
+            cursorBlink,
+            cursorStyle,
+            lineHeight,
+            scrollback: scrollbackLines,
             allowTransparency: true,
+            allowProposedApi: true
         });
 
         const fitAddon = new FitAddon();
@@ -163,15 +172,19 @@ const SSHTerminal = ({ sessionId }) => {
         // Botão direito do mouse para colar
         const handleContextMenu = async (e) => {
             e.preventDefault();
-            try {
-                const text = await readText();
-                if (text) {
-                    const result = await useSSHStore.getState().writeSSH(sessionId, text);
-                    if (result) {
-                        redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
+            if (pasteRight) {
+                try {
+                    const text = await readText();
+                    if (text) {
+                        const result = await useSSHStore.getState().writeSSH(sessionId, text);
+                        if (result) {
+                            redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
+                        }
                     }
-                }
-            } catch (e) { console.warn('[ssh-terminal] clipboard read failed:', e); }
+                } catch (e) { console.warn('[ssh-terminal] clipboard read failed:', e); }
+            } else {
+                setContextMenuPos({ x: e.clientX, y: e.clientY });
+            }
         };
         terminalRef.current?.addEventListener('contextmenu', handleContextMenu);
 
@@ -209,6 +222,15 @@ const SSHTerminal = ({ sessionId }) => {
                 return;
             }
 
+            // Backspace - usa \b \b para apagar visualmente (mais confiável que redrawLine)
+            if (data === '\x7f' || data === '\b') {
+                const result = await useSSHStore.getState().writeSSH(sessionId, data);
+                if (result) {
+                    xterm.write('\b \b');
+                }
+                return;
+            }
+
             // Capturar setas (Séquencias de escape ANSI)
             if (data === '\x1b[A') { // Cima
                 const result = useSSHStore.getState().navigateSSHHistory(sessionId, 'up');
@@ -239,17 +261,20 @@ const SSHTerminal = ({ sessionId }) => {
                 return;
             }
 
+            // Ctrl+C
+            if (data === '\x03') {
+                await useSSHStore.getState().writeSSH(sessionId, data);
+                return;
+            }
+
             const result = await useSSHStore.getState().writeSSH(sessionId, data);
 
             if (result) {
                 if (result.action === 'enter') {
                     xterm.writeln('');
-                } else if (result.action === 'backspace' || result.action === 'delete' || result.action === 'paste') {
+                } else if (result.action === 'delete' || result.action === 'paste') {
                     redrawLine(xterm, result.oldCursorPos, result.buffer, result.cursorPosition);
-                } else if (result.action === 'interrupt') {
-                    // o servidor SSH ecoa o ^C e nova linha via onStdout
                 } else if (result.action === 'write') {
-                    // Se estiver no fim do buffer, apenas escreve. Se estiver no meio, redesenha.
                     if (result.cursorPosition === result.buffer.length) {
                         xterm.write(data);
                     } else {
@@ -290,7 +315,7 @@ const SSHTerminal = ({ sessionId }) => {
             if (!addon) return;
             try {
                 const content = addon.serialize({
-                    scrollback: 2000,
+                    scrollback: TerminalConfig.getState().scrollback,
                     excludeModes: false,
                     excludeAltBuffer: false,
                 });
@@ -309,7 +334,7 @@ const SSHTerminal = ({ sessionId }) => {
                 const addon = serializeAddonRef.current;
                 if (addon) {
                     const content = addon.serialize({
-                        scrollback: 2000,
+                        scrollback: TerminalConfig.getState().scrollback,
                         excludeModes: false,
                         excludeAltBuffer: false,
                     });
@@ -331,7 +356,7 @@ const SSHTerminal = ({ sessionId }) => {
                 const addon = serializeAddonRef.current;
                 if (addon) {
                     const content = addon.serialize({
-                        scrollback: 2000,
+                        scrollback: TerminalConfig.getState().scrollback,
                         excludeModes: false,
                         excludeAltBuffer: false,
                     });
@@ -489,14 +514,54 @@ const SSHTerminal = ({ sessionId }) => {
         };
     }, [isInitialized, ligatures]);
 
-    // Atualiza as cores do terminal quando o tema muda
+    useEffect(() => {
+        const xterm = xtermRef.current;
+        if (!xterm || !isInitialized) return;
+        xterm.options.cursorBlink = cursorBlink;
+        xterm.options.cursorStyle = cursorStyle;
+    }, [cursorBlink, cursorStyle, isInitialized]);
+
+    useEffect(() => {
+        const xterm = xtermRef.current;
+        if (!xterm || !isInitialized) return;
+        xterm.options.lineHeight = lineHeight;
+    }, [lineHeight, isInitialized]);
+
+    useEffect(() => {
+        const xterm = xtermRef.current;
+        if (!xterm || !isInitialized) return;
+        xterm.options.scrollback = scrollbackLines;
+    }, [scrollbackLines, isInitialized]);
+
+    useEffect(() => {
+        const xterm = xtermRef.current;
+        if (!xterm || !isInitialized) return;
+        xterm.options.fontFamily = font;
+        xterm.options.fontSize = fontSize;
+    }, [font, fontSize, isInitialized]);
+
     useEffect(() => {
         const xterm = xtermRef.current;
         if (!xterm || !isInitialized) return;
         xterm.options.theme = { ...theme };
     }, [theme, isInitialized]);
 
-    // Se sessão não existe, não renderizar nada
+    const handleCopy = () => {
+        const xterm = xtermRef.current;
+        if (xterm && xterm.hasSelection()) {
+            writeText(xterm.getSelection());
+        }
+    };
+
+    const handlePaste = async () => {
+        try {
+            const text = await readText();
+            if (text) {
+                await useSSHStore.getState().writeSSH(sessionId, text);
+            }
+        } catch (e) { console.warn('[ssh-terminal] clipboard read failed:', e); }
+    };
+
     if (!session) {
         return null;
     }
@@ -506,6 +571,17 @@ const SSHTerminal = ({ sessionId }) => {
             <div ref={terminalRef} className="absolute top-0 right-0 bottom-0 left-1.5" />
             {isInitialized && searchAddonRef.current && (
                 <SearchOverlay searchAddon={searchAddonRef.current} />
+            )}
+            {contextMenuPos && (
+                <ContextMenu
+                    x={contextMenuPos.x}
+                    y={contextMenuPos.y}
+                    items={[
+                        { label: 'Copiar', onClick: handleCopy },
+                        { label: 'Colar', onClick: handlePaste },
+                    ]}
+                    onClose={() => setContextMenuPos(null)}
+                />
             )}
         </div>
     );

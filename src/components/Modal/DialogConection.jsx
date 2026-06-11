@@ -62,7 +62,6 @@ export default function DialogConection() {
                 password: password || null,
             });
 
-            console.log('[DialogConection] SSH session spawned successfully');
             closeModal('connect');
 
             // Limpar form

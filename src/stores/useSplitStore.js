@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { isTauri } from '@tauri-apps/api/core';
-import { BaseDirectory, exists, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { BaseDirectory, exists, mkdir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import useTerminalStore from './useTerminalStore';
 import useSSHStore from './useSSHStore';
 
@@ -14,9 +14,8 @@ async function saveLayoutToDisk(tabs, activeTabId) {
     try {
         const data = JSON.stringify({ tabs, activeTabId });
         if (isTauri()) {
-            console.log('[SplitStore] Saving layout, tabs:', tabs.length);
+            await mkdir('', { baseDir: BaseDirectory.AppData, recursive: true });
             await writeTextFile(STORAGE_FILE, data, { baseDir: BaseDirectory.AppData });
-            console.log('[SplitStore] Layout saved successfully');
         } else {
             localStorage.setItem('host-manager-split-layout', data);
         }
@@ -30,11 +29,9 @@ async function loadLayoutFromDisk() {
         if (isTauri()) {
             const fileExists = await exists(STORAGE_FILE, { baseDir: BaseDirectory.AppData });
             if (!fileExists) {
-                console.log('[SplitStore] Layout file does not exist yet');
                 return null;
             }
             const data = await readTextFile(STORAGE_FILE, { baseDir: BaseDirectory.AppData });
-            console.log('[SplitStore] Loaded layout from disk:', JSON.stringify(data).substring(0, 200));
             return JSON.parse(data);
         } else {
             const raw = localStorage.getItem('host-manager-split-layout');
@@ -282,6 +279,18 @@ const useSplitStore = create(
                 set({ activeTabId: tabId });
             },
 
+            /**
+             * Renames a tab.
+             */
+            renameTab: (tabId, label) => {
+                set((state) => {
+                    const newTabs = state.tabs.map((t) =>
+                        t.id === tabId ? { ...t, label } : t
+                    );
+                    return { tabs: newTabs };
+                });
+            },
+
             // ========== SPLIT CREATION / EXPANSION ==========
 
             /**
@@ -516,10 +525,8 @@ const useSplitStore = create(
                 });
 
                 if (remainingTerminalId) {
-                    console.log('[SplitStore] closePaneInSplit: setting focus to', remainingTerminalId);
                     if (useTerminalStore.getState().terminals.has(remainingTerminalId)) {
                         useTerminalStore.getState().setFocused(remainingTerminalId);
-                        console.log('[SplitStore] closePaneInSplit: focusedTerminal now', useTerminalStore.getState().focusedTerminal);
                     } else if (useSSHStore.getState().sessions.has(remainingTerminalId)) {
                         useSSHStore.getState().setFocused(remainingTerminalId);
                     }
@@ -1034,24 +1041,14 @@ const useSplitStore = create(
 // ─── Async rehydration from disk ──────────────────────────────────────
 loadLayoutFromDisk().then((data) => {
     const state = useSplitStore.getState();
-    console.log('[SplitStore] Rehydrating from disk:', {
-        hasData: !!data,
-        tabsCount: data?.tabs?.length || 0,
-        activeTabId: data?.activeTabId,
-        currentTabsCount: state.tabs.length,
-        currentActiveTabId: state.activeTabId
-    });
-
     if (data && data.tabs?.length) {
         useSplitStore.setState({
             tabs: data.tabs,
             activeTabId: data.activeTabId ?? state.activeTabId,
             rehydrated: true
         });
-        console.log('[SplitStore] Layout restored successfully');
         saveLayoutToDisk(data.tabs, data.activeTabId);
     } else {
-        console.log('[SplitStore] No layout to restore');
         useSplitStore.setState({ rehydrated: true });
     }
 });

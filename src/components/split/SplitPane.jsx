@@ -71,7 +71,7 @@ const SplitPane = () => {
 
     if (!activeTab) {
         return (
-            <div className="flex-1 flex items-center justify-center text-gray-500 dark:bg-[#1A1B1E] bg-[#F1F3F5] h-full">
+            <div className="flex-1 flex items-center justify-center text-gray-500 h-full" onContextMenu={(e) => e.preventDefault()}>
                 <p className="text-sm select-none">Nenhum terminal ativo</p>
             </div>
         );

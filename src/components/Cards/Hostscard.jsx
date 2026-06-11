@@ -36,7 +36,6 @@ const HostCard = ({ host, onEdit, onConnect }) => {
                 identityFile: customer.identityFile,
             });
 
-            console.log('[HostCard] SSH session spawned successfully');
         } catch (error) {
             console.error('[HostCard] Error spawning SSH:', error);
             useAppStore.getState().addNotification({ type: 'error', title: 'Falha na conexão', message: error.message || error });

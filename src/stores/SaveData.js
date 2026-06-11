@@ -36,9 +36,12 @@ const persistConfig = async () => {
         cursorStyle: terminalState.cursorStyle,
         scrollback: terminalState.scrollback,
         lineHeight: terminalState.lineHeight,
+        // TerminalConfig
+        defaultShell: terminalState.defaultShell,
         // ClipboardConfig
         pasteRight: clipboardState.pasteRight,
         copyOnSelect: clipboardState.copyOnSelect,
+        mode: clipboardState.mode,
         // AppVersionConfig
         version: versionState.version,
     };

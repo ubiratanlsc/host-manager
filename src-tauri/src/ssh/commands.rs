@@ -464,7 +464,6 @@ pub async fn write_ssh(
         *last_activity = SystemTime::now();
     }
 
-    // let data_with_newline = format!("{}\r\n", data); isso aqui tava duplucando a saida
     let data_with_newline = format!("{}\n", data);
     let bytes = data_with_newline.into_bytes();
     let len = bytes.len();

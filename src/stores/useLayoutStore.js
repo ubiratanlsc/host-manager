@@ -244,7 +244,6 @@ const useLayoutStore = create((set, get) => ({
             activePane: newPaneId,
         });
 
-        console.log(`[LayoutStore] Created new pane ${newPaneId} with terminal ${terminalId}`);
         return newPaneId;
     },
 

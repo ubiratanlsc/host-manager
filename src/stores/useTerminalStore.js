@@ -65,8 +65,6 @@ const useTerminalStore = create(
                     }
                     const shells = await invoke(GET_SYSTEM_SHELLS_COMMAND, {});
                     set({ shells });
-                    console.log('shells', shells);
-
                     return shells;
                 } catch (error) {
                     console.error('[TerminalStore] Failed to load system shells:', error);
@@ -149,8 +147,6 @@ const useTerminalStore = create(
                     const exitListener = await listen(PTY_EXIT_EVENT, ({ payload }) => {
                         const { id, success, code } = payload;
 
-                        console.log(`[TerminalStore] Terminal ${id} exited. Success: ${success}, Code: ${code}`);
-
                         set((state) => {
                             const newTerminals = new Map(state.terminals);
                             const terminal = newTerminals.get(id);
@@ -174,7 +170,6 @@ const useTerminalStore = create(
                             newAttached.delete(id);
 
                             // Determinar próximo foco
-                            console.log('[TerminalStore] exitListener focus check:', { focusedTerminal: state.focusedTerminal, exitedId: id, idMatch: state.focusedTerminal === id });
                             let newFocused = state.focusedTerminal;
                             if (state.focusedTerminal === id) {
                                 if (newTerminals.size > 0) {
@@ -216,7 +211,6 @@ const useTerminalStore = create(
                                 const focused = state.focusedTerminal || existingPtys[existingPtys.length - 1].id;
                                 return { terminals: newTerminals, focusedTerminal: focused };
                             });
-                            console.log('[TerminalStore] Restored existing PTYs:', existingPtys.length);
                         }
                     } catch (e) {
                         console.error('[TerminalStore] Failed to fetch existing PTYs:', e);
@@ -228,7 +222,6 @@ const useTerminalStore = create(
                         isInitialized: true
                     });
 
-                    console.log('[TerminalStore] Listeners initialized successfully');
                 } catch (error) {
                     console.error('[TerminalStore] Failed to initialize listeners:', error);
                 }
@@ -254,7 +247,6 @@ const useTerminalStore = create(
                     attachedTerminals: new Map(),
                 });
 
-                console.log('[TerminalStore] Cleanup completed');
             },
 
             // ========== AÇÕES PTY ==========

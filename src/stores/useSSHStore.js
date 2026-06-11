@@ -134,8 +134,6 @@ const useSSHStore = create(
                     const exitListener = await listen(SSH_EXIT_EVENT, ({ payload }) => {
                         const { id, success, code } = payload;
 
-                        console.log(`[SSHStore] Session ${id} exited. Success: ${success}, Code: ${code}`);
-
                         set((state) => {
                             const newSessions = new Map(state.sessions);
                             const sessionArray = Array.from(newSessions.keys());
@@ -189,7 +187,6 @@ const useSSHStore = create(
                     try {
                         const activeSessions = await invoke(SSH_LIST_COMMAND);
                         if (activeSessions && activeSessions.length > 0) {
-                            console.log(`[SSHStore] Restoring ${activeSessions.length} active sessions`);
                             set((state) => {
                                 const newSessions = new Map(state.sessions);
                                 const newBuffers = new Map(state.commandBuffers);
@@ -233,7 +230,6 @@ const useSSHStore = create(
                         isInitialized: true
                     });
 
-                    console.log('[SSHStore] Listeners initialized successfully');
                 } catch (error) {
                     console.error('[SSHStore] Failed to initialize listeners:', error);
                 }
@@ -259,7 +255,6 @@ const useSSHStore = create(
                     attachedSessions: new Map(),
                 });
 
-                console.log('[SSHStore] Cleanup completed');
             },
 
             // ========== AÇÕES SSH ==========
@@ -345,7 +340,6 @@ const useSSHStore = create(
                     // Se for Enter, enviar comando acumulado
                     if (data === '\r') {
                         const command = cmdData.buffer;
-                        console.log(`[SSHStore] Sending command to ${id}:`, command);
 
                         // Enviar comando para o backend
                         await invoke(SSH_STDIN_COMMAND, { id, data: command });
@@ -375,7 +369,6 @@ const useSSHStore = create(
 
                     // Ctrl+C (\x03)
                     if (data === '\x03') {
-                        console.log(`[SSHStore] Sending SIGINT to ${id}`);
                         await invoke(SSH_STDIN_COMMAND, { id, data: '\x03' });
                         // Limpar buffer local
                         set((state) => {
@@ -450,6 +443,8 @@ const useSSHStore = create(
                         });
                         return { action: data.length > 1 ? 'paste' : 'write', char: data, buffer: newBuffer, cursorPosition: newPos, oldCursorPos: cmdData.cursorPosition };
                     }
+
+                    return null;
                 } catch (error) {
                     console.error(`[SSHStore] Failed to write to SSH ${id}:`, error);
                 }

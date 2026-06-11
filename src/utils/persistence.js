@@ -21,7 +21,6 @@ export async function saveData(data) {
             baseDir: BaseDirectory.AppData,
         });
 
-        console.log('✅ Dados salvos com sucesso');
         return true;
     } catch (error) {
         console.error('❌ Erro ao salvar dados:', error);
@@ -40,7 +39,6 @@ export async function loadData() {
         });
 
         if (!fileExists) {
-            console.log('ℹ️  Arquivo de dados não existe ainda');
             return null;
         }
 
@@ -49,7 +47,6 @@ export async function loadData() {
         });
 
         const data = JSON.parse(jsonData);
-        console.log('✅ Dados carregados com sucesso');
         return data;
     } catch (error) {
         console.error('❌ Erro ao carregar dados:', error);
@@ -112,7 +109,6 @@ export async function createBackup() {
             baseDir: BaseDirectory.AppData,
         });
 
-        console.log(`✅ Backup criado: ${backupFile}`);
         return true;
     } catch (error) {
         console.error('❌ Erro ao criar backup:', error);
@@ -134,7 +130,6 @@ export async function exportData(data, filename = 'export.json') {
             baseDir: BaseDirectory.Desktop,
         });
 
-        console.log(`✅ Dados exportados para: ${filename}`);
         return true;
     } catch (error) {
         console.error('❌ Erro ao exportar dados:', error);
@@ -153,7 +148,6 @@ export async function importData(filename) {
         });
 
         const data = JSON.parse(jsonData);
-        console.log('✅ Dados importados com sucesso');
         return data;
     } catch (error) {
         console.error('❌ Erro ao importar dados:', error);

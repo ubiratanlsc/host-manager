@@ -120,16 +120,6 @@ const MainLayout = () => {
 
     // Synchronize open backend terminals/sessions with frontend tabs
     useEffect(() => {
-        console.log('[MainLayout] Sync effect triggered:', {
-            rehydrated,
-            isTerminalInit,
-            isSSHInit,
-            terminalsCount: terminals.length,
-            sessionsCount: sessions.length,
-            tabsCount: tabs.length,
-            activeTabId
-        });
-
         // Collect all terminalIds currently present in any tabs
         const allTabTerminalIds = new Set();
         tabs.forEach((tab) => {
@@ -149,16 +139,12 @@ const MainLayout = () => {
         // are already part of a restored split layout, which would change
         // the activeTabId and break the split restoration.
         if (!rehydrated) {
-            console.log('[MainLayout] Waiting for rehydration...');
             return;
         }
-
-        console.log('[MainLayout] Processing terminals and sessions...');
 
         // Add tabs for any new terminals
         terminals.forEach((t) => {
             if (!allTabTerminalIds.has(t.id)) {
-                console.log('[MainLayout] Adding new tab for terminal:', t.id);
                 addSingleTab(t.id, t.shell?.name || 'Terminal');
                 setFocusedTerminal(t.id);
             }
@@ -167,7 +153,6 @@ const MainLayout = () => {
         // Add tabs for any new SSH sessions
         sessions.forEach((s) => {
             if (!allTabTerminalIds.has(s.id)) {
-                console.log('[MainLayout] Adding new tab for SSH session:', s.id);
                 const title = s.title || (s.config ? `${s.config.username}@${s.config.host}` : 'SSH');
                 addSingleTab(s.id, title);
                 setFocusedSession(s.id);
@@ -185,7 +170,6 @@ const MainLayout = () => {
 
             allTabTerminalIds.forEach((id) => {
                 if (!activeTerminalIds.has(id)) {
-                    console.log('[MainLayout] Removing dead terminal from tabs:', id);
                     removeTerminalFromAnyTab(id);
                 }
             });

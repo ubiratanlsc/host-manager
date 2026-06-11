@@ -19,8 +19,6 @@ export function useAppInitialization() {
     let isMounted = true;
 
     const init = async () => {
-      console.log('[App] Initializing stores...');
-
       // Carregar dados salvos e aplicar configurações globais
       initLoadData();
 
@@ -31,7 +29,6 @@ export function useAppInitialization() {
           initializeSSH(),
           loadShells(),
         ]);
-        console.log('[App] Stores initialized successfully');
       }
     };
 
@@ -40,7 +37,6 @@ export function useAppInitialization() {
     // Cleanup ao desmontar a aplicação
     return () => {
       isMounted = false;
-      console.log('[App] Cleaning up stores...');
       cleanupTerminal();
       cleanupSSH();
     };

@@ -43,10 +43,12 @@ const useLoadData = create((set) => ({
             if (configs.cursorStyle) TerminalConfig.getState().setCursorStyle(configs.cursorStyle);
             if (configs.scrollback) TerminalConfig.getState().setScrollback(configs.scrollback);
             if (configs.lineHeight) TerminalConfig.getState().setLineHeight(configs.lineHeight);
+            if (configs.defaultShell !== undefined) TerminalConfig.getState().setDefaultShell(configs.defaultShell);
 
             // ClipboardConfig
             if (configs.pasteRight !== undefined) ClipboardConfig.getState().setPasteRight(configs.pasteRight);
             if (configs.copyOnSelect !== undefined) ClipboardConfig.getState().setCopyOnSelect(configs.copyOnSelect);
+            if (configs.mode) ClipboardConfig.getState().setMode(configs.mode);
 
             // AppVersionConfig
             if (configs.version) AppVersionConfig.getState().setVersion(configs.version);

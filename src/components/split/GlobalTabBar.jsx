@@ -1,9 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { X, SplitSquareVertical, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useSplitStore, useTerminalStore, useSSHStore } from '@/stores';
 import { useDraggable, useDroppable, useDndContext } from '@dnd-kit/core';
+import ContextMenu from '@/components/ui/context-menu';
+import RenameDialog from '@/components/ui/RenameDialog';
 
 const getTabLabel = (tab, terminals, sessions) => {
     if (tab.type === 'single') {
@@ -27,7 +29,7 @@ const countTerminals = (tab) => {
     return count;
 };
 
-const TabItem = ({ tab, isActive, terminals, sessions, onTabClick, onClose }) => {
+const TabItem = ({ tab, isActive, terminals, sessions, onTabClick, onClose, onContextMenu }) => {
     const label = getTabLabel(tab, terminals, sessions);
     const count = tab.type === 'split' ? countTerminals(tab) : 1;
     const tabText = tab.type === 'split' ? `${tab.label || 'Split'} (${count})` : label;
@@ -82,6 +84,7 @@ const TabItem = ({ tab, isActive, terminals, sessions, onTabClick, onClose }) =>
             ref={setRefs}
             style={style}
             onClick={onTabClick}
+            onContextMenu={(e) => onContextMenu(e, tab)}
             className={cn(
                 "group relative flex items-center gap-2 h-7 rounded-md px-2.5 cursor-pointer whitespace-nowrap select-none transition-all duration-150",
                 "border border-transparent dark:bg-[#25262B] dark:text-gray-400 text-gray-700 bg-gray-200",
@@ -136,6 +139,21 @@ const GlobalTabBar = () => {
     const setActiveTab = useSplitStore((s) => s.setActiveTab);
     const removeTab = useSplitStore((s) => s.removeTab);
     const closePaneInSplit = useSplitStore((s) => s.closePaneInSplit);
+    const renameTab = useSplitStore((s) => s.renameTab);
+
+    const [contextMenuPos, setContextMenuPos] = useState(null);
+    const [contextMenuTab, setContextMenuTab] = useState(null);
+    const [renameOpen, setRenameOpen] = useState(false);
+
+    const handleContextMenu = (e, tab) => {
+        e.preventDefault();
+        setContextMenuPos({ x: e.clientX, y: e.clientY });
+        setContextMenuTab(tab);
+    };
+
+    const handleRenameTab = () => {
+        setRenameOpen(true);
+    };
 
     const terminals = useTerminalStore((s) => s.terminals);
     const sessions = useSSHStore((s) => s.sessions);
@@ -193,8 +211,27 @@ const GlobalTabBar = () => {
                     sessions={sessions}
                     onTabClick={() => setActiveTab(tab.id)}
                     onClose={() => handleTabClose(tab)}
+                    onContextMenu={handleContextMenu}
                 />
             ))}
+            {contextMenuPos && contextMenuTab && (
+                <ContextMenu
+                    x={contextMenuPos.x}
+                    y={contextMenuPos.y}
+                    items={[
+                        { label: 'Renomear Aba', onClick: handleRenameTab },
+                    ]}
+                    onClose={() => { setContextMenuPos(null); setContextMenuTab(null); }}
+                />
+            )}
+            <RenameDialog
+                open={renameOpen}
+                onOpenChange={setRenameOpen}
+                currentLabel={contextMenuTab?.label}
+                onConfirm={(label) => {
+                    if (contextMenuTab) renameTab(contextMenuTab.id, label);
+                }}
+            />
         </div>
     );
 };

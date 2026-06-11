@@ -72,7 +72,6 @@ export function MenuBar({ className, disabled = false }) {
                     ? shells.find(s => s.name === defaultShellCommand)
                     : null;
                 const selectedShell = preferred || shells[0];
-                console.log('[Home] Spawning with shell:', selectedShell);
                 await spawnPty(selectedShell);
             } else {
                 console.warn('[Home] No shells detected. Attempting fallback spawn...');
