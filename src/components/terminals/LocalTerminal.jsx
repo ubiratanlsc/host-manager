@@ -61,6 +61,11 @@ const LocalTerminal = ({ terminalId }) => {
     const isReady = !!terminalMeta;
 
     const [isInitialized, setIsInitialized] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
+    const searchOpenRef = useRef(false);
+    const setSearchOpenRef = useRef(null);
+    searchOpenRef.current = searchOpen;
+    setSearchOpenRef.current = setSearchOpen;
     const font = FontConfig((s) => s.font);
     const fontSize = FontConfig((s) => s.fontSize);
     const ligatures = FontConfig((s) => s.ligatures);
@@ -155,20 +160,30 @@ const LocalTerminal = ({ terminalId }) => {
         });
 
         xterm.attachCustomKeyEventHandler((event) => {
-            // Ctrl+C para copiar se houver seleção
-            if (event.ctrlKey && event.key === 'c' && event.type === 'keydown') {
+            if (event.type !== 'keydown') return true;
+            // Ctrl+F abre busca (preventDefault bloqueia find bar nativo do webview)
+            if (event.ctrlKey && event.key === 'f') {
+                event.preventDefault();
+                setSearchOpenRef.current?.(true);
+                return false;
+            }
+            // Escape fecha busca se aberta
+            if (event.key === 'Escape' && searchOpenRef.current) {
+                setSearchOpenRef.current?.(false);
+                return false;
+            }
+            // Ctrl+C copia se houver seleção
+            if (event.ctrlKey && event.key === 'c') {
                 if (xterm.hasSelection()) {
                     const selectedText = xterm.getSelection();
                     writeText(selectedText);
                     return false;
                 }
             }
-            // Ctrl+V para colar
-            if (event.ctrlKey && event.key === 'v' && event.type === 'keydown') {
+            // Ctrl+V cola
+            if (event.ctrlKey && event.key === 'v') {
                 readText().then(text => {
-                    if (text) {
-                        useTerminalStore.getState().writePty(terminalId, text);
-                    }
+                    if (text) useTerminalStore.getState().writePty(terminalId, text);
                 });
                 return false;
             }
@@ -474,7 +489,11 @@ const LocalTerminal = ({ terminalId }) => {
                 >
                     <div ref={terminalRef} className="absolute top-0 right-0 bottom-0 left-1.5" />
                     {isInitialized && searchAddonRef.current && (
-                        <SearchOverlay searchAddon={searchAddonRef.current} />
+                        <SearchOverlay
+                            searchAddon={searchAddonRef.current}
+                            isOpen={searchOpen}
+                            onOpenChange={setSearchOpen}
+                        />
                     )}
                     {isInitialized && (
                         <CommandSuggestions

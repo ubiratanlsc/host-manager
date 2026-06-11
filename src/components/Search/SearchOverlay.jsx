@@ -3,10 +3,16 @@ import { Search, ArrowUp, ArrowDown, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SearchIcon } from '@/components/animate-ui/icons/search';
 
-const SearchOverlay = ({ searchAddon }) => {
-    const [isOpen, setIsOpen] = useState(false);
+const SearchOverlay = ({ searchAddon, isOpen: isOpenProp, onOpenChange }) => {
+    const [isOpenInternal, setIsOpenInternal] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const inputRef = useRef(null);
+
+    const isOpen = isOpenProp !== undefined ? isOpenProp : isOpenInternal;
+    const setIsOpen = (v) => {
+        setIsOpenInternal(v);
+        onOpenChange?.(v);
+    };
 
     useEffect(() => {
         if (isOpen && inputRef.current) {
