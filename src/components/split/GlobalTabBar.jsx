@@ -10,6 +10,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 const getTabLabel = (tab, terminals, sessions) => {
     if (tab.type === 'single') {
+        if (tab.userLabel) return tab.userLabel;
         const terminalId = tab.terminalId;
         const t = terminals.get(terminalId);
         const s = sessions.get(terminalId);

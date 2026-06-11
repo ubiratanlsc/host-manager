@@ -285,7 +285,7 @@ const useSplitStore = create(
             renameTab: (tabId, label) => {
                 set((state) => {
                     const newTabs = state.tabs.map((t) =>
-                        t.id === tabId ? { ...t, label } : t
+                        t.id === tabId ? { ...t, label, userLabel: label } : t
                     );
                     return { tabs: newTabs };
                 });
