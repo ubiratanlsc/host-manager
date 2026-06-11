@@ -1,4 +1,5 @@
 import { remove } from "@tauri-apps/plugin-fs";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { create } from "zustand";
 
 const useConfigStore = create((set) => ({
@@ -52,7 +53,22 @@ const useConfigStore = create((set) => ({
         tags: data.tags || [],
         colors: data.colors || {},
         configs: data.configs || {}
-    }))
+    })),
+    updateCustomerStatus: (id, status) => set((state) => ({
+        customers: state.customers.map(c => c.id === id ? { ...c, status } : c),
+    })),
+    checkAllConnectivity: async () => {
+        if (!isTauri()) return;
+        const customers = useConfigStore.getState().customers;
+        await Promise.all(customers.map(async (c) => {
+            try {
+                const online = await invoke('check_host_connectivity', { host: c.host, port: c.port || 22 });
+                useConfigStore.getState().updateCustomerStatus(c.id, online ? 'online' : 'offline');
+            } catch {
+                useConfigStore.getState().updateCustomerStatus(c.id, 'unknown');
+            }
+        }));
+    }
 }));
 
 export default useConfigStore;

@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 use std::collections::HashMap;
+use std::time::Duration;
 use tauri::Manager;
 use tokio::sync::Mutex;
 
@@ -24,6 +25,21 @@ impl AppState {
             pending_hostkey: Mutex::new(HashMap::new()),
         }
     }
+}
+
+#[tauri::command]
+async fn check_host_connectivity(host: String, port: u16) -> bool {
+    tokio::task::spawn_blocking(move || {
+        use std::net::{TcpStream, ToSocketAddrs};
+        let addr = format!("{}:{}", host, port);
+        let sock_addr = match addr.to_socket_addrs().ok().and_then(|mut a| a.next()) {
+            Some(a) => a,
+            None => return false,
+        };
+        TcpStream::connect_timeout(&sock_addr, Duration::from_secs(3)).is_ok()
+    })
+    .await
+    .unwrap_or(false)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -58,6 +74,7 @@ pub fn run() {
             ssh::commands::list_ssh_sessions,
             ssh::commands::respond_hostkey,
             ssh::commands::shutdown_all_sessions,
+            check_host_connectivity,
         ])
         .on_window_event(|window, event| {
             // Ao fechar a janela: encerra PTYs locais e desconecta as sessões SSH

@@ -5,7 +5,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEffect, useState, useMemo } from "react";
-import { Terminal, Server, Globe, Edit2, LayoutList, LayoutGrid, Rows3, Search } from "lucide-react";
+import { Terminal, Server, Globe, Edit2, LayoutList, LayoutGrid, Rows3, Search, RefreshCw, Send, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useConfigStore, useModalStore, useSSHStore } from "@/stores";
@@ -121,10 +121,25 @@ function HostDetailCard({ customer, groupName }) {
 }
 
 export default function DialogListConections() {
-    const { customers, groups } = useConfigStore();
+    const { customers, groups, checkAllConnectivity } = useConfigStore();
     const { modals, closeModal, openModal, setEditingCustomer } = useModalStore();
     const [viewMode, setViewMode] = useState('blocks');
     const [search, setSearch] = useState('');
+    const [checking, setChecking] = useState(false);
+    const [broadcastMode, setBroadcastMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [broadcastCmd, setBroadcastCmd] = useState('');
+    const [broadcasting, setBroadcasting] = useState(false);
+    const spawnSSH = useSSHStore((s) => s.spawnSSH);
+    const sessions = useSSHStore((s) => s.sessions);
+    const writeSSH = useSSHStore((s) => s.writeSSH);
+
+    useEffect(() => {
+        if (modals.connections) {
+            setChecking(true);
+            checkAllConnectivity().finally(() => setChecking(false));
+        }
+    }, [modals.connections]);
 
     const searchFilter = (c) => {
         if (!search.trim()) return true;
@@ -155,6 +170,39 @@ export default function DialogListConections() {
         }
     }, [tabs, defaultTab]);
 
+    const toggleSelect = (id) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    };
+
+    const handleBroadcast = async () => {
+        if (!broadcastCmd.trim() || selectedIds.size === 0) return;
+        setBroadcasting(true);
+        const cmd = broadcastCmd.trim() + '\n';
+        const selected = customers.filter(c => selectedIds.has(c.id));
+        await Promise.all(selected.map(async (c) => {
+            const existing = [...sessions.values()].find(s =>
+                s.config?.host === c.host &&
+                s.config?.port === (c.port || 22) &&
+                s.config?.username === c.username &&
+                !s.disconnected
+            );
+            if (existing) {
+                await writeSSH(existing.id, cmd);
+            } else {
+                await spawnSSH({ host: c.host, port: c.port || 22, username: c.username, password: c.password, identityFile: c.identityFile }, cmd);
+            }
+        }));
+        setBroadcasting(false);
+        setBroadcastMode(false);
+        setSelectedIds(new Set());
+        setBroadcastCmd('');
+        closeModal('connections');
+    };
+
     const getCustomersForTab = (tabId) => {
         const base = (() => {
             if (tabId === '__all__') return customers;
@@ -177,10 +225,23 @@ export default function DialogListConections() {
 
         const withStatus = filteredCustomers.map(c => ({ ...c, status: c.status || 'unknown' }));
 
+        const wrapWithSelect = (customer, el) => broadcastMode ? (
+            <div
+                key={customer.id}
+                className={cn("relative cursor-pointer rounded-lg ring-2 transition-all", selectedIds.has(customer.id) ? "ring-primary" : "ring-transparent")}
+                onClick={() => toggleSelect(customer.id)}
+            >
+                <div className="absolute top-1.5 left-1.5 z-10">
+                    <input type="checkbox" readOnly checked={selectedIds.has(customer.id)} className="w-3.5 h-3.5 accent-primary pointer-events-none" />
+                </div>
+                <div className="pointer-events-none select-none">{el}</div>
+            </div>
+        ) : el;
+
         if (viewMode === 'list') {
             return (
                 <div className="flex flex-col gap-1.5">
-                    {withStatus.map(customer => (
+                    {withStatus.map(customer => wrapWithSelect(customer,
                         <HostListRow key={customer.id} customer={customer} groupName={groupName} />
                     ))}
                 </div>
@@ -190,7 +251,7 @@ export default function DialogListConections() {
         if (viewMode === 'details') {
             return (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {withStatus.map(customer => (
+                    {withStatus.map(customer => wrapWithSelect(customer,
                         <HostDetailCard key={customer.id} customer={customer} groupName={groupName} />
                     ))}
                 </div>
@@ -204,16 +265,10 @@ export default function DialogListConections() {
 
         return (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {withStatus.map(customer => (
+                {withStatus.map(customer => wrapWithSelect(customer,
                     <HostCard
                         key={customer.id}
-                        host={{
-                            status: customer.status,
-                            hostname: customer.name,
-                            group: groupName,
-                            ip: customer.host,
-                            port: customer.port
-                        }}
+                        host={{ status: customer.status, hostname: customer.name, group: groupName, ip: customer.host, port: customer.port }}
                         onEdit={() => handleEdit(customer)}
                     />
                 ))}
@@ -257,6 +312,26 @@ export default function DialogListConections() {
                                             <mode.icon className="w-3.5 h-3.5" />
                                         </button>
                                     ))}
+                                    <button
+                                        onClick={() => { setChecking(true); checkAllConnectivity().finally(() => setChecking(false)); }}
+                                        disabled={checking}
+                                        className="p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-50"
+                                        title="Verificar conectividade"
+                                    >
+                                        <RefreshCw className={cn("w-3.5 h-3.5", checking && "animate-spin")} />
+                                    </button>
+                                    <button
+                                        onClick={() => { setBroadcastMode(v => !v); setSelectedIds(new Set()); }}
+                                        className={cn(
+                                            "p-1 rounded-md transition-colors",
+                                            broadcastMode
+                                                ? "bg-primary text-primary-foreground"
+                                                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                                        )}
+                                        title="Selecionar hosts para broadcast"
+                                    >
+                                        <CheckSquare className="w-3.5 h-3.5" />
+                                    </button>
                                 </div>
                                 <div className="relative flex-1 max-w-md mx-auto">
                                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -307,6 +382,28 @@ export default function DialogListConections() {
                         </div>
                     </Tabs>
                 </div>
+                {broadcastMode && (
+                    <div className="border-t bg-muted/40 p-3 flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-muted-foreground shrink-0">
+                            {selectedIds.size} host{selectedIds.size !== 1 ? 's' : ''} selecionado{selectedIds.size !== 1 ? 's' : ''}
+                        </span>
+                        <input
+                            value={broadcastCmd}
+                            onChange={e => setBroadcastCmd(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleBroadcast()}
+                            placeholder="Comando para executar em todos..."
+                            className="flex-1 h-7 px-2 text-xs rounded-md border bg-background placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                        />
+                        <button
+                            onClick={handleBroadcast}
+                            disabled={broadcasting || selectedIds.size === 0 || !broadcastCmd.trim()}
+                            className="flex items-center gap-1.5 px-3 h-7 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
+                        >
+                            <Send className="w-3 h-3" />
+                            {broadcasting ? 'Executando...' : 'Executar'}
+                        </button>
+                    </div>
+                )}
             </DialogContent>
         </Dialog>
     );

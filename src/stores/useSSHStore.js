@@ -43,6 +43,7 @@ const useSSHStore = create(
             pendingStdout: new Map(),
             recentlyClosed: new Map(),
             attachedSessions: new Map(),
+            pendingCommands: new Map(),
 
             // ========== INICIALIZAÇÃO ==========
 
@@ -104,6 +105,19 @@ const useSSHStore = create(
                                 recentlyClosed: newRecentlyClosed,
                             };
                         });
+
+                        // Executar comando pendente se houver
+                        const pending = get().pendingCommands.get(id);
+                        if (pending) {
+                            set((state) => {
+                                const next = new Map(state.pendingCommands);
+                                next.delete(id);
+                                return { pendingCommands: next };
+                            });
+                            setTimeout(() => {
+                                invoke(SSH_STDIN_COMMAND, { id, data: pending }).catch(() => {});
+                            }, 600);
+                        }
                     });
 
                     // Listener para stdout do SSH
@@ -251,7 +265,7 @@ const useSSHStore = create(
              * @param {string} config.username - Usuário
              * @param {string} config.password - Senha (ou null para usar chave)
              */
-            spawnSSH: async (config) => {
+            spawnSSH: async (config, pendingCommand) => {
                 try {
                     if (!isTauri()) {
                         const id = crypto.randomUUID();
@@ -287,10 +301,10 @@ const useSSHStore = create(
                             };
                         });
 
-                        return;
+                        return id;
                     }
                     const { windowId, host, port = 22, username, password, identityFile } = config;
-                    await invoke(SSH_SPAWN_COMMAND, {
+                    const sessionId = await invoke(SSH_SPAWN_COMMAND, {
                         windowId: windowId || crypto.randomUUID(),
                         host,
                         port,
@@ -298,6 +312,14 @@ const useSSHStore = create(
                         password,
                         identityFile: identityFile || null,
                     });
+                    if (pendingCommand && sessionId) {
+                        set((state) => {
+                            const next = new Map(state.pendingCommands);
+                            next.set(sessionId, pendingCommand);
+                            return { pendingCommands: next };
+                        });
+                    }
+                    return sessionId;
                 } catch (error) {
                     console.error('[SSHStore] Failed to spawn SSH:', error);
                     throw error;
