@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import useCommandStore from '@/stores/useCommandStore';
-
+import { CubeIcon } from '@radix-ui/react-icons';
 const MIN_CHARS = 2;
 
 /**
@@ -214,10 +214,13 @@ export default function CommandSuggestions({ xtermRef, isReady, active, write })
                     onMouseEnter={() => setSel(i)}
                     onClick={() => accept(i)}
                     className={
-                        "flex w-full items-center gap-2 px-2 py-1 text-left text-sm font-mono " +
-                        (i === selectedIndex ? "bg-accent text-accent-foreground" : "text-popover-foreground")
+                        "flex w-full items-center gap-2 px-2 py-1 text-left text-[12px] leading-none font-mono transition-colors " +
+                        (i === selectedIndex
+                            ? "bg-[#2a2d31] text-[#d4d4d4] relative before:absolute before:left-0 before:top-0 before:h-full before:w-[2px] before:bg-[#8b5cf6]"
+                            : "text-[#9da1a6] hover:bg-[#2a2d31] hover:text-[#d4d4d4]")
                     }
                 >
+                    <CubeIcon className="text-primary w-4 h-4" />
                     <span className="truncate flex-1">{s.command}</span>
                     <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground font-sans">
                         {s.source === 'saved' ? 'salvo' : 'histórico'}
