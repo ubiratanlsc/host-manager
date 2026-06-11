@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import CommandsSettings from "@/components/Modal/CommandsSettings";
 import {
     useSaveData,
     useModalStore,
@@ -67,6 +68,8 @@ function NumberStepper({ value, onChange, step = 1, min, max }) {
 export default function DialogSettings() {
     const { persist, exportConfig, importConfig } = useSaveData();
     const { modals, closeModal } = useModalStore();
+    const settingsTab = useModalStore((s) => s.settingsTab);
+    const setSettingsTab = useModalStore((s) => s.setSettingsTab);
 
     // Theme Config
     const interfaceTheme = ThemeConfig((s) => s.theme);
@@ -150,11 +153,12 @@ export default function DialogSettings() {
                     </DialogHeader>
 
                     <div className="flex-1 overflow-y-auto p-6 grid gap-6">
-                        <Tabs defaultValue="appearance" className="w-full">
-                            <TabsList className="grid w-full grid-cols-4 mb-6">
+                        <Tabs value={settingsTab} onValueChange={setSettingsTab} className="w-full">
+                            <TabsList className="grid w-full grid-cols-5 mb-6">
                                 <TabsTrigger value="appearance">Aparência</TabsTrigger>
                                 <TabsTrigger value="terminal">Terminal</TabsTrigger>
                                 <TabsTrigger value="behavior">Comportamento</TabsTrigger>
+                                <TabsTrigger value="commands">Comandos</TabsTrigger>
                                 <TabsTrigger value="data">Dados</TabsTrigger>
                             </TabsList>
 
@@ -409,6 +413,10 @@ export default function DialogSettings() {
                                         </Select>
                                     </div>
                                 </div>
+                            </TabsContent>
+
+                            <TabsContent value="commands">
+                                <CommandsSettings />
                             </TabsContent>
                         </Tabs>
                     </div>

@@ -15,6 +15,7 @@ import MainLayout from '@/components/split/MainLayout';
 import { Toaster } from 'sonner';
 import QuickSearch from '@/components/Modal/QuickSearch';
 import HostKeyDialog from '@/components/Modal/HostKeyDialog';
+import CommandModals from '@/components/Modal/CommandModals';
 
 
 const App = () => {
@@ -70,6 +71,7 @@ const App = () => {
       <DialogTag onClose={() => closeModal('tag')} />
       <QuickSearch open={quickSearchOpen} onClose={() => setQuickSearchOpen(false)} />
       <HostKeyDialog />
+      <CommandModals />
       <Toaster theme={theme} position="bottom-right" richColors closeButton />
     </div>
   );

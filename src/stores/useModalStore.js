@@ -11,9 +11,14 @@ const useModalStore = create((set, get) => ({
         settings: false,
         tag: false,
         tagList: false,
+        saveCommand: false,
     },
     
     overlayCount: 0,
+
+    // Aba ativa do diálogo de Configurações (permite deep-link, ex.: abrir em "Comandos")
+    settingsTab: 'appearance',
+    setSettingsTab: (tab) => set({ settingsTab: tab }),
 
     // Retorna true se qualquer modal está aberto
     anyModalOpen: () => {

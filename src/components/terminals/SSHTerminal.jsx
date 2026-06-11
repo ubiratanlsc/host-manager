@@ -8,9 +8,10 @@ import { LigaturesAddon } from '@xterm/addon-ligatures';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { isTauri } from '@tauri-apps/api/core';
-import { useSSHStore, FontConfig, TerminalConfig, ClipboardConfig, useThemeStore, useModalStore } from '@/stores';
+import { useSSHStore, FontConfig, TerminalConfig, ClipboardConfig, useThemeStore, useModalStore, useCommandStore } from '@/stores';
 import SearchOverlay from '@/components/Search/SearchOverlay';
-import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu';
+import CommandSuggestions from './CommandSuggestions';
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import '@xterm/xterm/css/xterm.css';
 
@@ -485,6 +486,17 @@ const SSHTerminal = ({ sessionId }) => {
         } catch (err) { console.warn('[ssh-terminal] clipboard read failed:', err); }
     }, [sessionId]);
 
+    const openSaveCommand = () => {
+        const sel = xtermRef.current?.getSelection?.()?.trim();
+        const last = useCommandStore.getState().history[0];
+        useCommandStore.getState().setDraft({ command: sel || last || '' });
+        useModalStore.getState().openModal('saveCommand');
+    };
+    const openCommandManager = () => {
+        useModalStore.getState().setSettingsTab('commands');
+        useModalStore.getState().openModal('settings');
+    };
+
     if (!session) {
         return null;
     }
@@ -502,11 +514,22 @@ const SSHTerminal = ({ sessionId }) => {
                     {isInitialized && searchAddonRef.current && (
                         <SearchOverlay searchAddon={searchAddonRef.current} />
                     )}
+                    {isInitialized && (
+                        <CommandSuggestions
+                            xtermRef={xtermRef}
+                            isReady={isInitialized}
+                            active={isFocused}
+                            write={(d) => useSSHStore.getState().writeSSH(sessionId, d)}
+                        />
+                    )}
                 </div>
             </ContextMenuTrigger>
-            <ContextMenuContent className="w-40">
+            <ContextMenuContent className="w-48">
                 <ContextMenuItem onSelect={handleCopy}>Copiar</ContextMenuItem>
                 <ContextMenuItem onSelect={handlePaste}>Colar</ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem onSelect={openSaveCommand}>Salvar comando</ContextMenuItem>
+                <ContextMenuItem onSelect={openCommandManager}>Comandos salvos…</ContextMenuItem>
             </ContextMenuContent>
         </ContextMenu>
     );

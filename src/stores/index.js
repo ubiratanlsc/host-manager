@@ -14,6 +14,7 @@ export { default as useModalStore } from './useModalStore';
 export { default as useSplitStore } from './useSplitStore';
 export { default as useTabStore } from './useTabStore';
 export { default as useThemeStore } from './useThemeStore';
+export { default as useCommandStore } from './useCommandStore';
 
 // Config Componentized Stores
 export { default as ThemeConfig } from './ThemeConfig';
