@@ -27,6 +27,7 @@ const useAppStore = create(
                     savePasswords: true,
                     terminalFontSize: 14,
                     terminalTheme: 'default',
+                    tabLayout: 'grouped', // 'grouped' | 'flat'
                 },
 
                 // ========== THEME ==========
@@ -86,6 +87,12 @@ const useAppStore = create(
                     }));
                 },
 
+                setTabLayout: (layout) => {
+                    set((state) => ({
+                        settings: { ...state.settings, tabLayout: layout },
+                    }));
+                },
+
                 resetSettings: () => {
                     set({
                         settings: {
@@ -93,6 +100,7 @@ const useAppStore = create(
                             savePasswords: true,
                             terminalFontSize: 14,
                             terminalTheme: 'default',
+                            tabLayout: 'grouped',
                         },
                     });
                 },

@@ -10,9 +10,9 @@ import useSSHStore from './useSSHStore';
 
 const STORAGE_FILE = 'split-layout.json';
 
-async function saveLayoutToDisk(tabs, activeTabId) {
+async function saveLayoutToDisk(tabs, activeTabId, activeGroupId) {
     try {
-        const data = JSON.stringify({ tabs, activeTabId });
+        const data = JSON.stringify({ tabs, activeTabId, activeGroupId });
         if (isTauri()) {
             await mkdir('', { baseDir: BaseDirectory.AppData, recursive: true });
             await writeTextFile(STORAGE_FILE, data, { baseDir: BaseDirectory.AppData });
@@ -235,6 +235,7 @@ const useSplitStore = create(
             // ========== STATE ==========
             tabs: [],
             activeTabId: null,
+            activeGroupId: null,
             pendingSplitDrop: null, // { sourceTabId?, sourcePaneId?, sourceTerminalId, targetTabId, rect? }
             rehydrated: false,
 
@@ -243,12 +244,13 @@ const useSplitStore = create(
             /**
              * Creates a new single-terminal tab and activates it.
              */
-            addSingleTab: (terminalId, label = 'Terminal') => {
+            addSingleTab: (terminalId, label = 'Terminal', groupId = null) => {
                 const id = uuidv4();
-                const newTab = { id, type: 'single', terminalId, label };
+                const newTab = { id, type: 'single', terminalId, label, groupId };
                 set((state) => ({
                     tabs: [...state.tabs, newTab],
                     activeTabId: id,
+                    activeGroupId: groupId,
                 }));
                 return id;
             },
@@ -259,16 +261,24 @@ const useSplitStore = create(
             removeTab: (tabId) => {
                 set((state) => {
                     const idx = state.tabs.findIndex((t) => t.id === tabId);
+                    const removedTab = state.tabs[idx];
                     const newTabs = state.tabs.filter((t) => t.id !== tabId);
                     let newActiveTabId = state.activeTabId;
                     if (state.activeTabId === tabId) {
-                        if (newTabs.length > 0) {
+                        // Prefer staying in same group
+                        const sameGroup = newTabs.filter(t => t.groupId === removedTab?.groupId);
+                        if (sameGroup.length > 0) {
+                            const sameIdx = Math.min(idx, sameGroup.length - 1);
+                            newActiveTabId = sameGroup[sameIdx]?.id || sameGroup[0]?.id || null;
+                        } else if (newTabs.length > 0) {
                             newActiveTabId = newTabs[Math.min(idx, newTabs.length - 1)]?.id || null;
                         } else {
                             newActiveTabId = null;
                         }
                     }
-                    return { tabs: newTabs, activeTabId: newActiveTabId };
+                    const newActiveTab = newTabs.find(t => t.id === newActiveTabId);
+                    const newActiveGroupId = newActiveTab?.groupId ?? (newTabs.length > 0 ? newTabs[0].groupId : null);
+                    return { tabs: newTabs, activeTabId: newActiveTabId, activeGroupId: newActiveGroupId };
                 });
             },
 
@@ -276,7 +286,19 @@ const useSplitStore = create(
              * Activates a tab.
              */
             setActiveTab: (tabId) => {
-                set({ activeTabId: tabId });
+                set((state) => {
+                    const tab = state.tabs.find(t => t.id === tabId);
+                    return { activeTabId: tabId, activeGroupId: tab?.groupId ?? state.activeGroupId };
+                });
+            },
+
+            setActiveGroup: (groupId) => {
+                set((state) => {
+                    const tabsInGroup = state.tabs.filter(t => (t.groupId ?? null) === groupId);
+                    const alreadyActive = tabsInGroup.some(t => t.id === state.activeTabId);
+                    const newActiveTabId = alreadyActive ? state.activeTabId : (tabsInGroup[0]?.id ?? state.activeTabId);
+                    return { activeGroupId: groupId, activeTabId: newActiveTabId };
+                });
             },
 
             /**
@@ -348,6 +370,7 @@ const useSplitStore = create(
                             id: targetTab.id,
                             type: 'split',
                             label: 'Split',
+                            groupId: targetTab.groupId,
                             rootNodeId: rootBranchId,
                             nodes,
                             activePaneId: srcLeafId,
@@ -437,6 +460,7 @@ const useSplitStore = create(
                             id: targetTab.id,
                             type: 'split',
                             label: 'Split',
+                            groupId: targetTab.groupId,
                             rootNodeId: branchId,
                             nodes,
                             activePaneId: newLeafId,
@@ -503,6 +527,7 @@ const useSplitStore = create(
                             type: 'single',
                             terminalId: lastLeaf.terminalId,
                             label: 'Terminal',
+                            groupId: tab.groupId,
                         };
                         return { tabs: newTabs };
                     }
@@ -559,6 +584,7 @@ const useSplitStore = create(
                             type: 'single',
                             terminalId,
                             label: 'Terminal',
+                            groupId: tab.groupId,
                         };
                         return { tabs: newTabs, activeTabId: tab.id };
                     }
@@ -574,6 +600,7 @@ const useSplitStore = create(
                             type: 'single',
                             terminalId: lastLeaf.terminalId,
                             label: 'Terminal',
+                            groupId: tab.groupId,
                         };
                     } else {
                         const newActivePaneId = remainingLeaves.includes(tab.activePaneId)
@@ -593,6 +620,7 @@ const useSplitStore = create(
                         type: 'single',
                         terminalId,
                         label: 'Terminal',
+                        groupId: tab.groupId,
                     };
                     newTabs.push(newSingleTab);
 
@@ -641,6 +669,7 @@ const useSplitStore = create(
                                 type: 'single',
                                 terminalId: lastLeaf.terminalId,
                                 label: 'Terminal',
+                                groupId: sourceTab.groupId,
                             };
                         } else {
                             const newActivePaneId = remainingLeaves.includes(sourceTab.activePaneId)
@@ -689,6 +718,7 @@ const useSplitStore = create(
                             id: currentTarget.id,
                             type: 'split',
                             label: 'Split',
+                            groupId: currentTarget.groupId,
                             rootNodeId: rootBranchId,
                             nodes,
                             activePaneId: srcLeafId,
@@ -1025,11 +1055,11 @@ const useSplitStore = create(
             // ========== CLEANUP ==========
 
             clear: () => {
-                set({ tabs: [], activeTabId: null, pendingSplitDrop: null });
+                set({ tabs: [], activeTabId: null, activeGroupId: null, pendingSplitDrop: null });
             },
 
             resetLayout: () => {
-                set({ tabs: [], activeTabId: null, pendingSplitDrop: null });
+                set({ tabs: [], activeTabId: null, activeGroupId: null, pendingSplitDrop: null });
                 window.dispatchEvent(new Event('terminal:relayout'));
             },
 
@@ -1045,9 +1075,10 @@ loadLayoutFromDisk().then((data) => {
         useSplitStore.setState({
             tabs: data.tabs,
             activeTabId: data.activeTabId ?? state.activeTabId,
+            activeGroupId: data.activeGroupId ?? null,
             rehydrated: true
         });
-        saveLayoutToDisk(data.tabs, data.activeTabId);
+        saveLayoutToDisk(data.tabs, data.activeTabId, data.activeGroupId);
     } else {
         useSplitStore.setState({ rehydrated: true });
     }
@@ -1059,7 +1090,7 @@ useSplitStore.subscribe((state) => {
     if (!state.rehydrated) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-        saveLayoutToDisk(state.tabs, state.activeTabId);
+        saveLayoutToDisk(state.tabs, state.activeTabId, state.activeGroupId);
     }, 500);
 });
 

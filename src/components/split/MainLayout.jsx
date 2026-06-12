@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { useTerminalStore, useSSHStore, useSplitStore } from '@/stores';
+import { useTerminalStore, useSSHStore, useSplitStore, useConfigStore } from '@/stores';
 import SplitPane from './SplitPane';
 import GlobalTabBar from './GlobalTabBar';
 import SplitPositionMenu from './SplitPositionMenu';
@@ -142,19 +142,24 @@ const MainLayout = () => {
             return;
         }
 
-        // Add tabs for any new terminals
+        // Add tabs for any new terminals (local PTY → '__local__' group)
         terminals.forEach((t) => {
             if (!allTabTerminalIds.has(t.id)) {
-                addSingleTab(t.id, t.shell?.name || 'Terminal');
+                addSingleTab(t.id, t.shell?.name || 'Terminal', '__local__');
                 setFocusedTerminal(t.id);
             }
         });
 
-        // Add tabs for any new SSH sessions
+        // Add tabs for any new SSH sessions (resolve group from saved customer)
+        const customers = useConfigStore.getState().customers;
         sessions.forEach((s) => {
             if (!allTabTerminalIds.has(s.id)) {
                 const title = s.title || (s.config ? `${s.config.username}@${s.config.host}` : 'SSH');
-                addSingleTab(s.id, title);
+                const customer = customers.find(c =>
+                    c.host === s.config?.host && c.username === s.config?.username
+                );
+                const groupId = customer?.groups?.[0] || '__ungrouped__';
+                addSingleTab(s.id, title, groupId);
                 setFocusedSession(s.id);
             }
         });

@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
-import { X, SplitSquareVertical, Plus } from 'lucide-react';
+import React, { useMemo, useState, useCallback } from 'react';
+import { X, SplitSquareVertical, Plus, Layers, List } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useSplitStore, useTerminalStore, useSSHStore } from '@/stores';
+import { useSplitStore, useTerminalStore, useSSHStore, useConfigStore, useAppStore } from '@/stores';
 import { useDraggable, useDroppable, useDndContext } from '@dnd-kit/core';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu';
 import RenameDialog from '@/components/ui/RenameDialog';
@@ -31,7 +31,7 @@ const countTerminals = (tab) => {
     return count;
 };
 
-const TabItem = ({ tab, isActive, terminals, sessions, onTabClick, onRequestClose, onRename }) => {
+const TabItem = ({ tab, isActive, terminals, sessions, onTabClick, onRequestClose, onRename, compact = false }) => {
     const label = getTabLabel(tab, terminals, sessions);
     const count = tab.type === 'split' ? countTerminals(tab) : 1;
     const tabText = tab.type === 'split' ? `${tab.label || 'Split'} (${count})` : label;
@@ -89,14 +89,24 @@ const TabItem = ({ tab, isActive, terminals, sessions, onTabClick, onRequestClos
                     style={style}
                     onClick={onTabClick}
                     className={cn(
-                        "group relative flex items-center gap-2 h-7 rounded-md px-2.5 cursor-pointer whitespace-nowrap select-none transition-all duration-150",
-                        "border border-transparent dark:bg-[#25262B] dark:text-gray-400 text-gray-700 bg-gray-200",
-                        "hover:bg-[#2C2D32] dark:hover:text-gray-100 hover:text-gray-900",
-                        isActive && "dark:bg-[#1A1B1E] dark:text-white dark:border-gray-800 bg-white text-gray-900 border-gray-300 shadow-sm",
-                        !showDropHint && isOver && "border-blue-500 bg-blue-500/10 scale-[1.02] shadow-[0_0_10px_rgba(59,130,246,0.3)]",
-                        showDropHint && !isSplitTarget && "border-blue-500 bg-blue-500/15 scale-[1.02] shadow-[0_0_12px_rgba(59,130,246,0.4)]",
-                        showDropHint && isSplitTarget && "border-amber-500 bg-amber-500/15 scale-[1.02] shadow-[0_0_12px_rgba(245,158,11,0.4)]",
-                        isDragging && "z-50 opacity-40 border-dashed border-gray-600"
+                        "group relative flex items-center gap-2 cursor-pointer whitespace-nowrap select-none transition-all duration-150",
+                        compact ? [
+                            "h-6 px-2 rounded",
+                            "dark:text-gray-500 text-gray-500",
+                            "dark:hover:text-gray-200 hover:text-gray-800",
+                            isActive && "dark:text-white text-gray-900 dark:bg-white/5 bg-black/5",
+                            isOver && "dark:text-blue-400 text-blue-500",
+                            isDragging && "opacity-40",
+                        ] : [
+                            "h-7 rounded-md px-2.5",
+                            "border border-transparent dark:bg-[#25262B] dark:text-gray-400 text-gray-700 bg-gray-200",
+                            "hover:dark:bg-[#2C2D32] dark:hover:text-gray-100 hover:text-gray-900",
+                            isActive && "dark:bg-[#1A1B1E] dark:text-white dark:border-gray-800 bg-white text-gray-900 border-gray-300 shadow-sm",
+                            !showDropHint && isOver && "border-blue-500 bg-blue-500/10 scale-[1.02] shadow-[0_0_10px_rgba(59,130,246,0.3)]",
+                            showDropHint && !isSplitTarget && "border-blue-500 bg-blue-500/15 scale-[1.02] shadow-[0_0_12px_rgba(59,130,246,0.4)]",
+                            showDropHint && isSplitTarget && "border-amber-500 bg-amber-500/15 scale-[1.02] shadow-[0_0_12px_rgba(245,158,11,0.4)]",
+                            isDragging && "z-50 opacity-40 border-dashed border-gray-600",
+                        ]
                     )}
                     {...attributes}
                     {...listeners}
@@ -142,13 +152,30 @@ const TabItem = ({ tab, isActive, terminals, sessions, onTabClick, onRequestClos
     );
 };
 
+const GROUP_LABELS = {
+    '__local__': 'Local',
+    '__ungrouped__': 'Sem grupo',
+};
+
+const groupDotColor = (groupId) => {
+    if (groupId === '__local__') return 'bg-green-500';
+    if (groupId === '__ungrouped__') return 'bg-amber-500';
+    return 'bg-blue-500';
+};
+
 const GlobalTabBar = () => {
     const tabs = useSplitStore((s) => s.tabs);
     const activeTabId = useSplitStore((s) => s.activeTabId);
+    const activeGroupId = useSplitStore((s) => s.activeGroupId);
     const setActiveTab = useSplitStore((s) => s.setActiveTab);
+    const setActiveGroup = useSplitStore((s) => s.setActiveGroup);
     const removeTab = useSplitStore((s) => s.removeTab);
     const closePaneInSplit = useSplitStore((s) => s.closePaneInSplit);
     const renameTab = useSplitStore((s) => s.renameTab);
+
+    const groups = useConfigStore((s) => s.groups);
+    const tabLayout = useAppStore((s) => s.settings.tabLayout ?? 'grouped');
+    const setTabLayout = useAppStore((s) => s.setTabLayout);
 
     const [renameOpen, setRenameOpen] = useState(false);
     const [tabToRename, setTabToRename] = useState(null);
@@ -178,9 +205,7 @@ const GlobalTabBar = () => {
             }
             return;
         }
-
         removeTab(tab.id);
-
         if (terminals.has(tab.terminalId)) {
             await killPty(tab.terminalId);
         } else if (sessions.has(tab.terminalId)) {
@@ -188,23 +213,19 @@ const GlobalTabBar = () => {
         }
     };
 
-    // terminalId relevante para a aba (no split, o painel ativo)
     const getTabTerminalId = (tab) => {
         if (tab.type === 'single') return tab.terminalId;
         const leaf = tab.nodes?.[tab.activePaneId];
         return leaf?.type === 'leaf' ? leaf.terminalId : null;
     };
 
-    // Conectado = shell local vivo, ou SSH presente e não marcado como desconectado.
     const isConnected = (terminalId) => {
         if (!terminalId) return false;
         if (terminals.has(terminalId)) return true;
         const s = sessions.get(terminalId);
-        if (s) return !s.disconnected;
-        return false;
+        return s ? !s.disconnected : false;
     };
 
-    // Só pede confirmação se a sessão estiver conectada; senão fecha direto.
     const requestTabClose = (tab) => {
         if (isConnected(getTabTerminalId(tab))) {
             setTabToClose(tab);
@@ -213,36 +234,107 @@ const GlobalTabBar = () => {
         }
     };
 
-    // Droppable tab bar for pane extraction
+    // Build ordered group list from existing tabs
+    const tabGroups = useMemo(() => {
+        const seen = new Set();
+        const result = [];
+        // Order: preserve insertion order of first tab per group
+        for (const tab of tabs) {
+            const gid = tab.groupId ?? '__ungrouped__';
+            if (!seen.has(gid)) {
+                seen.add(gid);
+                const label = GROUP_LABELS[gid] ?? groups.find(g => g.id === gid)?.name ?? gid;
+                result.push({ id: gid, label });
+            }
+        }
+        return result;
+    }, [tabs, groups]);
+
+    // Resolve current group (fallback to first)
+    const currentGroupId = useMemo(() => {
+        if (tabGroups.length === 0) return null;
+        const valid = tabGroups.some(g => g.id === activeGroupId);
+        return valid ? activeGroupId : tabGroups[0].id;
+    }, [activeGroupId, tabGroups]);
+
+    // Sub-tabs for active group
+    const activeTabs = useMemo(
+        () => tabs.filter(t => (t.groupId ?? '__ungrouped__') === currentGroupId),
+        [tabs, currentGroupId]
+    );
+
+    // Droppable tab bar for pane extraction (on sub-tabs row)
     const { setNodeRef: setTabBarRef, isOver } = useDroppable({
         id: 'tab-bar',
         data: { type: 'tab-bar' },
     });
 
+    const isGrouped = tabLayout === 'grouped';
+    const visibleTabs = isGrouped ? activeTabs : tabs;
+
     if (tabs.length === 0) return null;
 
     return (
-        <div
-            ref={setTabBarRef}
-            data-testid="global-tab-bar"
-            className={cn(
-                "flex items-center gap-2 px-2 dark:bg-[#121212] bg-[#D7D7D7] h-9 flex-shrink-0 overflow-x-auto [&::-webkit-scrollbar]:hidden transition-colors duration-150 border-b dark:border-gray-900 border-gray-300",
-                isOver && "bg-blue-500/10 border-b-2 border-blue-500"
+        <div data-testid="global-tab-bar" className="flex flex-col flex-shrink-0">
+            {/* Group tabs row — only in grouped mode */}
+            {isGrouped && tabGroups.length > 0 && (
+                <div className="flex items-center gap-2 px-2 h-9 dark:bg-[#121212] bg-[#D7D7D7] border-b dark:border-gray-900 border-gray-300 overflow-x-auto [&::-webkit-scrollbar]:hidden flex-shrink-0" style={{ scrollbarWidth: 'none' }}>
+                    {tabGroups.map(group => {
+                        const count = tabs.filter(t => (t.groupId ?? '__ungrouped__') === group.id).length;
+                        const isActive = currentGroupId === group.id;
+                        return (
+                            <button
+                                key={group.id}
+                                onClick={() => setActiveGroup(group.id)}
+                                className={cn(
+                                    "flex items-center gap-2 h-7 rounded-md px-2.5 cursor-pointer whitespace-nowrap select-none transition-all duration-150 shrink-0",
+                                    "border border-transparent dark:bg-[#25262B] dark:text-gray-400 text-gray-700 bg-gray-200",
+                                    "hover:dark:bg-[#2C2D32] dark:hover:text-gray-100 hover:text-gray-900",
+                                    isActive && "dark:bg-[#1A1B1E] dark:text-white dark:border-gray-800 bg-white text-gray-900 border-gray-300 shadow-sm"
+                                )}
+                            >
+                                <div className={cn("w-2 h-2 rounded-full flex-shrink-0", groupDotColor(group.id))} />
+                                <span className="text-xs font-semibold truncate max-w-[120px]">{group.label}</span>
+                                <span className="text-[10px] font-normal dark:text-gray-500 text-gray-400 flex-shrink-0">{count}</span>
+                            </button>
+                        );
+                    })}
+                </div>
             )}
-            style={{ scrollbarWidth: 'none' }}
-        >
-            {tabs.map((tab) => (
-                <TabItem
-                    key={tab.id}
-                    tab={tab}
-                    isActive={tab.id === activeTabId}
-                    terminals={terminals}
-                    sessions={sessions}
-                    onTabClick={() => setActiveTab(tab.id)}
-                    onRequestClose={() => requestTabClose(tab)}
-                    onRename={() => handleRename(tab)}
-                />
-            ))}
+            {/* Tabs row */}
+            <div
+                ref={setTabBarRef}
+                className={cn(
+                    "flex items-center gap-2 px-2 dark:bg-[#121212] bg-[#D7D7D7] h-9 overflow-x-auto [&::-webkit-scrollbar]:hidden transition-colors duration-150 border-b dark:border-gray-900 border-gray-300",
+                    isOver && "bg-blue-500/10 border-b-2 border-blue-500"
+                )}
+                style={{ scrollbarWidth: 'none' }}
+            >
+                {visibleTabs.map((tab) => (
+                    <TabItem
+                        key={tab.id}
+                        tab={tab}
+                        isActive={tab.id === activeTabId}
+                        terminals={terminals}
+                        sessions={sessions}
+                        onTabClick={() => setActiveTab(tab.id)}
+                        onRequestClose={() => requestTabClose(tab)}
+                        onRename={() => handleRename(tab)}
+                        compact
+                    />
+                ))}
+                <div className="ml-auto flex-shrink-0">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 dark:text-gray-500 hover:dark:text-gray-200 p-0"
+                        title={isGrouped ? 'Modo flat (só abas)' : 'Modo agrupado (grupos + sub-abas)'}
+                        onClick={() => setTabLayout(isGrouped ? 'flat' : 'grouped')}
+                    >
+                        {isGrouped ? <List className="h-3.5 w-3.5" /> : <Layers className="h-3.5 w-3.5" />}
+                    </Button>
+                </div>
+            </div>
             <RenameDialog
                 open={renameOpen}
                 onOpenChange={setRenameOpen}
