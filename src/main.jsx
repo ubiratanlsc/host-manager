@@ -53,6 +53,22 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// Em produção, desativa o menu de contexto nativo do WebView (que inclui
+// "Inspecionar elemento") e os atalhos de devtools. No dev tudo é mantido
+// para depuração. Os menus de contexto da própria UI (Radix) continuam
+// funcionando porque tratam o evento no elemento antes deste handler global.
+if (import.meta.env.PROD) {
+  window.addEventListener("contextmenu", (e) => e.preventDefault());
+  window.addEventListener("keydown", (e) => {
+    const key = e.key.toLowerCase();
+    const isDevtoolsCombo =
+      e.key === "F12" ||
+      (e.ctrlKey && e.shiftKey && (key === "i" || key === "j" || key === "c")) ||
+      (e.ctrlKey && key === "u");
+    if (isDevtoolsCombo) e.preventDefault();
+  });
+}
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <ErrorBoundary>
     <App />
