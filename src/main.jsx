@@ -60,9 +60,9 @@ class ErrorBoundary extends React.Component {
 if (import.meta.env.PROD) {
   window.addEventListener("contextmenu", (e) => e.preventDefault());
   window.addEventListener("keydown", (e) => {
-    const key = e.key.toLowerCase();
+    const key = (e.key || "").toLowerCase();
     const isDevtoolsCombo =
-      e.key === "F12" ||
+      key === "f12" ||
       (e.ctrlKey && e.shiftKey && (key === "i" || key === "j" || key === "c")) ||
       (e.ctrlKey && key === "u");
     if (isDevtoolsCombo) e.preventDefault();
