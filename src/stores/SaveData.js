@@ -14,7 +14,7 @@ import AppVersionConfig from './AppVersionConfig';
  * This is the single source of truth for writing to disk.
  */
 const persistConfig = async () => {
-    const { customers, groups, tags, colors } = useConfigStore.getState();
+    const { customers, groups, tags, colors, externalTools } = useConfigStore.getState();
 
     // Montar configs a partir dos stores componentizados
     const themeState = ThemeConfig.getState();
@@ -52,6 +52,7 @@ const persistConfig = async () => {
         tags: [...tags],
         configs,
         colors: { ...colors },
+        externalTools: [...externalTools],
     };
 
     await writeFile(
@@ -130,7 +131,7 @@ const useSaveData = create(() => ({
     },
 
     getFullConfig: () => {
-        const { customers, groups, tags, colors } = useConfigStore.getState();
+        const { customers, groups, tags, colors, externalTools } = useConfigStore.getState();
         const themeState = ThemeConfig.getState();
         const fontState = FontConfig.getState();
         const terminalState = TerminalConfig.getState();
@@ -142,6 +143,7 @@ const useSaveData = create(() => ({
             groups: [...groups],
             tags: [...tags],
             colors: { ...colors },
+            externalTools: [...externalTools],
             configs: {
                 theme: themeState.theme,
                 colorTheme: themeState.colorTheme,

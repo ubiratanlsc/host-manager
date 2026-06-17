@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
     Dialog,
     DialogContent,
@@ -18,6 +19,7 @@ import {
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CommandsSettings from "@/components/Modal/CommandsSettings";
+import ExternalToolsSettings from "@/components/Modal/ExternalToolsSettings";
 import {
     useSaveData,
     useModalStore,
@@ -29,8 +31,11 @@ import {
 } from "@/stores";
 import useThemeStore from "@/stores/useThemeStore";
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { CheckCircle2, Download, Upload } from "lucide-react";
+import { CheckCircle2, Download, Upload, RefreshCw, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import AppVersionConfig from "@/stores/AppVersionConfig";
+import { checkForUpdates } from "@/lib/updater";
+import IconHM from "@/assets/icon-hm.svg";
 
 function NumberStepper({ value, onChange, step = 1, min, max }) {
     const dec = () => {
@@ -103,6 +108,18 @@ export default function DialogSettings() {
     // Available system shells
     const shells = useTerminalStore((s) => s.shells);
 
+    // App version
+    const appVersion = AppVersionConfig((s) => s.version);
+    const [checkingUpdate, setCheckingUpdate] = useState(false);
+    const handleCheckUpdate = async () => {
+        setCheckingUpdate(true);
+        try {
+            await checkForUpdates();
+        } finally {
+            setCheckingUpdate(false);
+        }
+    };
+
     // Clipboard Config
     const pasteRight = ClipboardConfig((s) => s.pasteRight);
     const setPasteRight = ClipboardConfig((s) => s.setPasteRight);
@@ -142,7 +159,7 @@ export default function DialogSettings() {
     return (
         <Dialog open={modals.settings} onOpenChange={handleOpenChange}>
             <DialogContent
-                className="w-[calc(100vw-2rem)] sm:w-[85vw] md:w-[70vw] lg:w-[60vw] xl:w-[50vw] max-w-[900px] gap-0 p-0 overflow-hidden"
+                className="w-[calc(100vw-2rem)] sm:w-[90vw] md:w-[85vw] lg:w-[80vw] xl:w-[72vw] max-w-[1150px] gap-0 p-0 overflow-hidden"
             >
                 <form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh]">
                     <DialogHeader className="px-6 py-4 border-b">
@@ -154,12 +171,14 @@ export default function DialogSettings() {
 
                     <div className="flex-1 overflow-y-auto p-6 grid gap-6">
                         <Tabs value={settingsTab} onValueChange={setSettingsTab} className="w-full">
-                            <TabsList className="grid w-full grid-cols-5 mb-6">
+                            <TabsList className="grid w-full grid-cols-7 mb-6">
                                 <TabsTrigger value="appearance">Aparência</TabsTrigger>
                                 <TabsTrigger value="terminal">Terminal</TabsTrigger>
                                 <TabsTrigger value="behavior">Comportamento</TabsTrigger>
                                 <TabsTrigger value="commands">Comandos</TabsTrigger>
+                                <TabsTrigger value="tools">Ferramentas</TabsTrigger>
                                 <TabsTrigger value="data">Dados</TabsTrigger>
+                                <TabsTrigger value="about">Sobre</TabsTrigger>
                             </TabsList>
 
                             <TabsContent value="appearance" className="grid gap-6">
@@ -417,6 +436,39 @@ export default function DialogSettings() {
 
                             <TabsContent value="commands">
                                 <CommandsSettings />
+                            </TabsContent>
+
+                            <TabsContent value="tools">
+                                <ExternalToolsSettings />
+                            </TabsContent>
+
+                            <TabsContent value="about" className="grid gap-6">
+                                <div className="flex items-center gap-4">
+                                    <img src={IconHM} alt="Host Manager" className="w-14 h-14 shrink-0" />
+                                    <div className="grid gap-0.5">
+                                        <span className="text-lg font-semibold leading-tight">Host Manager</span>
+                                        <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                            <Info className="w-3.5 h-3.5" />
+                                            Versão {appVersion || "—"}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="border-t pt-4 grid gap-2">
+                                    <Label className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Atualizações</Label>
+                                    <p className="text-sm text-muted-foreground">
+                                        Verifique se há uma nova versão disponível. Se houver, você será notificado para instalar.
+                                    </p>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="w-fit gap-2"
+                                        onClick={handleCheckUpdate}
+                                        disabled={checkingUpdate}
+                                    >
+                                        <RefreshCw className={cn("w-4 h-4", checkingUpdate && "animate-spin")} />
+                                        {checkingUpdate ? "Verificando..." : "Verificar atualizações"}
+                                    </Button>
+                                </div>
                             </TabsContent>
                         </Tabs>
                     </div>

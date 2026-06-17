@@ -1,9 +1,18 @@
 import React, { useState } from 'react';
-import { Terminal, Edit2, Server, Globe } from 'lucide-react';
+import { Terminal, Edit2, Server, Globe, Wrench } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+    ContextMenu,
+    ContextMenuTrigger,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuLabel,
+    ContextMenuSeparator,
+} from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { useModalStore, useSSHStore, useConfigStore, useAppStore } from '@/stores';
+import { launchTool } from '@/lib/externalTools';
 
 const statusDot = {
     online: 'bg-emerald-500',
@@ -15,6 +24,11 @@ const HostCard = ({ host, onEdit, onConnect }) => {
     const { closeModal } = useModalStore();
     const spawnSSH = useSSHStore((state) => state.spawnSSH);
     const { customers } = useConfigStore();
+    const externalTools = useConfigStore((s) => s.externalTools);
+
+    // Customer real (com senha/chave) ou fallback básico a partir do card
+    const customer = customers.find(c => c.host === host.ip)
+        || { host: host.ip, port: host.port, name: host.hostname };
 
     const handleConnect = async () => {
         try {
@@ -43,6 +57,8 @@ const HostCard = ({ host, onEdit, onConnect }) => {
     };
 
     return (
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
         <Card className="transition-all hover:shadow-md hover:-translate-y-0.5">
             <CardContent className="p-3">
                 <div className="flex items-center justify-between gap-2 mb-2">
@@ -69,6 +85,31 @@ const HostCard = ({ host, onEdit, onConnect }) => {
                 </div>
             </CardContent>
         </Card>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-52">
+                <ContextMenuItem onSelect={handleConnect}>
+                    <Terminal className="mr-2 h-4 w-4" />
+                    Conectar
+                </ContextMenuItem>
+                <ContextMenuItem onSelect={onEdit}>
+                    <Edit2 className="mr-2 h-4 w-4" />
+                    Editar
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuLabel className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Wrench className="h-3.5 w-3.5" /> Ferramentas
+                </ContextMenuLabel>
+                {externalTools.length === 0 ? (
+                    <ContextMenuItem disabled>Nenhuma ferramenta cadastrada</ContextMenuItem>
+                ) : (
+                    externalTools.map((tool) => (
+                        <ContextMenuItem key={tool.id} onSelect={() => launchTool(tool, customer)}>
+                            {tool.name}
+                        </ContextMenuItem>
+                    ))
+                )}
+            </ContextMenuContent>
+        </ContextMenu>
     );
 };
 

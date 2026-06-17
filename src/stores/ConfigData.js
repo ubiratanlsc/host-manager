@@ -8,6 +8,7 @@ const useConfigStore = create((set) => ({
     tags: [],
     colors: {},
     configs: {},
+    externalTools: [],
     addCustomer: (id, name, host, port, username, password, group, tagId, identityFile) => set((state) => ({
         customers: state.customers.some(c => c.id === id || c.host === host)
             ? state.customers
@@ -44,6 +45,15 @@ const useConfigStore = create((set) => ({
     addConfig: (key, value) => set((state) => ({
         configs: { ...state.configs, [key]: value },
     })),
+    addTool: (tool) => set((state) => ({
+        externalTools: [...state.externalTools, tool],
+    })),
+    editTool: (id, updatedData) => set((state) => ({
+        externalTools: state.externalTools.map(t => t.id === id ? { ...t, ...updatedData } : t),
+    })),
+    removeTool: (id) => set((state) => ({
+        externalTools: state.externalTools.filter(t => t.id !== id),
+    })),
     addColors: (id, obj) => set((state) => ({
         colors: { ...state.colors, [id]: { id: id, name: obj?.name, colors: obj?.colors } },
     })),
@@ -52,7 +62,8 @@ const useConfigStore = create((set) => ({
         groups: data.groups || [],
         tags: data.tags || [],
         colors: data.colors || {},
-        configs: data.configs || {}
+        configs: data.configs || {},
+        externalTools: data.externalTools || [],
     })),
     updateCustomerStatus: (id, status) => set((state) => ({
         customers: state.customers.map(c => c.id === id ? { ...c, status } : c),

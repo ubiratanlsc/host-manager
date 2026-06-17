@@ -1,7 +1,7 @@
 import * as React from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Server, FolderTree, Tags, Settings, Sun, Moon, Menu as MenuIcon, } from 'lucide-react'
+import { Server, FolderTree, Tags, Settings, Sun, Moon, Menu as MenuIcon, Download, Wrench, } from 'lucide-react'
 import {
     Copy,
     Minus,
@@ -12,7 +12,7 @@ import {
     Xmark,
 } from "iconoir-react";
 import { cn } from "@/lib/utils";
-import { useModalStore, ThemeConfig, TerminalConfig, useAppStore } from "@/stores";
+import { useModalStore, ThemeConfig, TerminalConfig, useAppStore, useConfigStore, useSSHStore } from "@/stores";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,11 +25,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { useTerminalStore } from "@/stores";
+import { checkForUpdates } from "@/lib/updater";
+import { launchTool } from "@/lib/externalTools";
+import AppVersionConfig from "@/stores/AppVersionConfig";
 import IconHM from "@/assets/icon-hm.svg";
 export function MenuBar({ className, disabled = false }) {
     const [isMobile, setIsMobile] = React.useState(false);
     const [openMax, setOpenMax] = React.useState(true);
     const { openModal } = useModalStore();
+    const appVersion = AppVersionConfig((s) => s.version);
     const theme = ThemeConfig((s) => s.theme);
     const setTheme = ThemeConfig((s) => s.setTheme);
     const shells = useTerminalStore((state) => state.shells);
@@ -87,6 +91,28 @@ export function MenuBar({ className, disabled = false }) {
             useAppStore.getState().addNotification({ type: 'error', title: 'Falha ao abrir terminal', message: error.message || error });
         }
     };
+    const handleCheckUpdates = () => {
+        checkForUpdates();
+    };
+
+    // Ferramentas externas na toolbar (lançadas sobre o host da sessão focada)
+    const externalTools = useConfigStore((s) => s.externalTools);
+    const customers = useConfigStore((s) => s.customers);
+    const focusedSession = useSSHStore((s) => s.focusedSession);
+    const sessions = useSSHStore((s) => s.sessions);
+    const toolbarTools = externalTools.filter((t) => t.showOnToolbar !== false);
+
+    const launchToolbarTool = (tool) => {
+        const session = focusedSession ? sessions.get(focusedSession) : null;
+        const hostName = session?.config?.host;
+        if (!hostName) {
+            useAppStore.getState().addNotification({ type: 'warning', title: 'Sem sessão ativa', message: 'Abra ou selecione uma conexão SSH para usar a ferramenta.' });
+            return;
+        }
+        const customer = customers.find((c) => c.host === hostName)
+            || { host: hostName, port: session.config.port, username: session.config.username };
+        launchTool(tool, customer);
+    };
     const handleToggleTheme = () => {
         const newTheme = theme === "dark" ? "light" : "dark";
         setTheme(newTheme);
@@ -129,6 +155,14 @@ export function MenuBar({ className, disabled = false }) {
                         Host Manager
                     </span>
                 </Button>
+                {appVersion && (
+                    <span
+                        className="text-[10px] font-medium text-muted-foreground tabular-nums px-1.5 py-0.5 rounded bg-muted/60 hidden sm:inline-block"
+                        title={`Versão ${appVersion}`}
+                    >
+                        v{appVersion}
+                    </span>
+                )}
 
                 {isMobile && (
                     <DropdownMenu>
@@ -162,6 +196,10 @@ export function MenuBar({ className, disabled = false }) {
                             <DropdownMenuItem onClick={() => openModal("settings")}>
                                 <Settings className="mr-2 h-4 w-4" />
                                 <span>Configurações</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleCheckUpdates}>
+                                <Download className="mr-2 h-4 w-4" />
+                                <span>Verificar atualizações</span>
                             </DropdownMenuItem>
 
                             <DropdownMenuSeparator />
@@ -279,6 +317,30 @@ export function MenuBar({ className, disabled = false }) {
                             Configurações
                         </Button>
 
+                        {toolbarTools.length > 0 && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="gap-2"
+                                        disabled={disabled}
+                                        title="Ferramentas externas"
+                                    >
+                                        <Wrench className="w-4 h-4" />
+                                        Ferramentas
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" className="w-52">
+                                    {toolbarTools.map((tool) => (
+                                        <DropdownMenuItem key={tool.id} onClick={() => launchToolbarTool(tool)}>
+                                            <Wrench className="mr-2 h-4 w-4" />
+                                            {tool.name}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
 
                     </div>
                 )}
@@ -286,6 +348,18 @@ export function MenuBar({ className, disabled = false }) {
 
             {/* Right Section: Theme & Window Controls */}
             <div className="flex items-center gap-2 [app-region:no-drag]">
+                {!isMobile && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="w-8 h-8 rounded-lg"
+                        onClick={handleCheckUpdates}
+                        disabled={disabled}
+                        title="Verificar atualizações"
+                    >
+                        <Download className="w-4 h-4" />
+                    </Button>
+                )}
                 <Button
                     variant="ghost"
                     size="icon"

@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::pty::PtyProcess;
 
+mod external_tools;
 mod pty;
 mod shell;
 mod ssh;
@@ -58,6 +59,13 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_system_fonts::init())
+        .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
+            Ok(())
+        })
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             shell::commands::get_system_shells,
@@ -75,6 +83,7 @@ pub fn run() {
             ssh::commands::respond_hostkey,
             ssh::commands::shutdown_all_sessions,
             check_host_connectivity,
+            external_tools::launch_external_tool,
         ])
         .on_window_event(|window, event| {
             // Ao fechar a janela: encerra PTYs locais e desconecta as sessões SSH

@@ -13,6 +13,7 @@ dist
 dist-ssr
 *.local
 testsprite_tests/*
+.localtest/
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

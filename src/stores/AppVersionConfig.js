@@ -7,7 +7,7 @@ Estado:
 
 */
 const AppVersionConfig = create((set) => ({
-    version: "0.0.1",
+    version: "",
     setVersion: (version) => set({ version }),
 }));
 

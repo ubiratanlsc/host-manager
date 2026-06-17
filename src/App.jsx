@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
+import { isTauri } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { MenuBar } from './components/header/MenuBar';
 import { useAppInitialization } from './hooks/useAppInitialization';
 import useModalStore from './stores/useModalStore';
 import ThemeConfig from './stores/ThemeConfig';
+import AppVersionConfig from './stores/AppVersionConfig';
+import { checkForUpdates } from '@/lib/updater';
 import DialogConection from './components/Modal/DialogConection';
 import DialogHost from './components/Modal/DialogHost';
 import DialogGroup from './components/Modal/DialogGroup';
@@ -29,6 +33,22 @@ const App = () => {
 
   // Verificar se qualquer sobreposição (Modal ou componente fixo como Select) está aberto
   const isOverlayActive = Object.values(modals).some(Boolean) || overlayCount > 0;
+
+  // Carrega a versão real do app e verifica atualizações silenciosamente no boot
+  useEffect(() => {
+    if (!isTauri()) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const version = await getVersion();
+        if (mounted) AppVersionConfig.getState().setVersion(version);
+      } catch (_) {
+        // ignora: ambiente sem Tauri ou API indisponível
+      }
+      checkForUpdates({ silent: true });
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   // Update HTML class for global dark mode (covers Portals/Modals)
   useEffect(() => {
