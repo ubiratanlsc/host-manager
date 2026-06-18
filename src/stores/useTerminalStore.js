@@ -4,11 +4,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import useAppStore from './useAppStore';
+import TerminalConfig from './TerminalConfig';
 
 // Constants
 const PTY_SPAWN_EVENT = 'EVENTS:PTY:SPAWN';
 const PTY_STDOUT_EVENT = 'EVENTS:PTY:STDOUT';
 const PTY_EXIT_EVENT = 'EVENTS:PTY:EXIT';
+const OPEN_HERE_EVENT = 'EVENTS:OPEN_HERE';
+const TAKE_OPEN_HERE_PATH_COMMAND = 'take_open_here_path';
 const GET_SYSTEM_SHELLS_COMMAND = 'get_system_shells';
 const PTY_SPAWN_COMMAND = 'spawn_pty';
 const PTY_STDIN_COMMAND = 'write_pty';
@@ -206,6 +209,18 @@ const useTerminalStore = create(
                         });
                     });
 
+                    // Listener para "Abrir no host-manager" (menu de contexto do
+                    // Windows) quando o app já está aberto (warm start). Cold start
+                    // é drenado por drainInitialOpenHere().
+                    const openHereListener = await listen(OPEN_HERE_EVENT, ({ payload }) => {
+                        const path = typeof payload === 'string' ? payload : payload?.path;
+                        if (path) {
+                            get().spawnPtyAt(path).catch((e) =>
+                                console.error('[TerminalStore] Failed to open terminal at path:', e)
+                            );
+                        }
+                    });
+
                     // Buscar PTYs existentes ANTES de marcar como inicializado
                     try {
                         const existingPtys = await invoke(LIST_PTYS_COMMAND);
@@ -231,7 +246,7 @@ const useTerminalStore = create(
 
                     // Armazenar unlisteners e marcar como inicializado
                     set({
-                        listeners: { spawnListener, stdoutListener, exitListener },
+                        listeners: { spawnListener, stdoutListener, exitListener, openHereListener },
                         isInitialized: true
                     });
 
@@ -250,6 +265,7 @@ const useTerminalStore = create(
                     state.listeners.spawnListener();
                     state.listeners.stdoutListener();
                     state.listeners.exitListener();
+                    state.listeners.openHereListener?.();
                 }
 
                 set({
@@ -296,6 +312,53 @@ const useTerminalStore = create(
                 } catch (error) {
                     console.error('[TerminalStore] Failed to spawn PTY:', error);
                     throw error;
+                }
+            },
+
+            /**
+             * Spawna um terminal local com o shell padrão já posicionado em `cwd`.
+             * Usado pelo "Abrir no host-manager" do menu de contexto do Windows.
+             */
+            spawnPtyAt: async (cwd, cols = 80, rows = 24) => {
+                const { shells, spawnPty } = get();
+                const defaultShellName = TerminalConfig.getState().defaultShell;
+
+                let base;
+                if (shells.length > 0) {
+                    // Respeita o shell padrão definido nas Configurações (mesma
+                    // lógica do botão "novo terminal" na MenuBar).
+                    const preferred = defaultShellName
+                        ? shells.find((s) => s.name === defaultShellName)
+                        : null;
+                    base = preferred || shells[0];
+                } else {
+                    base = {
+                        id: 'powershell',
+                        name: 'PowerShell',
+                        command: 'powershell.exe',
+                        args: [],
+                        env: {},
+                        icon: '',
+                    };
+                }
+
+                await spawnPty({ ...base, cwd }, cols, rows);
+            },
+
+            /**
+             * Drena o caminho inicial de "--open-here" (cold start): o app foi
+             * iniciado pelo menu de contexto do Windows. Chamado uma vez após os
+             * shells carregarem. No-op fora do Tauri ou sem caminho pendente.
+             */
+            drainInitialOpenHere: async () => {
+                if (!isTauri()) return;
+                try {
+                    const path = await invoke(TAKE_OPEN_HERE_PATH_COMMAND);
+                    if (path) {
+                        await get().spawnPtyAt(path);
+                    }
+                } catch (error) {
+                    console.error('[TerminalStore] Failed to drain initial open-here path:', error);
                 }
             },
 

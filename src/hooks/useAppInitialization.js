@@ -8,6 +8,7 @@ import { useTerminalStore, useSSHStore, useLoadData } from '@/stores';
 export function useAppInitialization() {
   const initializeTerminal = useTerminalStore((state) => state.initializeListeners);
   const loadShells = useTerminalStore((state) => state.loadSystemShells);
+  const drainInitialOpenHere = useTerminalStore((state) => state.drainInitialOpenHere);
   const cleanupTerminal = useTerminalStore((state) => state.cleanup);
 
   const initializeSSH = useSSHStore((state) => state.initializeListeners);
@@ -29,6 +30,11 @@ export function useAppInitialization() {
           initializeSSH(),
           loadShells(),
         ]);
+
+        // Cold start via "Abrir no host-manager": shells já carregados aqui.
+        if (isMounted) {
+          await drainInitialOpenHere();
+        }
       }
     };
 
@@ -40,5 +46,5 @@ export function useAppInitialization() {
       cleanupTerminal();
       cleanupSSH();
     };
-  }, [initializeTerminal, initializeSSH, loadShells, initLoadData, cleanupTerminal, cleanupSSH]);
+  }, [initializeTerminal, initializeSSH, loadShells, drainInitialOpenHere, initLoadData, cleanupTerminal, cleanupSSH]);
 }

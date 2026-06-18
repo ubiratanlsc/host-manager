@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 use crate::pty::PtyProcess;
 
 mod external_tools;
+mod open_here;
 mod pty;
 mod shell;
 mod ssh;
@@ -16,14 +17,17 @@ pub struct AppState {
     ptys: Mutex<HashMap<String, PtyProcess>>,
     ssh_sessions: Mutex<HashMap<String, ssh::SshSession>>,
     pending_hostkey: Mutex<HashMap<String, tokio::sync::oneshot::Sender<bool>>>,
+    /// Caminho passado via `--open-here` no cold start, drenado pelo frontend.
+    pending_open_here: Mutex<Option<String>>,
 }
 
 impl AppState {
-    fn new() -> Self {
+    fn new(pending_open_here: Option<String>) -> Self {
         Self {
             ptys: Mutex::new(HashMap::new()),
             ssh_sessions: Mutex::new(HashMap::new()),
             pending_hostkey: Mutex::new(HashMap::new()),
+            pending_open_here: Mutex::new(pending_open_here),
         }
     }
 }
@@ -53,7 +57,17 @@ pub fn run() {
     //     }
     // };
 
+    // Caminho do menu de contexto do Windows ("Abrir no host-manager") quando
+    // o app é iniciado já a partir de uma pasta (cold start).
+    let pending_open_here = open_here::path_from_current_args();
+
     tauri::Builder::default()
+        // O single-instance DEVE ser o primeiro plugin registrado. Garante uma
+        // única janela: uma segunda invocação (ex.: outro "Abrir no host-manager")
+        // é repassada para a instância viva em vez de abrir outra janela.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            open_here::handle_second_instance(app, &args);
+        }))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -66,7 +80,7 @@ pub fn run() {
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
             Ok(())
         })
-        .manage(AppState::new())
+        .manage(AppState::new(pending_open_here))
         .invoke_handler(tauri::generate_handler![
             shell::commands::get_system_shells,
             pty::commands::spawn_pty,
@@ -84,6 +98,7 @@ pub fn run() {
             ssh::commands::shutdown_all_sessions,
             check_host_connectivity,
             external_tools::launch_external_tool,
+            open_here::take_open_here_path,
         ])
         .on_window_event(|window, event| {
             // Ao fechar a janela: encerra PTYs locais e desconecta as sessões SSH
