@@ -3,6 +3,26 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import './App.css'
 
+// Neutraliza a Local Font Access API (`queryLocalFonts`) para suprimir o prompt
+// nativo do WebView ("Use as fontes no computador para poder criar conteúdo de
+// alta fidelidade"). O @xterm/addon-ligatures só chama essa API quando
+// `"queryLocalFonts" in window` é verdadeiro; sem ela, o addon usa seu conjunto
+// estático de ligaduras (fallbackLigatures), então as ligaduras continuam
+// funcionando. A lista de fontes da UI segue vindo do plugin do sistema
+// (tauri-plugin-system-fonts), nunca do browser.
+(() => {
+  try {
+    if (!("queryLocalFonts" in window)) return;
+    try { delete window.queryLocalFonts; } catch (_) { /* own prop pode não existir */ }
+    if ("queryLocalFonts" in window) {
+      // A API é definida em Window.prototype; remove de lá.
+      try { delete Object.getPrototypeOf(window).queryLocalFonts; } catch (_) { /* noop */ }
+    }
+  } catch (_) {
+    // Pior caso: mantém o comportamento atual (prompt nativo).
+  }
+})();
+
 window.onerror = function (msg, url, line, col, error) {
   const root = document.getElementById("root");
   if (root) {

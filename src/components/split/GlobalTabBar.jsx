@@ -278,7 +278,7 @@ const GlobalTabBar = () => {
         <div data-testid="global-tab-bar" className="flex flex-col flex-shrink-0">
             {/* Group tabs row — only in grouped mode */}
             {isGrouped && tabGroups.length > 0 && (
-                <div className="flex items-center gap-2 px-2 h-9 dark:bg-[#121212] bg-[#D7D7D7] border-b dark:border-gray-900 border-gray-300 overflow-x-auto [&::-webkit-scrollbar]:hidden flex-shrink-0" style={{ scrollbarWidth: 'none' }}>
+                <div onContextMenu={(e) => e.preventDefault()} className="flex items-center gap-2 px-2 h-9 dark:bg-[#121212] bg-[#D7D7D7] border-b dark:border-gray-900 border-gray-300 overflow-x-auto [&::-webkit-scrollbar]:hidden flex-shrink-0" style={{ scrollbarWidth: 'none' }}>
                     {tabGroups.map(group => {
                         const count = tabs.filter(t => (t.groupId ?? '__ungrouped__') === group.id).length;
                         const isActive = currentGroupId === group.id;
@@ -304,6 +304,7 @@ const GlobalTabBar = () => {
             {/* Tabs row */}
             <div
                 ref={setTabBarRef}
+                onContextMenu={(e) => e.preventDefault()}
                 className={cn(
                     "flex items-center gap-2 px-2 dark:bg-[#121212] bg-[#D7D7D7] h-9 overflow-x-auto [&::-webkit-scrollbar]:hidden transition-colors duration-150 border-b dark:border-gray-900 border-gray-300",
                     isOver && "bg-blue-500/10 border-b-2 border-blue-500"
