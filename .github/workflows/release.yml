@@ -62,6 +62,6 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Host Manager ${{ github.ref_name }}"
           releaseBody: "Veja os ativos abaixo para baixar e instalar."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
