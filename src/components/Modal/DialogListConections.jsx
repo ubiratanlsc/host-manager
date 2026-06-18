@@ -144,7 +144,7 @@ export default function DialogListConections() {
     const searchFilter = (c) => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
-        return c.name.toLowerCase().includes(q) || c.host.toLowerCase().includes(q);
+        return (c.name || '').toLowerCase().includes(q) || (c.host || '').toLowerCase().includes(q);
     };
 
     const tabs = useMemo(() => {

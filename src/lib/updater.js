@@ -48,9 +48,15 @@ export async function checkForUpdates({ silent = false } = {}) {
 
         return update;
     } catch (error) {
-        if (!silent) {
-            toast.error(`Falha ao verificar atualização: ${error?.message || error}`);
+        const message = error?.message || String(error);
+        // Sem release publicada / sem JSON de update válido no remoto não é erro
+        // do ponto de vista do usuário: simplesmente não há nada novo pra instalar.
+        const noReleaseAvailable = /valid release json|could not fetch|not found|404/i.test(message);
+        if (noReleaseAvailable) {
+            if (!silent) toast.success("Você já está na versão mais recente.");
+            return null;
         }
+        if (!silent) toast.error(`Falha ao verificar atualização: ${message}`);
         return null;
     }
 }

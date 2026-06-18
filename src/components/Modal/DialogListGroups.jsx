@@ -25,7 +25,7 @@ export default function DialogListGroups() {
     const filteredGroups = useMemo(() => {
         if (!search.trim()) return groups;
         const q = search.toLowerCase();
-        return groups.filter(g => g.name.toLowerCase().includes(q));
+        return groups.filter(g => (g.name || '').toLowerCase().includes(q));
     }, [groups, search]);
 
     const handleOpenChange = (open) => {

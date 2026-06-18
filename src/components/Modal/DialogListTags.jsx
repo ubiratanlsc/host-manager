@@ -25,7 +25,7 @@ export default function DialogListTags() {
     const filteredTags = useMemo(() => {
         if (!search.trim()) return tags;
         const q = search.toLowerCase();
-        return tags.filter(t => t.name.toLowerCase().includes(q) || (t.description && t.description.toLowerCase().includes(q)));
+        return tags.filter(t => (t.name || '').toLowerCase().includes(q) || (t.description && t.description.toLowerCase().includes(q)));
     }, [tags, search]);
 
     const handleOpenChange = (open) => {

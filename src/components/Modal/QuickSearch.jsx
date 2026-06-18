@@ -21,11 +21,11 @@ export default function QuickSearch({ open, onClose }) {
         if (!query.trim()) return [];
         const q = query.toLowerCase();
         const out = [];
-        const hosts = customers.filter(c => c.name.toLowerCase().includes(q) || c.host.toLowerCase().includes(q));
+        const hosts = customers.filter(c => (c.name || '').toLowerCase().includes(q) || (c.host || '').toLowerCase().includes(q));
         if (hosts.length) out.push({ section: 'hosts', items: hosts.slice(0, 8).map(c => ({ id: c.id, label: c.name, description: `${c.host}:${c.port || 22}`, data: c })) });
-        const filteredTags = tags.filter(t => t.name.toLowerCase().includes(q) || (t.description && t.description.toLowerCase().includes(q)));
+        const filteredTags = tags.filter(t => (t.name || '').toLowerCase().includes(q) || (t.description && t.description.toLowerCase().includes(q)));
         if (filteredTags.length) out.push({ section: 'tags', items: filteredTags.slice(0, 8).map(t => ({ id: t.id, label: t.name, description: t.description, data: t })) });
-        const filteredGroups = groups.filter(g => g.name.toLowerCase().includes(q));
+        const filteredGroups = groups.filter(g => (g.name || '').toLowerCase().includes(q));
         if (filteredGroups.length) out.push({ section: 'groups', items: filteredGroups.slice(0, 8).map(g => ({ id: g.id, label: g.name, data: g })) });
         return out;
     }, [query, customers, tags, groups]);
