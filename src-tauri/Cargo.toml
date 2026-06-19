@@ -1,6 +1,6 @@
 [package]
 name = "host-manager"
-version = "1.0.3"
+version = "1.0.4"
 description = "Cross-platform host manager with embedded terminal"
 authors = ["ubiratanlsc"]
 edition = "2021"

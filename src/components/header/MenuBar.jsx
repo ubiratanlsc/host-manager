@@ -28,7 +28,7 @@ import { useTerminalStore } from "@/stores";
 import { checkForUpdates } from "@/lib/updater";
 import { launchTool } from "@/lib/externalTools";
 import AppVersionConfig from "@/stores/AppVersionConfig";
-import IconHM from "@/assets/icon-hm.svg";
+import BrandLogo from "@/assets/brand-logo.svg";
 export function MenuBar({ className, disabled = false }) {
     const [isMobile, setIsMobile] = React.useState(false);
     const [openMax, setOpenMax] = React.useState(true);
@@ -150,9 +150,9 @@ export function MenuBar({ className, disabled = false }) {
                     onClick={() => openModal("dashboard")}
                     disabled={disabled}
                 >
-                    {/* <PcCheck className="w-5 h-5" /> */}
-                    <span className="font-bold text-lg hidden sm:inline-block text-foreground">
-                        Host Manager
+                    <img src={BrandLogo} alt="host-manager" className="w-7 h-7 rounded-md flex-shrink-0" />
+                    <span className="font-bold text-lg hidden sm:inline-block text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                        host-manager
                     </span>
                 </Button>
                 {appVersion && (

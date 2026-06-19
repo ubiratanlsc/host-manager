@@ -6,7 +6,6 @@ import FontConfig from './FontConfig';
 import ThemeConfig from './ThemeConfig';
 import TerminalConfig from './TerminalConfig';
 import ClipboardConfig from './ClipboardConfig';
-import AppVersionConfig from './AppVersionConfig';
 
 /**
  * Persists the entire ConfigStore state to config.json.
@@ -21,8 +20,6 @@ const persistConfig = async () => {
     const fontState = FontConfig.getState();
     const terminalState = TerminalConfig.getState();
     const clipboardState = ClipboardConfig.getState();
-    const versionState = AppVersionConfig.getState();
-
     const configs = {
         // ThemeConfig
         theme: themeState.theme,
@@ -42,8 +39,6 @@ const persistConfig = async () => {
         pasteRight: clipboardState.pasteRight,
         copyOnSelect: clipboardState.copyOnSelect,
         mode: clipboardState.mode,
-        // AppVersionConfig
-        version: versionState.version,
     };
 
     const dataToSave = {
@@ -136,7 +131,6 @@ const useSaveData = create(() => ({
         const fontState = FontConfig.getState();
         const terminalState = TerminalConfig.getState();
         const clipboardState = ClipboardConfig.getState();
-        const versionState = AppVersionConfig.getState();
 
         return {
             customers: [...customers],
@@ -158,7 +152,6 @@ const useSaveData = create(() => ({
                 pasteRight: clipboardState.pasteRight,
                 copyOnSelect: clipboardState.copyOnSelect,
                 mode: clipboardState.mode,
-                version: versionState.version,
             },
         };
     },
@@ -198,7 +191,6 @@ const useSaveData = create(() => ({
             if (configs.pasteRight !== undefined) ClipboardConfig.getState().setPasteRight(configs.pasteRight);
             if (configs.copyOnSelect !== undefined) ClipboardConfig.getState().setCopyOnSelect(configs.copyOnSelect);
             if (configs.mode) ClipboardConfig.getState().setMode(configs.mode);
-            if (configs.version) AppVersionConfig.getState().setVersion(configs.version);
 
             await persistConfig();
             useAppStore.getState().addNotification({ type: 'success', title: 'Importado', message: 'Dados importados com sucesso.' });

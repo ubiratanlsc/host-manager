@@ -8,7 +8,6 @@ import FontConfig from './FontConfig';
 import ThemeConfig from './ThemeConfig';
 import TerminalConfig from './TerminalConfig';
 import ClipboardConfig from './ClipboardConfig';
-import AppVersionConfig from './AppVersionConfig';
 
 const useLoadData = create((set) => ({
     loadData: async () => {
@@ -50,8 +49,7 @@ const useLoadData = create((set) => ({
             if (configs.copyOnSelect !== undefined) ClipboardConfig.getState().setCopyOnSelect(configs.copyOnSelect);
             if (configs.mode) ClipboardConfig.getState().setMode(configs.mode);
 
-            // AppVersionConfig
-            if (configs.version) AppVersionConfig.getState().setVersion(configs.version);
+            // versão sempre vem do binário via getVersion() em App.jsx — não persistida
         } catch (error) {
             useAppStore.getState().addNotification({ type: 'info', title: 'Configuração inicial', message: 'Arquivo de configuração não encontrado. Criando com valores padrão.' });
             const { persist } = useSaveData.getState();

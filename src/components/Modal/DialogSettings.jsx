@@ -35,7 +35,7 @@ import { CheckCircle2, Download, Upload, RefreshCw, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AppVersionConfig from "@/stores/AppVersionConfig";
 import { checkForUpdates } from "@/lib/updater";
-import IconHM from "@/assets/icon-hm.svg";
+import BrandLogo from "@/assets/brand-logo.svg";
 
 function NumberStepper({ value, onChange, step = 1, min, max }) {
     const dec = () => {
@@ -444,9 +444,9 @@ export default function DialogSettings() {
 
                             <TabsContent value="about" className="grid gap-6">
                                 <div className="flex items-center gap-4">
-                                    <img src={IconHM} alt="Host Manager" className="w-14 h-14 shrink-0" />
+                                    <img src={BrandLogo} alt="host-manager" className="w-14 h-14 shrink-0 rounded-lg" />
                                     <div className="grid gap-0.5">
-                                        <span className="text-lg font-semibold leading-tight">Host Manager</span>
+                                        <span className="text-lg font-semibold leading-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>host-manager</span>
                                         <span className="text-sm text-muted-foreground flex items-center gap-1.5">
                                             <Info className="w-3.5 h-3.5" />
                                             Versão {appVersion || "—"}

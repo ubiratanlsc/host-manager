@@ -1,7 +1,7 @@
 {
   "name": "host-manager",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "Cross-platform host manager with embedded terminal",
   "author": "ubiratanlsc",
   "type": "module",
