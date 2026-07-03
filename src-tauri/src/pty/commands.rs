@@ -90,15 +90,13 @@ pub async fn spawn_pty(
         loop {
             match stdout_reader.read(&mut buf) {
                 Ok(n) if n > 0 => {
-                    app_handle_clone
-                        .emit(
-                            PTY_STDOUT_EVENT,
-                            PtyStdoutPayload {
-                                id: id_clone.clone(),
-                                bytes: buf[..n].to_vec(),
-                            },
-                        )
-                        .unwrap();
+                    let _ = app_handle_clone.emit(
+                        PTY_STDOUT_EVENT,
+                        PtyStdoutPayload {
+                            id: id_clone.clone(),
+                            bytes: buf[..n].to_vec(),
+                        },
+                    );
                 }
                 _ => {
                     break;
@@ -127,15 +125,13 @@ pub async fn spawn_pty(
             },
         );
 
-        app_handle
-            .emit(
-                PTY_SPAWN_EVENT,
-                PtySpawnPayload {
-                    id: id.clone(),
-                    shell: shell.clone(),
-                },
-            )
-            .unwrap();
+        let _ = app_handle.emit(
+            PTY_SPAWN_EVENT,
+            PtySpawnPayload {
+                id: id.clone(),
+                shell: shell.clone(),
+            },
+        );
 
         println!("[TAURI]: Successfully spawned pty ({}).", id.clone());
     }
@@ -143,16 +139,14 @@ pub async fn spawn_pty(
     loop {
         match (child.try_wait(), kill_rx.try_recv()) {
             (Ok(Some(status)), _) => {
-                app_handle
-                    .emit(
-                        PTY_EXIT_EVENT,
-                        PtyExitPayload {
-                            id: id.clone(),
-                            success: status.success(),
-                            code: Some(status.exit_code()),
-                        },
-                    )
-                    .unwrap();
+                let _ = app_handle.emit(
+                    PTY_EXIT_EVENT,
+                    PtyExitPayload {
+                        id: id.clone(),
+                        success: status.success(),
+                        code: Some(status.exit_code()),
+                    },
+                );
                 break;
             }
 
@@ -160,30 +154,26 @@ pub async fn spawn_pty(
                 // Mata o processo filho explicitamente (não confia só no drop do
                 // pty_master) para garantir que o shell não fique órfão.
                 let _ = child.kill();
-                app_handle
-                    .emit(
-                        PTY_EXIT_EVENT,
-                        PtyExitPayload {
-                            id: id.clone(),
-                            success: true,
-                            code: None,
-                        },
-                    )
-                    .unwrap();
+                let _ = app_handle.emit(
+                    PTY_EXIT_EVENT,
+                    PtyExitPayload {
+                        id: id.clone(),
+                        success: true,
+                        code: None,
+                    },
+                );
                 break;
             }
 
             (Err(_), _) => {
-                app_handle
-                    .emit(
-                        PTY_EXIT_EVENT,
-                        PtyExitPayload {
-                            id: id.clone(),
-                            success: false,
-                            code: None,
-                        },
-                    )
-                    .unwrap();
+                let _ = app_handle.emit(
+                    PTY_EXIT_EVENT,
+                    PtyExitPayload {
+                        id: id.clone(),
+                        success: false,
+                        code: None,
+                    },
+                );
                 break;
             }
 
@@ -205,8 +195,8 @@ pub async fn spawn_pty(
         // Need to drop the pty_master to close out file handles and avoid deadlock when waiting on stdout_task
         drop(pty.pty_master);
 
-        pty.stdin_task.await.unwrap();
-        pty.stdout_task.await.unwrap();
+        let _ = pty.stdin_task.await;
+        let _ = pty.stdout_task.await;
 
         println!("[TAURI]: Successfully dropped pty ({}).", id.clone());
     }
