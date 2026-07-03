@@ -3,7 +3,7 @@ use crate::AppState;
 use cuid2;
 use portable_pty::PtySize;
 use socket2::{SockRef, TcpKeepalive};
-use ssh2::{CheckResult, HashType, HostKeyType, KeyboardInteractivePrompt, KnownHostFileKind, KnownHostKeyFormat};
+use ssh2::{CheckResult, HashType, KeyboardInteractivePrompt, KnownHostFileKind, KnownHostKeyFormat};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::thread;
@@ -167,7 +167,30 @@ pub async fn spawn_ssh(
 
     let id = cuid2::create_id();
 
-    let tcp = TcpStream::connect((host.as_str(), port)).map_err(|e| e.to_string())?;
+    // connect_timeout evita travar a UI por 20s+ quando o host está
+    // inacessível (o connect padrão usa o timeout do SO).
+    let tcp = {
+        use std::net::ToSocketAddrs;
+        let addrs = (host.as_str(), port)
+            .to_socket_addrs()
+            .map_err(|e| format!("Failed to resolve {}: {}", host, e))?;
+        let mut last_err: Option<std::io::Error> = None;
+        let mut stream = None;
+        for addr in addrs {
+            match TcpStream::connect_timeout(&addr, Duration::from_secs(10)) {
+                Ok(s) => {
+                    stream = Some(s);
+                    break;
+                }
+                Err(e) => last_err = Some(e),
+            }
+        }
+        stream.ok_or_else(|| {
+            last_err
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| format!("Could not resolve host: {}", host))
+        })?
+    };
 
     // TCP keepalive em nível de SO: detecta peer morto (servidor caiu, rede
     // sumiu) sem depender de tráfego da aplicação. Quando as sondas falham, o
@@ -267,66 +290,62 @@ pub async fn spawn_ssh(
 
     // Task dedicada para escrita
     let channel_write = Arc::clone(&channel);
+    let connected_write = Arc::clone(&connected);
     let stdin_task = tokio::task::spawn_blocking(move || {
         println!("ponto: 28 - Iniciando task de escrita");
-        while let Some(data) = stdin_rx.blocking_recv() {
-            println!(
-                "ponto: 29 - Recebido dado para escrita: {} bytes",
-                data.len()
-            );
+        'outer: while let Some(mut data) = stdin_rx.blocking_recv() {
+            // Coalesce: junta o que já está na fila num único write (menos
+            // pacotes SSH; digitação/backspace rápidos não saturam o canal).
+            while data.len() < 8192 {
+                match stdin_rx.try_recv() {
+                    Ok(more) => data.extend_from_slice(&more),
+                    Err(_) => break,
+                }
+            }
 
-            let mut retry_count = 0;
-            let max_retries = 3;
-            let mut success = false;
+            // Canal é non-blocking: write pode aceitar só parte dos bytes ou
+            // retornar WouldBlock quando a janela SSH está cheia (digitação
+            // rápida). Nunca descartamos dados — avançamos o offset e
+            // repetimos até entregar tudo ou a sessão cair.
+            let mut written = 0;
+            while written < data.len() {
+                if !connected_write.lock().map(|c| *c).unwrap_or(false) {
+                    break 'outer;
+                }
 
-            while retry_count < max_retries && !success {
                 let mut channel_guard = match channel_write.lock() {
                     Ok(guard) => guard,
                     Err(e) => {
                         println!("ponto: 29.1 - Erro ao obter lock do canal: {}", e);
-                        break;
+                        break 'outer;
                     }
                 };
 
-                // Tentar escrever os dados
-                match channel_guard.write_all(&data) {
-                    Ok(_) => {
-                        if let Ok(_) = channel_guard.flush() {
-                            println!("ponto: 30.1 - Dados escritos e flush realizado");
-                            success = true;
-                        } else {
-                            println!("ponto: 30.2 - Erro no flush, tentando novamente");
-                            thread::sleep(Duration::from_millis(100));
-                            retry_count += 1;
-                            continue;
-                        }
+                match channel_guard.write(&data[written..]) {
+                    Ok(0) => {
+                        drop(channel_guard);
+                        thread::sleep(Duration::from_millis(5));
+                    }
+                    Ok(n) => {
+                        written += n;
+                        let _ = channel_guard.flush();
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        // Janela cheia: solta o lock (deixa a task de leitura
+                        // drenar ACKs do servidor) e tenta de novo.
+                        drop(channel_guard);
+                        thread::sleep(Duration::from_millis(5));
                     }
                     Err(e) => {
-                        println!(
-                            "ponto: 30.3 - Erro na escrita: {}. Tentativa {}",
-                            e,
-                            retry_count + 1
-                        );
-                        thread::sleep(Duration::from_millis(100));
-                        retry_count += 1;
-                        continue;
+                        println!("ponto: 30.3 - Erro fatal na escrita: {}", e);
+                        // Sinaliza desconexão: o loop de leitura encerra e
+                        // emite SSH_EXIT para o frontend.
+                        if let Ok(mut c) = connected_write.lock() {
+                            *c = false;
+                        }
+                        break 'outer;
                     }
                 }
-
-                drop(channel_guard);
-                thread::sleep(Duration::from_millis(50));
-            }
-
-            if success {
-                println!(
-                    "ponto: 32 - Escrita concluída com sucesso após {} tentativas",
-                    retry_count + 1
-                );
-            } else {
-                println!(
-                    "ponto: 32.1 - Falha na escrita após {} tentativas",
-                    max_retries
-                );
             }
         }
         println!("ponto: 33 - Task de escrita finalizada");
@@ -339,7 +358,7 @@ pub async fn spawn_ssh(
     let id_clone = id.clone();
     let stdout_task = tokio::task::spawn_blocking(move || {
         println!("ponto: 21 - Iniciando task de leitura");
-        let mut buf = vec![0; 16384];
+        let mut buf = vec![0; MAX_PIPE_CHUNK_SIZE];
 
         loop {
             // Encerramento gracioso: kill_ssh/shutdown setam `connected = false`.
@@ -445,7 +464,6 @@ pub async fn spawn_ssh(
                 host,
                 port,
                 username,
-                password: None,
             },
         )
         .map_err(|e| e.to_string())?;
@@ -586,7 +604,6 @@ pub async fn list_ssh_sessions(state: State<'_, AppState>) -> Result<Vec<SshSpaw
                 host: session.host.clone(),
                 port: session.port,
                 username: session.username.clone(),
-                password: None,
             });
         }
     }

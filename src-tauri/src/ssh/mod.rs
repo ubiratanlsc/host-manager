@@ -10,7 +10,6 @@ use tokio::task::JoinHandle;
 pub mod commands;
 mod constants;
 
-pub use commands::*;
 pub use constants::*;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -19,8 +18,6 @@ pub struct SshSpawnPayload {
     pub host: String,
     pub port: u16,
     pub username: String,
-    #[serde(skip_serializing)] // Não expor a senha nos eventos
-    pub password: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -29,13 +26,6 @@ pub struct SshStdoutPayload {
     pub bytes: Vec<u8>,
     // #[serde(skip_serializing_if = "Option::is_none")]
     // exit_code: Option<i32>, // Novo campo
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct SshStdinPayload {
-    id: String,
-    bytes: Vec<u8>,
-    success: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

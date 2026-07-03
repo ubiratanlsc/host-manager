@@ -10,12 +10,6 @@ mod windows;
 mod unix;
 
 #[derive(Serialize, Deserialize, Clone)]
-struct PtyStdoutPayload {
-    id: String,
-    bytes: Vec<u8>,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
 pub struct SystemShell {
     pub id: String,
     pub name: String,
