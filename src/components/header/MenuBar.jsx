@@ -52,7 +52,8 @@ export function MenuBar({ className, disabled = false }) {
     // Detect mobile
     React.useEffect(() => {
         const checkMobile = () => {
-            setIsMobile(window.innerWidth < 768);
+            // setIsMobile(window.innerWidth < 768);
+            setIsMobile(window.innerWidth < 919);
         };
         checkMobile();
         window.addEventListener("resize", checkMobile);
