@@ -19,7 +19,7 @@ const CustomResizeHandle = ({ direction }) => {
 /**
  * Split Pane Renderer - Renderiza recursivamente a árvore de splits
  */
-const SplitPaneRenderer = ({ tabId, nodes, nodeId }) => {
+const SplitPaneRenderer = ({ tabId, nodes, nodeId, isActiveTab }) => {
     const node = nodes[nodeId];
     const updateNodeSizes = useSplitStore((state) => state.updateNodeSizes);
 
@@ -33,6 +33,7 @@ const SplitPaneRenderer = ({ tabId, nodes, nodeId }) => {
                 paneId={nodeId}
                 terminalId={node.terminalId}
                 isSplitLayout={true}
+                isActiveTab={isActiveTab}
             />
         );
     }
@@ -51,13 +52,13 @@ const SplitPaneRenderer = ({ tabId, nodes, nodeId }) => {
             className="w-full h-full"
         >
             <ResizablePanel className="z-[1] overflow-hidden" defaultSize={defaultSizes[0]} minSize={10}>
-                <SplitPaneRenderer tabId={tabId} nodes={nodes} nodeId={node.children[0]} />
+                <SplitPaneRenderer tabId={tabId} nodes={nodes} nodeId={node.children[0]} isActiveTab={isActiveTab} />
             </ResizablePanel>
 
             <CustomResizeHandle direction={node.direction} />
 
             <ResizablePanel className="z-[2] overflow-hidden" defaultSize={defaultSizes[1]} minSize={10}>
-                <SplitPaneRenderer tabId={tabId} nodes={nodes} nodeId={node.children[1]} />
+                <SplitPaneRenderer tabId={tabId} nodes={nodes} nodeId={node.children[1]} isActiveTab={isActiveTab} />
             </ResizablePanel>
         </ResizablePanelGroup>
     );
@@ -66,10 +67,35 @@ const SplitPaneRenderer = ({ tabId, nodes, nodeId }) => {
 /**
  * Split Pane Container - Componente principal
  */
-const SplitPane = () => {
-    const activeTab = useSplitStore((state) => state.getActiveTab());
+const TabContent = ({ tab, isActiveTab }) => {
+    if (tab.type === 'single') {
+        return (
+            <Pane
+                tabId={tab.id}
+                paneId={tab.id}
+                terminalId={tab.terminalId}
+                isSplitLayout={false}
+                isActiveTab={isActiveTab}
+            />
+        );
+    }
 
-    if (!activeTab) {
+    return (
+        <SplitPaneRenderer
+            tabId={tab.id}
+            nodes={tab.nodes}
+            nodeId={tab.rootNodeId}
+            isActiveTab={isActiveTab}
+        />
+    );
+};
+
+const SplitPane = () => {
+    const tabs = useSplitStore((state) => state.tabs);
+    const activeTabId = useSplitStore((state) => state.activeTabId);
+    const hasActiveTab = tabs.some((tab) => tab.id === activeTabId);
+
+    if (!hasActiveTab) {
         return (
             <div className="flex-1 flex items-center justify-center text-gray-500 h-full" onContextMenu={(e) => e.preventDefault()}>
                 <p className="text-sm select-none">Nenhum terminal ativo</p>
@@ -77,26 +103,20 @@ const SplitPane = () => {
         );
     }
 
-    if (activeTab.type === 'single') {
-        return (
-            <div className="w-full h-full overflow-hidden">
-                <Pane
-                    tabId={activeTab.id}
-                    paneId={activeTab.id}
-                    terminalId={activeTab.terminalId}
-                    isSplitLayout={false}
-                />
-            </div>
-        );
-    }
-
     return (
-        <div className="w-full h-full overflow-hidden">
-            <SplitPaneRenderer
-                tabId={activeTab.id}
-                nodes={activeTab.nodes}
-                nodeId={activeTab.rootNodeId}
-            />
+        <div className="relative w-full h-full overflow-hidden">
+            {tabs.map((tab) => {
+                const isActiveTab = tab.id === activeTabId;
+                return (
+                    <div
+                        key={tab.id}
+                        className={isActiveTab ? 'absolute inset-0' : 'hidden'}
+                        aria-hidden={!isActiveTab}
+                    >
+                        <TabContent tab={tab} isActiveTab={isActiveTab} />
+                    </div>
+                );
+            })}
         </div>
     );
 };

@@ -5,6 +5,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import useAppStore from './useAppStore';
 import TerminalConfig from './TerminalConfig';
+import { appendTerminalChunk, createOrderedAsyncQueue } from '@/lib/terminalIo';
 
 // Constants
 const PTY_SPAWN_EVENT = 'EVENTS:PTY:SPAWN';
@@ -19,6 +20,19 @@ const PTY_RESIZE_COMMAND = 'resize_pty';
 const PTY_KILL_COMMAND = 'kill_pty';
 const PTY_KILL_ALL_COMMAND = 'kill_all_ptys';
 const LIST_PTYS_COMMAND = 'list_ptys';
+
+const ptyWriteQueues = new Map();
+
+const enqueuePtyWrite = (id, data) => {
+    let queue = ptyWriteQueues.get(id);
+    if (!queue) {
+        queue = createOrderedAsyncQueue((nextData) =>
+            invoke(PTY_STDIN_COMMAND, { id, data: nextData })
+        );
+        ptyWriteQueues.set(id, queue);
+    }
+    return queue(data);
+};
 
 /**
  * Terminal Store - Gerencia terminais PTY locais com Xterm.js
@@ -139,11 +153,7 @@ const useTerminalStore = create(
 
                         const pending = new Map(state.pendingStdout);
                         const chunks = pending.get(id) || [];
-                        chunks.push(bytes);
-                        if (chunks.length > 200) {
-                            chunks.splice(0, chunks.length - 200);
-                        }
-                        pending.set(id, chunks);
+                        pending.set(id, appendTerminalChunk(chunks, bytes));
                         set({ pendingStdout: pending });
                     });
 
@@ -184,6 +194,7 @@ const useTerminalStore = create(
 
                             const newAttached = new Map(state.attachedTerminals);
                             newAttached.delete(id);
+                            ptyWriteQueues.delete(id);
 
                             // Determinar próximo foco
                             let newFocused = state.focusedTerminal;
@@ -275,6 +286,7 @@ const useTerminalStore = create(
                     recentlyClosed: new Map(),
                     attachedTerminals: new Map(),
                 });
+                ptyWriteQueues.clear();
 
             },
 
@@ -368,7 +380,7 @@ const useTerminalStore = create(
             writePty: async (id, data) => {
                 try {
                     if (!isTauri()) return;
-                    await invoke(PTY_STDIN_COMMAND, { id, data });
+                    await enqueuePtyWrite(id, data);
                 } catch (error) {
                     console.error(`[TerminalStore] Failed to write to PTY ${id}:`, error);
                 }
@@ -390,6 +402,7 @@ const useTerminalStore = create(
              * Mata terminal PTY
              */
             killPty: async (id) => {
+                ptyWriteQueues.delete(id);
                 // Remove terminal from store immediately to prevent
                 // the MainLayout sync effect from re-creating a tab for it.
                 set((state) => {

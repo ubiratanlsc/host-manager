@@ -1,4 +1,5 @@
 use super::constants::{MAX_PIPE_CHUNK_SIZE, READ_PAUSE_DURATION};
+use super::diagnostics::{resolve_log_path, write_backend_record};
 use super::{PtyExitPayload, PtyProcess, PtySpawnPayload, PtyStdoutPayload};
 use crate::pty::constants::{PTY_EXIT_EVENT, PTY_SPAWN_EVENT, PTY_STDOUT_EVENT};
 use crate::shell::SystemShell;
@@ -6,6 +7,7 @@ use crate::AppState;
 use cuid2;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 static SPAWN_CALL_COUNTER: AtomicU64 = AtomicU64::new(0);
 use tauri::{AppHandle, Emitter, State};
@@ -23,19 +25,29 @@ pub async fn spawn_pty(
     spawn_id: String,
 ) -> Result<(), String> {
     let call_seq = SPAWN_CALL_COUNTER.fetch_add(1, Ordering::SeqCst);
-    println!("[TAURI]: spawn_pty CALLED (seq={}, spawn_id={})", call_seq, spawn_id);
+    println!(
+        "[TAURI]: spawn_pty CALLED (seq={}, spawn_id={})",
+        call_seq, spawn_id
+    );
 
     // Anti-replay: verifica se este spawn_id já está associado a um PTY vivo.
     // Tauri reenvia a mesma invoke IPC idêntica após um reload da página.
     {
         let ptys = state.ptys.lock().await;
         if ptys.values().any(|pty| pty.spawn_id == spawn_id) {
-            println!("[TAURI]: Rejected replayed spawn_pty (spawn_id={})", spawn_id);
+            println!(
+                "[TAURI]: Rejected replayed spawn_pty (spawn_id={})",
+                spawn_id
+            );
             return Err("Duplicate spawn rejected (replayed command).".to_string());
         }
     }
 
     let id = cuid2::create_id();
+    let diagnostic_log_path = resolve_log_path(&app_handle);
+    if let Some(path) = diagnostic_log_path.as_deref() {
+        write_backend_record(path, &id, "pty_spawn", None, None, None, None);
+    }
 
     // Establish our new pty for the given size
     let pty_system = native_pty_system();
@@ -69,11 +81,20 @@ pub async fn spawn_pty(
     drop(pty_slave);
 
     // Spawn a thread to wait input from frontend and write to the pty
-    let (stdin_tx, mut stdin_rx) = channel::<Vec<u8>>(1);
+    // A bounded queue absorbs bursts (fast typing/paste) without blocking the
+    // global PTY registry. PuTTY uses the same lossless queued-write model.
+    let (stdin_tx, mut stdin_rx) = channel::<Vec<u8>>(128);
     let mut stdin_writer = pty_master.take_writer().map_err(|x| x.to_string())?;
 
     let stdin_task = spawn_blocking(move || {
-        while let Some(input) = stdin_rx.blocking_recv() {
+        while let Some(mut input) = stdin_rx.blocking_recv() {
+            // Reduce syscall overhead while preserving the exact byte order.
+            while input.len() < 64 * 1024 {
+                match stdin_rx.try_recv() {
+                    Ok(more) => input.extend_from_slice(&more),
+                    Err(_) => break,
+                }
+            }
             if stdin_writer.write_all(&input).is_err() {
                 break;
             }
@@ -85,20 +106,73 @@ pub async fn spawn_pty(
 
     let app_handle_clone = app_handle.clone();
     let id_clone = id.clone();
+    let stdout_log_path = diagnostic_log_path.clone();
     let stdout_task = spawn_blocking(move || {
         let mut buf: [u8; MAX_PIPE_CHUNK_SIZE] = [0; MAX_PIPE_CHUNK_SIZE];
+        let mut sample_started = Instant::now();
+        let mut sample_events = 0_u64;
+        let mut sample_bytes = 0_u64;
+        let mut max_chunk_bytes = 0_u64;
         loop {
             match stdout_reader.read(&mut buf) {
                 Ok(n) if n > 0 => {
-                    let _ = app_handle_clone.emit(
+                    sample_events += 1;
+                    sample_bytes += n as u64;
+                    max_chunk_bytes = max_chunk_bytes.max(n as u64);
+
+                    let emit_result = app_handle_clone.emit(
                         PTY_STDOUT_EVENT,
                         PtyStdoutPayload {
                             id: id_clone.clone(),
                             bytes: buf[..n].to_vec(),
                         },
                     );
+                    if emit_result.is_err() {
+                        if let Some(path) = stdout_log_path.as_deref() {
+                            write_backend_record(
+                                path,
+                                &id_clone,
+                                "stdout_emit_error",
+                                None,
+                                None,
+                                None,
+                                None,
+                            );
+                        }
+                    }
+
+                    if sample_started.elapsed().as_secs() >= 1 {
+                        if let Some(path) = stdout_log_path.as_deref() {
+                            write_backend_record(
+                                path,
+                                &id_clone,
+                                "stdout_sample",
+                                Some(sample_events),
+                                Some(sample_bytes),
+                                Some(max_chunk_bytes),
+                                None,
+                            );
+                        }
+                        sample_started = Instant::now();
+                        sample_events = 0;
+                        sample_bytes = 0;
+                        max_chunk_bytes = 0;
+                    }
                 }
                 _ => {
+                    if sample_events > 0 {
+                        if let Some(path) = stdout_log_path.as_deref() {
+                            write_backend_record(
+                                path,
+                                &id_clone,
+                                "stdout_sample",
+                                Some(sample_events),
+                                Some(sample_bytes),
+                                Some(max_chunk_bytes),
+                                None,
+                            );
+                        }
+                    }
                     break;
                 }
             }
@@ -139,6 +213,17 @@ pub async fn spawn_pty(
     loop {
         match (child.try_wait(), kill_rx.try_recv()) {
             (Ok(Some(status)), _) => {
+                if let Some(path) = diagnostic_log_path.as_deref() {
+                    write_backend_record(
+                        path,
+                        &id,
+                        "pty_exit",
+                        None,
+                        None,
+                        None,
+                        Some(status.exit_code()),
+                    );
+                }
                 let _ = app_handle.emit(
                     PTY_EXIT_EVENT,
                     PtyExitPayload {
@@ -154,6 +239,9 @@ pub async fn spawn_pty(
                 // Mata o processo filho explicitamente (não confia só no drop do
                 // pty_master) para garantir que o shell não fique órfão.
                 let _ = child.kill();
+                if let Some(path) = diagnostic_log_path.as_deref() {
+                    write_backend_record(path, &id, "pty_killed", None, None, None, None);
+                }
                 let _ = app_handle.emit(
                     PTY_EXIT_EVENT,
                     PtyExitPayload {
@@ -166,6 +254,9 @@ pub async fn spawn_pty(
             }
 
             (Err(_), _) => {
+                if let Some(path) = diagnostic_log_path.as_deref() {
+                    write_backend_record(path, &id, "pty_wait_error", None, None, None, None);
+                }
                 let _ = app_handle.emit(
                     PTY_EXIT_EVENT,
                     PtyExitPayload {
@@ -184,8 +275,11 @@ pub async fn spawn_pty(
         }
     }
 
-    let mut ptys = state.ptys.lock().await;
-    if let Some(pty) = ptys.remove(&id) {
+    let pty = {
+        let mut ptys = state.ptys.lock().await;
+        ptys.remove(&id)
+    };
+    if let Some(pty) = pty {
         // Need to drop the stdin_tx to avoid deadlock when waiting on stdin_task
         drop(pty.stdin_tx);
 
@@ -205,18 +299,16 @@ pub async fn spawn_pty(
 }
 
 #[tauri::command]
-pub async fn write_pty(
-    state: State<'_, AppState>,
-    id: String,
-    data: String,
-) -> Result<(), String> {
-    let mut ptys = state.ptys.lock().await;
+pub async fn write_pty(state: State<'_, AppState>, id: String, data: String) -> Result<(), String> {
+    let stdin_tx = {
+        let ptys = state.ptys.lock().await;
+        ptys.get(&id)
+            .ok_or("[WRITE_PTY] The specified ID is not associated with any pty.")?
+            .stdin_tx
+            .clone()
+    };
 
-    let pty = ptys
-        .get_mut(&id)
-        .ok_or("[WRITE_PTY] The specified ID is not associated with any pty.")?;
-
-    pty.stdin_tx
+    stdin_tx
         .send(data.into_bytes())
         .await
         .map_err(|x| x.to_string())?;
@@ -243,32 +335,33 @@ pub async fn resize_pty(
 
 #[tauri::command]
 pub async fn kill_pty(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let mut ptys = state.ptys.lock().await;
+    let kill_tx = {
+        let ptys = state.ptys.lock().await;
+        ptys.get(&id)
+            .ok_or("[KILL_PTY] The specified ID is not associated with any pty.")?
+            .kill_tx
+            .clone()
+    };
 
-    let pty = ptys
-        .get_mut(&id)
-        .ok_or("[KILL_PTY] The specified ID is not associated with any pty.")?;
-
-    pty.kill_tx.send(()).await.map_err(|x| x.to_string())?;
+    kill_tx.send(()).await.map_err(|x| x.to_string())?;
 
     Ok(())
 }
 
 #[tauri::command]
 pub async fn kill_all_ptys(state: State<'_, AppState>) -> Result<(), String> {
-    let ids = {
+    let kill_senders = {
         let ptys = state.ptys.lock().await;
-        ptys.keys().cloned().collect::<Vec<_>>()
+        ptys.values()
+            .map(|pty| pty.kill_tx.clone())
+            .collect::<Vec<_>>()
     };
 
-    for id in &ids {
-        let mut ptys = state.ptys.lock().await;
-        if let Some(pty) = ptys.get_mut(id) {
-            let _ = pty.kill_tx.send(()).await;
-        }
+    for kill_tx in &kill_senders {
+        let _ = kill_tx.send(()).await;
     }
 
-    println!("[TAURI]: Killed {} PTY(s).", ids.len());
+    println!("[TAURI]: Killed {} PTY(s).", kill_senders.len());
     Ok(())
 }
 
@@ -277,7 +370,7 @@ pub async fn list_ptys(state: State<'_, AppState>) -> Result<Vec<PtySpawnPayload
     let ptys = state.ptys.lock().await;
     let mut result = Vec::new();
 
-    for (_, pty) in ptys.iter() {
+    for pty in ptys.values() {
         result.push(PtySpawnPayload {
             id: pty.id.clone(),
             shell: pty.shell.clone(),

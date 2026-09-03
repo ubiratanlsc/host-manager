@@ -24,25 +24,11 @@ import './App.css'
 })();
 
 window.onerror = function (msg, url, line, col, error) {
-  const root = document.getElementById("root");
-  if (root) {
-    root.innerHTML = `<div style="color:red; background:black; position:fixed; z-index:9999; padding:20px; top:0; left:0; width:100%;">
-        <h3>Runtime Error</h3>
-        <p>${msg}</p>
-        <pre>${error ? error.stack : ''}</pre>
-      </div>`;
-  }
+  console.error('[runtime error]', { msg, url, line, col, error });
 };
 
 window.addEventListener("unhandledrejection", function (e) {
-  const root = document.getElementById("root");
-  if (root) {
-    root.innerHTML = `<div style="color:red; background:black; position:fixed; z-index:9999; padding:20px; top:0; left:0; width:100%;">
-        <h3>Unhandled Promise Rejection</h3>
-        <p>${e.reason && e.reason.message ? e.reason.message : e.reason}</p>
-        <pre>${e.reason && e.reason.stack ? e.reason.stack : ''}</pre>
-      </div>`;
-  }
+  console.error('[unhandled promise rejection]', e.reason);
 });
 
 class ErrorBoundary extends React.Component {

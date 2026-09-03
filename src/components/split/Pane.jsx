@@ -11,11 +11,11 @@ import { cn } from '@/lib/utils';
 /**
  * Pane - Container de terminal. Suporta cabeçalho arrastável (em split) e zonas de drop para divisão.
  */
-const Pane = ({ tabId, paneId, terminalId, isSplitLayout }) => {
+const Pane = ({ tabId, paneId, terminalId, isSplitLayout, isActiveTab = true }) => {
     const { active } = useDndContext();
     const isDraggingTab = active?.data?.current?.type === 'terminal-tab';
     const isDraggingPane = active?.data?.current?.type === 'pane';
-    const showDropZones = isDraggingTab || isDraggingPane;
+    const showDropZones = isActiveTab && (isDraggingTab || isDraggingPane);
 
     const terminals = useTerminalStore((s) => s.terminals);
     const sessions = useSSHStore((s) => s.sessions);
@@ -39,7 +39,7 @@ const Pane = ({ tabId, paneId, terminalId, isSplitLayout }) => {
 
     // Sincronizar foco global do xterm quando o painel fica ativo
     useEffect(() => {
-        if ((!isSplitLayout || isFocusedPane) && terminalId) {
+        if (isActiveTab && (!isSplitLayout || isFocusedPane) && terminalId) {
             const timer = setTimeout(() => {
                 if (useTerminalStore.getState().terminals.has(terminalId)) {
                     useTerminalStore.getState().setFocused(terminalId);
@@ -49,7 +49,7 @@ const Pane = ({ tabId, paneId, terminalId, isSplitLayout }) => {
             }, 50);
             return () => clearTimeout(timer);
         }
-    }, [isFocusedPane, isSplitLayout, terminalId]);
+    }, [isActiveTab, isFocusedPane, isSplitLayout, terminalId]);
 
     // Draggable hook para o cabeçalho do painel
     const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
@@ -119,7 +119,7 @@ const Pane = ({ tabId, paneId, terminalId, isSplitLayout }) => {
 
     return (
         <div
-            onClick={() => isSplitLayout && setActivePaneInTab(tabId, paneId)}
+            onClick={() => isActiveTab && isSplitLayout && setActivePaneInTab(tabId, paneId)}
             className={cn(
                 "relative flex flex-col h-full overflow-hidden transition-colors duration-150 bg-[#1A1B1E]",
                 isSplitLayout && "border dark:border-[#2C2D32]/80 border-gray-300",

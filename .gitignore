@@ -24,3 +24,11 @@ testsprite_tests/*
 *.njsproj
 *.sln
 *.sw?
+
+# Updater signing keys - never commit
+keys/
+*.key
+
+# Local build artifacts and agent instructions - not part of the repo
+artifacts/
+AGENTS.md

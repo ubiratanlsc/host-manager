@@ -10,12 +10,20 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import SearchOverlay from '@/components/Search/SearchOverlay';
 import CommandSuggestions from './CommandSuggestions';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
-import { isTauri } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useTerminalStore, useCommandStore } from '@/stores';
 import { FontConfig, TerminalConfig, ClipboardConfig } from '@/stores';
 import { useThemeStore } from '@/stores';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { useModalStore } from '@/stores';
+import {
+    concatTerminalChunks,
+    createConptyProbeFilter,
+    createTerminalModeSafeWriter,
+    createTerminalWritePump,
+    createXtgettcapReply,
+    toTerminalBytes,
+} from '@/lib/terminalIo';
 import '@xterm/xterm/css/xterm.css';
 
 const canUseWebgl = () => {
@@ -55,9 +63,7 @@ const LocalTerminal = ({ terminalId }) => {
     const containerSize = useSize(containerRef);
 
     const terminalMeta = useTerminalStore((state) => state.terminals.get(terminalId));
-    const focusedTerminal = useTerminalStore((state) => state.focusedTerminal);
-
-    const isFocused = focusedTerminal === terminalId;
+    const isFocused = useTerminalStore((state) => state.focusedTerminal === terminalId);
     const isReady = !!terminalMeta;
 
     const [isInitialized, setIsInitialized] = useState(false);
@@ -74,10 +80,9 @@ const LocalTerminal = ({ terminalId }) => {
     const lineHeight = TerminalConfig((s) => s.lineHeight);
     const scrollbackLines = TerminalConfig((s) => s.scrollback);
     const pasteRight = ClipboardConfig((s) => s.pasteRight);
-    const { theme } = useThemeStore();
+    const theme = useThemeStore((state) => state.theme);
 
-    const modals = useModalStore((s) => s.modals);
-    const hasModalOpen = Object.values(modals).some(Boolean);
+    const hasModalOpen = useModalStore((s) => Object.values(s.modals).some(Boolean));
 
     const initOk = useMemo(() => {
         const width = containerSize?.width ?? 0;
@@ -122,7 +127,7 @@ const LocalTerminal = ({ terminalId }) => {
             cursorStyle,
             lineHeight,
             scrollback: scrollbackLines,
-            allowTransparency: true,
+            allowTransparency: false,
             allowProposedApi: true,
         });
 
@@ -136,13 +141,58 @@ const LocalTerminal = ({ terminalId }) => {
         xterm.loadAddon(serializeAddon);
         xterm.loadAddon(searchAddon);
 
+        const sendPtyData = (data) => useTerminalStore.getState().writePty(terminalId, data);
+        const probeFilter = createConptyProbeFilter((capability) => {
+            const reply = createXtgettcapReply(capability);
+            if (reply) sendPtyData(reply);
+        });
+        const xtgettcapHandler = xterm.parser.registerDcsHandler(
+            { intermediates: '+', final: 'q' },
+            (capability) => {
+                const reply = createXtgettcapReply(capability);
+                if (!reply) return false;
+                sendPtyData(reply);
+                return true;
+            },
+        );
 
+        const reportDiagnostic = (event, stats = {}) => {
+            console.warn(`[terminal] ${event}`, stats);
+            if (!isTauri()) return;
+            invoke('log_terminal_diagnostic', {
+                terminalId,
+                event,
+                queuedBytes: stats.queuedBytes ?? null,
+                queuedChunks: stats.queuedChunks ?? null,
+            }).catch((error) => console.warn('[terminal] diagnostic log failed:', error));
+        };
+        let writePump;
+        writePump = createTerminalWritePump(
+            createTerminalModeSafeWriter(
+                (bytes, done) => xterm.write(bytes, done),
+                () => reportDiagnostic('input_mode_recovered'),
+            ),
+            {
+                onBackpressure: (stats) => reportDiagnostic('renderer_backpressure', stats),
+                onError: (error) => {
+                    reportDiagnostic('renderer_error', writePump?.getStats());
+                    console.warn('[terminal] xterm write failed:', error);
+                },
+            },
+        );
 
         if (canUseWebgl()) {
             try {
                 const webglAddon = new WebglAddon();
                 xterm.loadAddon(webglAddon);
                 webglAddonRef.current = webglAddon;
+                webglAddon.onContextLoss(() => {
+                    if (webglAddonRef.current !== webglAddon) return;
+                    webglAddonRef.current = null;
+                    try { webglAddon.dispose(); } catch (_) { }
+                    releaseWebgl();
+                    reportDiagnostic('webgl_context_lost');
+                });
             } catch (e) {
                 console.warn('[terminal] WebGL addon failed:', e);
                 releaseWebgl();
@@ -154,7 +204,9 @@ const LocalTerminal = ({ terminalId }) => {
             if (xterm.hasSelection()) {
                 const selectedText = xterm.getSelection();
                 if (selectedText) {
-                    writeText(selectedText);
+                    writeText(selectedText).catch((error) =>
+                        console.warn('[terminal] clipboard write failed:', error)
+                    );
                 }
             }
         });
@@ -176,7 +228,9 @@ const LocalTerminal = ({ terminalId }) => {
             if (event.ctrlKey && event.key === 'c') {
                 if (xterm.hasSelection()) {
                     const selectedText = xterm.getSelection();
-                    writeText(selectedText);
+                    writeText(selectedText).catch((error) =>
+                        console.warn('[terminal] clipboard write failed:', error)
+                    );
                     return false;
                 }
             }
@@ -184,7 +238,7 @@ const LocalTerminal = ({ terminalId }) => {
             if (event.ctrlKey && event.key === 'v') {
                 readText().then(text => {
                     if (text) useTerminalStore.getState().writePty(terminalId, text);
-                });
+                }).catch((error) => console.warn('[terminal] clipboard read failed:', error));
                 return false;
             }
             return true;
@@ -199,15 +253,15 @@ const LocalTerminal = ({ terminalId }) => {
                 }
                 return;
             }
-            useTerminalStore.getState().writePty(terminalId, data);
+            sendPtyData(data);
         });
 
         xterm.onResize((size) => {
             if (!isTauri() || isWebModeRef.current) return;
             useTerminalStore.getState().resizePty(terminalId, {
                 ...size,
-                pixel_width: 0,
-                pixel_height: 0,
+                pixel_width: Math.min(65535, Math.round(terminalRef.current?.clientWidth || 0)),
+                pixel_height: Math.min(65535, Math.round(terminalRef.current?.clientHeight || 0)),
             });
         });
 
@@ -221,7 +275,8 @@ const LocalTerminal = ({ terminalId }) => {
         const onStdout = (event) => {
             const detail = event?.detail;
             if (!detail || detail.id !== terminalId) return;
-            xterm.write(detail.bytes);
+            const output = probeFilter.write(toTerminalBytes(detail.bytes));
+            if (output.byteLength > 0) writePump.write(output);
         };
 
         const onSnapshot = (event) => {
@@ -247,6 +302,7 @@ const LocalTerminal = ({ terminalId }) => {
         return () => {
             window.removeEventListener('pty:stdout', onStdout);
             window.removeEventListener('terminal:snapshot', onSnapshot);
+            xtgettcapHandler.dispose();
 
             try {
                 const addon = serializeAddonRef.current;
@@ -263,6 +319,18 @@ const LocalTerminal = ({ terminalId }) => {
             }
 
             useTerminalStore.getState().detachTerminal(terminalId);
+            writePump.dispose();
+
+            const webglAddon = webglAddonRef.current;
+            webglAddonRef.current = null;
+            if (webglAddon) {
+                try {
+                    webglAddon.dispose();
+                } catch (e) {
+                    console.warn('[terminal] WebGL dispose failed:', e);
+                }
+                releaseWebgl();
+            }
 
             try {
                 xterm.dispose();
@@ -270,20 +338,10 @@ const LocalTerminal = ({ terminalId }) => {
                 console.warn('[terminal] dispose failed:', e);
             }
 
-            try {
-                webglAddonRef.current?.dispose?.();
-            } catch (e) {
-                console.warn('[terminal] WebGL dispose failed:', e);
-            }
-            if (webglAddonRef.current) {
-                releaseWebgl();
-            }
-
             xtermRef.current = null;
             fitAddonRef.current = null;
             serializeAddonRef.current = null;
             searchAddonRef.current = null;
-            webglAddonRef.current = null;
             openedRef.current = false;
 
             if (resizeTimeoutRef.current) {
@@ -316,9 +374,7 @@ const LocalTerminal = ({ terminalId }) => {
 
         const pending = useTerminalStore.getState().drainPendingStdout(terminalId);
         if (pending?.length) {
-            for (const chunk of pending) {
-                xterm.write(chunk);
-            }
+            xterm.write(concatTerminalChunks(pending));
         }
     }, [isReady, terminalId, initOk]);
 
@@ -408,7 +464,8 @@ const LocalTerminal = ({ terminalId }) => {
         const xterm = xtermRef.current;
         if (!xterm || !isInitialized) return;
         xterm.options.lineHeight = lineHeight;
-    }, [lineHeight, isInitialized]);
+        scheduleResize();
+    }, [lineHeight, isInitialized, scheduleResize]);
 
     useEffect(() => {
         const xterm = xtermRef.current;
@@ -421,7 +478,8 @@ const LocalTerminal = ({ terminalId }) => {
         if (!xterm || !isInitialized) return;
         xterm.options.fontFamily = font;
         xterm.options.fontSize = fontSize;
-    }, [font, fontSize, isInitialized]);
+        scheduleResize();
+    }, [font, fontSize, isInitialized, scheduleResize]);
 
     useEffect(() => {
         const xterm = xtermRef.current;
@@ -432,7 +490,9 @@ const LocalTerminal = ({ terminalId }) => {
     const handleCopy = () => {
         const xterm = xtermRef.current;
         if (xterm && xterm.hasSelection()) {
-            writeText(xterm.getSelection());
+            writeText(xterm.getSelection()).catch((error) =>
+                console.warn('[terminal] clipboard write failed:', error)
+            );
         }
     };
 

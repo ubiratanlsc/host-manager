@@ -104,7 +104,7 @@ const oneDarkTheme = {
 const solarizedDarkTheme = {
     foreground: '#839496',
     background: '#002b36',
-    cursor: '#duli36',
+    cursor: '#93a1a1',
     cursorAccent: '#002b36',
     selection: 'rgba(131, 148, 150, 0.3)',
     black: '#002b36',
@@ -402,7 +402,7 @@ const snazzyTheme = {
 
 // 16. Lime Dark
 const limeDarkTheme = {
-    foreground: '#cddaemon',
+    foreground: '#cdda8e',
     background: '#0c0c0c',
     cursor: '#b8d568',
     cursorAccent: '#0c0c0c',

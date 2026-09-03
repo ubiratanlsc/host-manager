@@ -3,6 +3,7 @@ import { devtools } from 'zustand/middleware';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import useAppStore from './useAppStore';
+import { appendTerminalChunk, createOrderedAsyncQueue } from '@/lib/terminalIo';
 
 // Constants
 const SSH_SPAWN_EVENT = 'EVENTS:SSH:SPAWN';
@@ -13,6 +14,19 @@ const SSH_STDIN_COMMAND = 'write_ssh';
 const SSH_RESIZE_COMMAND = 'resize_ssh';
 const SSH_KILL_COMMAND = 'kill_ssh';
 const SSH_LIST_COMMAND = 'list_ssh_sessions';
+
+const sshWriteQueues = new Map();
+
+const enqueueSSHWrite = (id, data) => {
+    let queue = sshWriteQueues.get(id);
+    if (!queue) {
+        queue = createOrderedAsyncQueue((nextData) =>
+            invoke(SSH_STDIN_COMMAND, { id, data: nextData })
+        );
+        sshWriteQueues.set(id, queue);
+    }
+    return queue(data);
+};
 
 /**
  * SSH Store - Gerencia sessões SSH remotas com Xterm.js
@@ -115,7 +129,7 @@ const useSSHStore = create(
                                 return { pendingCommands: next };
                             });
                             setTimeout(() => {
-                                invoke(SSH_STDIN_COMMAND, { id, data: pending }).catch(() => {});
+                                get().writeSSH(id, pending).catch(() => {});
                             }, 600);
                         }
                     });
@@ -137,11 +151,7 @@ const useSSHStore = create(
 
                         const pending = new Map(state.pendingStdout);
                         const chunks = pending.get(id) || [];
-                        chunks.push(bytes);
-                        if (chunks.length > 200) {
-                            chunks.splice(0, chunks.length - 200);
-                        }
-                        pending.set(id, chunks);
+                        pending.set(id, appendTerminalChunk(chunks, bytes));
                         set({ pendingStdout: pending });
                     });
 
@@ -149,6 +159,7 @@ const useSSHStore = create(
                     const exitListener = await listen(SSH_EXIT_EVENT, ({ payload }) => {
                         const { id } = payload;
                         const session = get().sessions.get(id);
+                        sshWriteQueues.delete(id);
 
                         // Sem sessão no store = fechamento intencional (killSSH já
                         // removeu). Ou já marcada como desconectada: ignora (evita
@@ -251,6 +262,7 @@ const useSSHStore = create(
                     recentlyClosed: new Map(),
                     attachedSessions: new Map(),
                 });
+                sshWriteQueues.clear();
 
             },
 
@@ -334,7 +346,7 @@ const useSSHStore = create(
             writeSSH: async (id, data) => {
                 try {
                     if (!isTauri()) return;
-                    await invoke(SSH_STDIN_COMMAND, { id, data });
+                    await enqueueSSHWrite(id, data);
                 } catch (error) {
                     console.error(`[SSHStore] Failed to write to SSH ${id}:`, error);
                 }
@@ -344,6 +356,7 @@ const useSSHStore = create(
              * Mata sessão SSH
              */
             killSSH: async (id) => {
+                sshWriteQueues.delete(id);
                 set((state) => {
                     const newSessions = new Map(state.sessions);
                     newSessions.delete(id);

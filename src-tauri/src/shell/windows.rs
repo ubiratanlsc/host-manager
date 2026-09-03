@@ -25,6 +25,19 @@ const WSL_ICON_MAPPINGS: phf::Map<&'static str, &'static str> = phf_map! {
     "docker-desktop" => "/assets/icons/docker.svg",
     "docker-desktop-data" => "/assets/icons/docker.svg",
 };
+
+fn terminal_env() -> HashMap<String, String> {
+    HashMap::from([
+        ("TERM".to_string(), "xterm-256color".to_string()),
+        ("COLORTERM".to_string(), "truecolor".to_string()),
+        ("TERM_PROGRAM".to_string(), "host-manager".to_string()),
+        (
+            "TERM_PROGRAM_VERSION".to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+        ),
+    ])
+}
+
 pub fn get_available_shells() -> Vec<SystemShell> {
     let mut shells = Vec::new();
 
@@ -45,7 +58,7 @@ fn get_stock(mut shells: Vec<SystemShell>) -> Vec<SystemShell> {
         name: "CMD (Stock)".to_string(),
         command: "cmd.exe".to_string(),
         args: Vec::new(),
-        env: HashMap::new(),
+        env: terminal_env(),
         cwd: None,
         icon: "/assets/icons/cmd.svg".to_string(),
     });
@@ -55,7 +68,7 @@ fn get_stock(mut shells: Vec<SystemShell>) -> Vec<SystemShell> {
         name: "PowerShell".to_string(),
         command: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe".to_string(),
         args: Vec::from(["-NoLogo".to_string()]),
-        env: HashMap::from([("TERM".to_string(), "cygwin".to_string())]),
+        env: terminal_env(),
         cwd: None,
         icon: "/assets/icons/powershell.svg".to_string(),
     });
@@ -84,7 +97,7 @@ fn get_gitbash(mut shells: Vec<SystemShell>) -> Vec<SystemShell> {
             name: "Git Bash".to_string(),
             command: format!("{}\\bin\\bash.exe", path),
             args: Vec::from(["--login".to_string(), "-i".to_string()]),
-            env: HashMap::from([("TERM".to_string(), "cygwin".to_string())]),
+            env: terminal_env(),
             cwd: None,
             icon: "/assets/icons/git-bash.svg".to_string(),
         });
@@ -103,7 +116,7 @@ fn get_powershell_core(mut shells: Vec<SystemShell>) -> Vec<SystemShell> {
                 name: "PowerShell Core".to_string(),
                 command: path,
                 args: Vec::from(["-NoLogo".to_string()]),
-                env: HashMap::from([("TERM".to_string(), "cygwin".to_string())]),
+                env: terminal_env(),
                 cwd: None,
                 icon: "/assets/icons/powershell-core.svg".to_string(),
             });
@@ -132,7 +145,7 @@ fn get_vscode(mut shells: Vec<SystemShell>) -> Vec<SystemShell> {
                     name: format!("Developer Prompt for VS {}", version),
                     command: "cmd.exe".to_string(),
                     args: Vec::from(["/k".to_string(), bat]),
-                    env: HashMap::new(),
+                    env: terminal_env(),
                     cwd: None,
                     icon: format!("/assets/icons/vs{}.svg", version),
                 })
@@ -163,10 +176,7 @@ fn get_wsl(mut shells: Vec<SystemShell>) -> Vec<SystemShell> {
             name: format!("WSL / {}", distribution_name.clone()),
             command: "wsl.exe".to_string(),
             args: Vec::from(["-d".to_string(), distribution_name.clone()]),
-            env: HashMap::from([
-                ("TERM".to_string(), "xterm-256color".to_string()),
-                ("COLORTERM".to_string(), "truecolor".to_string()),
-            ]),
+            env: terminal_env(),
             cwd: None,
             icon: WSL_ICON_MAPPINGS
                 .get(distribution_name.clone().as_ref())
@@ -177,4 +187,21 @@ fn get_wsl(mut shells: Vec<SystemShell>) -> Vec<SystemShell> {
     }
 
     shells
+}
+
+#[cfg(test)]
+mod tests {
+    use super::terminal_env;
+
+    #[test]
+    fn embedded_terminal_advertises_xterm_truecolor_capabilities() {
+        let env = terminal_env();
+
+        assert_eq!(env.get("TERM").map(String::as_str), Some("xterm-256color"));
+        assert_eq!(env.get("COLORTERM").map(String::as_str), Some("truecolor"));
+        assert_eq!(
+            env.get("TERM_PROGRAM").map(String::as_str),
+            Some("host-manager")
+        );
+    }
 }

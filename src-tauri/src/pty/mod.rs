@@ -6,6 +6,7 @@ use tokio::task::JoinHandle;
 
 pub mod commands;
 mod constants;
+pub mod diagnostics;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct PtyStdoutPayload {

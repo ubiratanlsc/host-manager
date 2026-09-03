@@ -89,6 +89,7 @@ pub fn run() {
             pty::commands::kill_pty,
             pty::commands::kill_all_ptys,
             pty::commands::list_ptys,
+            pty::diagnostics::log_terminal_diagnostic,
             ssh::commands::spawn_ssh,
             ssh::commands::write_ssh,
             ssh::commands::resize_ssh,
@@ -109,7 +110,7 @@ pub fn run() {
                 tauri::async_runtime::block_on(async move {
                     {
                         let ptys = state.ptys.lock().await;
-                        for (_, pty) in ptys.iter() {
+                        for pty in ptys.values() {
                             let _ = pty.kill_tx.send(()).await;
                         }
                     }

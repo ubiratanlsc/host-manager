@@ -3,7 +3,9 @@ use crate::AppState;
 use cuid2;
 use portable_pty::PtySize;
 use socket2::{SockRef, TcpKeepalive};
-use ssh2::{CheckResult, HashType, KeyboardInteractivePrompt, KnownHostFileKind, KnownHostKeyFormat};
+use ssh2::{
+    CheckResult, HashType, KeyboardInteractivePrompt, KnownHostFileKind, KnownHostKeyFormat,
+};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::thread;
@@ -76,11 +78,18 @@ fn authenticate(
         if let Some(key_path) = identity_file {
             let key_path = Path::new(key_path);
             if key_path.exists() {
-                println!("ponto: 5.1 - Tentando chave personalizada: {}", key_path.display());
+                println!(
+                    "ponto: 5.1 - Tentando chave personalizada: {}",
+                    key_path.display()
+                );
                 let pub_key = key_path.with_extension("pub");
                 match sess.userauth_pubkey_file(
                     username,
-                    if pub_key.exists() { Some(&pub_key) } else { None },
+                    if pub_key.exists() {
+                        Some(&pub_key)
+                    } else {
+                        None
+                    },
                     key_path,
                     None,
                 ) {
@@ -94,7 +103,10 @@ fn authenticate(
                     }
                 }
             } else {
-                println!("ponto: 5.4 - Chave personalizada não encontrada: {}", key_path.display());
+                println!(
+                    "ponto: 5.4 - Chave personalizada não encontrada: {}",
+                    key_path.display()
+                );
                 return Err(format!("Identity file not found: {}", key_path.display()));
             }
         }
@@ -135,7 +147,9 @@ fn authenticate(
 
         return Err(format!(
             "Authentication failed: {}",
-            last_err.map(|e| e.to_string()).unwrap_or_else(|| "No SSH keys found".to_string())
+            last_err
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "No SSH keys found".to_string())
         ));
     }
     println!("ponto: 7 - Autenticação bem-sucedida");
@@ -143,6 +157,7 @@ fn authenticate(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // Tauri exposes these fields as the invoke payload.
 pub async fn spawn_ssh(
     app_handle: AppHandle,
     state: State<'_, AppState>,
@@ -158,7 +173,7 @@ pub async fn spawn_ssh(
     // Verificar se já existe uma sessão para esta janela
     {
         let ssh_sessions = state.ssh_sessions.lock().await;
-        for (_, session) in ssh_sessions.iter() {
+        for session in ssh_sessions.values() {
             if session.window_id == window_id {
                 return Err("Já existe uma sessão SSH para esta janela".to_string());
             }
@@ -210,8 +225,12 @@ pub async fn spawn_ssh(
     // Verificação de host key
     let (hostkey, hostkey_type) = sess.host_key().ok_or("Failed to get host key")?;
     let hostkey_type_str = format!("{:?}", hostkey_type);
-    let hash_sha256 = sess.host_key_hash(HashType::Sha256).ok_or("Failed to get SHA256 hash")?;
-    let hash_md5 = sess.host_key_hash(HashType::Md5).ok_or("Failed to get MD5 hash")?;
+    let hash_sha256 = sess
+        .host_key_hash(HashType::Sha256)
+        .ok_or("Failed to get SHA256 hash")?;
+    let hash_md5 = sess
+        .host_key_hash(HashType::Md5)
+        .ok_or("Failed to get MD5 hash")?;
     let fingerprint_sha256 = base64_encode_sha256(hash_sha256);
     let fingerprint_md5 = hex_encode_md5(hash_md5);
 
@@ -242,15 +261,20 @@ pub async fn spawn_ssh(
             let mut pending = state.pending_hostkey.lock().await;
             pending.insert(prompt_id.clone(), tx);
         }
-            let _ = app_handle.emit("hostkey-prompt", serde_json::json!({
+        let _ = app_handle.emit(
+            "hostkey-prompt",
+            serde_json::json!({
                 "prompt_id": prompt_id,
                 "host": host,
                 "port": port,
                 "fingerprint_sha256": fingerprint_sha256,
                 "fingerprint_md5": fingerprint_md5,
                 "key_type": hostkey_type_str,
-            }));
-        let accepted = rx.await.map_err(|_| "Host key verification timed out".to_string())?;
+            }),
+        );
+        let accepted = rx
+            .await
+            .map_err(|_| "Host key verification timed out".to_string())?;
         if !accepted {
             return Err("Conexão rejeitada pelo usuário".to_string());
         }
@@ -483,10 +507,7 @@ pub async fn write_ssh(
         let session = ssh_sessions
             .get(&id)
             .ok_or_else(|| "SSH session not found".to_string())?;
-        (
-            session.stdin_tx.clone(),
-            Arc::clone(&session.connected),
-        )
+        (session.stdin_tx.clone(), Arc::clone(&session.connected))
     };
 
     // Verificar se a sessão está conectada
@@ -596,7 +617,7 @@ pub async fn list_ssh_sessions(state: State<'_, AppState>) -> Result<Vec<SshSpaw
     let ssh_sessions = state.ssh_sessions.lock().await;
     let mut result = Vec::new();
 
-    for (_, session) in ssh_sessions.iter() {
+    for session in ssh_sessions.values() {
         let is_connected = session.connected.lock().map(|c| *c).unwrap_or(false);
         if is_connected {
             result.push(SshSpawnPayload {
@@ -620,7 +641,9 @@ pub async fn respond_hostkey(
 ) -> Result<(), String> {
     let mut pending = state.pending_hostkey.lock().await;
     if let Some(sender) = pending.remove(&prompt_id) {
-        sender.send(accept).map_err(|_| "Failed to send response".to_string())
+        sender
+            .send(accept)
+            .map_err(|_| "Failed to send response".to_string())
     } else {
         Err("Prompt not found or already responded".to_string())
     }
@@ -639,4 +662,3 @@ pub async fn shutdown_all_sessions(state: State<'_, AppState>) -> Result<(), Str
     }
     Ok(())
 }
-

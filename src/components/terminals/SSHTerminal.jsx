@@ -7,12 +7,20 @@ import { SerializeAddon } from '@xterm/addon-serialize';
 import { LigaturesAddon } from '@xterm/addon-ligatures';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
-import { isTauri } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useSSHStore, FontConfig, TerminalConfig, ClipboardConfig, useThemeStore, useModalStore, useCommandStore } from '@/stores';
 import SearchOverlay from '@/components/Search/SearchOverlay';
 import CommandSuggestions from './CommandSuggestions';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
+import {
+    concatTerminalChunks,
+    createConptyProbeFilter,
+    createTerminalModeSafeWriter,
+    createTerminalWritePump,
+    createXtgettcapReply,
+    toTerminalBytes,
+} from '@/lib/terminalIo';
 import '@xterm/xterm/css/xterm.css';
 
 const canUseWebgl = () => {
@@ -56,8 +64,8 @@ const SSHTerminal = ({ sessionId }) => {
     const isWebModeRef = useRef(false);
 
     const session = useSSHStore((state) => state.sessions.get(sessionId));
-    const focusedSession = useSSHStore((state) => state.focusedSession);
-    const isFocused = focusedSession === sessionId;
+    const isFocused = useSSHStore((state) => state.focusedSession === sessionId);
+    const isReady = !!session;
 
     const [isInitialized, setIsInitialized] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
@@ -74,10 +82,9 @@ const SSHTerminal = ({ sessionId }) => {
     const lineHeight = TerminalConfig((s) => s.lineHeight);
     const scrollbackLines = TerminalConfig((s) => s.scrollback);
     const pasteRight = ClipboardConfig((s) => s.pasteRight);
-    const { theme } = useThemeStore();
+    const theme = useThemeStore((state) => state.theme);
 
-    const modals = useModalStore((s) => s.modals);
-    const hasModalOpen = Object.values(modals).some(Boolean);
+    const hasModalOpen = useModalStore((s) => Object.values(s.modals).some(Boolean));
 
     const initOk = useMemo(() => {
         const width = containerSize?.width ?? 0;
@@ -115,7 +122,7 @@ const SSHTerminal = ({ sessionId }) => {
     }, [session?.mode]);
 
     useEffect(() => {
-        if (!session || xtermRef.current) return;
+        if (!isReady || xtermRef.current) return;
 
         const xterm = new Terminal({
             theme: { ...theme },
@@ -125,7 +132,7 @@ const SSHTerminal = ({ sessionId }) => {
             cursorStyle,
             lineHeight,
             scrollback: scrollbackLines,
-            allowTransparency: true,
+            allowTransparency: false,
             allowProposedApi: true
         });
 
@@ -139,11 +146,58 @@ const SSHTerminal = ({ sessionId }) => {
         xterm.loadAddon(serializeAddon);
         xterm.loadAddon(searchAddon);
 
+        const sendSshData = (data) => useSSHStore.getState().writeSSH(sessionId, data);
+        const probeFilter = createConptyProbeFilter((capability) => {
+            const reply = createXtgettcapReply(capability);
+            if (reply) sendSshData(reply);
+        });
+        const xtgettcapHandler = xterm.parser.registerDcsHandler(
+            { intermediates: '+', final: 'q' },
+            (capability) => {
+                const reply = createXtgettcapReply(capability);
+                if (!reply) return false;
+                sendSshData(reply);
+                return true;
+            },
+        );
+
+        const reportDiagnostic = (event, stats = {}) => {
+            console.warn(`[ssh-terminal] ${event}`, stats);
+            if (!isTauri()) return;
+            invoke('log_terminal_diagnostic', {
+                terminalId: sessionId,
+                event,
+                queuedBytes: stats.queuedBytes ?? null,
+                queuedChunks: stats.queuedChunks ?? null,
+            }).catch((error) => console.warn('[ssh-terminal] diagnostic log failed:', error));
+        };
+        let writePump;
+        writePump = createTerminalWritePump(
+            createTerminalModeSafeWriter(
+                (bytes, done) => xterm.write(bytes, done),
+                () => reportDiagnostic('input_mode_recovered'),
+            ),
+            {
+                onBackpressure: (stats) => reportDiagnostic('renderer_backpressure', stats),
+                onError: (error) => {
+                    reportDiagnostic('renderer_error', writePump?.getStats());
+                    console.warn('[ssh-terminal] xterm write failed:', error);
+                },
+            },
+        );
+
         if (canUseWebgl()) {
             try {
                 const webglAddon = new WebglAddon();
                 xterm.loadAddon(webglAddon);
                 webglAddonRef.current = webglAddon;
+                webglAddon.onContextLoss(() => {
+                    if (webglAddonRef.current !== webglAddon) return;
+                    webglAddonRef.current = null;
+                    try { webglAddon.dispose(); } catch (_) { }
+                    releaseWebgl();
+                    reportDiagnostic('webgl_context_lost');
+                });
             } catch (e) {
                 console.warn('[ssh-terminal] WebGL addon failed:', e);
                 releaseWebgl();
@@ -155,7 +209,9 @@ const SSHTerminal = ({ sessionId }) => {
             if (xterm.hasSelection()) {
                 const selectedText = xterm.getSelection();
                 if (selectedText) {
-                    writeText(selectedText);
+                    writeText(selectedText).catch((error) =>
+                        console.warn('[ssh-terminal] clipboard write failed:', error)
+                    );
                 }
             }
         });
@@ -177,7 +233,9 @@ const SSHTerminal = ({ sessionId }) => {
             if (event.ctrlKey && event.key === 'c') {
                 if (xterm.hasSelection()) {
                     const selectedText = xterm.getSelection();
-                    writeText(selectedText);
+                    writeText(selectedText).catch((error) =>
+                        console.warn('[ssh-terminal] clipboard write failed:', error)
+                    );
                     return false;
                 }
             }
@@ -185,7 +243,7 @@ const SSHTerminal = ({ sessionId }) => {
             if (event.ctrlKey && event.key === 'v') {
                 readText().then((text) => {
                     if (text) useSSHStore.getState().writeSSH(sessionId, text);
-                });
+                }).catch((error) => console.warn('[ssh-terminal] clipboard read failed:', error));
                 return false;
             }
             return true;
@@ -203,15 +261,15 @@ const SSHTerminal = ({ sessionId }) => {
             // Pass-through cru: o shell remoto faz o echo e a edição de linha.
             // Não escrevemos nada localmente (Tab, setas, backspace, etc. são
             // tratados pelo shell e refletidos via stdout).
-            useSSHStore.getState().writeSSH(sessionId, data);
+            sendSshData(data);
         });
 
         xterm.onResize((size) => {
             if (!isTauri() || isWebModeRef.current) return;
             useSSHStore.getState().resizeSSH(sessionId, {
                 ...size,
-                pixel_width: 0,
-                pixel_height: 0,
+                pixel_width: Math.min(65535, Math.round(terminalRef.current?.clientWidth || 0)),
+                pixel_height: Math.min(65535, Math.round(terminalRef.current?.clientHeight || 0)),
             });
         });
 
@@ -227,7 +285,8 @@ const SSHTerminal = ({ sessionId }) => {
             if (!detail || detail.id !== sessionId) return;
             // Bytes crus: o xterm decodifica UTF-8 e sequências ANSI corretamente
             // (essencial para acentos e apps TUI como vim/htop/less).
-            xterm.write(new Uint8Array(detail.bytes));
+            const output = probeFilter.write(toTerminalBytes(detail.bytes));
+            if (output.byteLength > 0) writePump.write(output);
         };
 
         const onSnapshot = (event) => {
@@ -272,6 +331,7 @@ const SSHTerminal = ({ sessionId }) => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
             window.removeEventListener('ssh:stdout', onStdout);
             window.removeEventListener('terminal:snapshot', onSnapshot);
+            xtgettcapHandler.dispose();
 
             try {
                 const addon = serializeAddonRef.current;
@@ -288,6 +348,18 @@ const SSHTerminal = ({ sessionId }) => {
             }
 
             useSSHStore.getState().detachSession(sessionId);
+            writePump.dispose();
+
+            const webglAddon = webglAddonRef.current;
+            webglAddonRef.current = null;
+            if (webglAddon) {
+                try {
+                    webglAddon.dispose();
+                } catch (e) {
+                    console.warn('[ssh-terminal] WebGL dispose failed:', e);
+                }
+                releaseWebgl();
+            }
 
             try {
                 xterm.dispose();
@@ -295,20 +367,10 @@ const SSHTerminal = ({ sessionId }) => {
                 console.warn('[ssh-terminal] dispose failed:', e);
             }
 
-            try {
-                webglAddonRef.current?.dispose?.();
-            } catch (e) {
-                console.warn('[ssh-terminal] WebGL dispose failed:', e);
-            }
-            if (webglAddonRef.current) {
-                releaseWebgl();
-            }
-
             xtermRef.current = null;
             fitAddonRef.current = null;
             serializeAddonRef.current = null;
             searchAddonRef.current = null;
-            webglAddonRef.current = null;
             openedRef.current = false;
 
             if (resizeTimeoutRef.current) {
@@ -316,10 +378,10 @@ const SSHTerminal = ({ sessionId }) => {
                 resizeTimeoutRef.current = null;
             }
         };
-    }, [session, sessionId]);
+    }, [isReady, sessionId]);
 
     useEffect(() => {
-        if (!session || openedRef.current) return;
+        if (!isReady || openedRef.current) return;
         const xterm = xtermRef.current;
         if (!xterm || !terminalRef.current) return;
         if (!initOk) return;
@@ -348,12 +410,10 @@ const SSHTerminal = ({ sessionId }) => {
 
         const pending = useSSHStore.getState().drainPendingStdout(sessionId);
         if (pending?.length) {
-            for (const bytes of pending) {
-                xterm.write(new Uint8Array(bytes));
-            }
+            xterm.write(concatTerminalChunks(pending));
         }
 
-    }, [session, sessionId, initOk]);
+    }, [isReady, sessionId, initOk]);
 
     useEffect(() => {
         if (!isInitialized || !initOk) return;
@@ -444,7 +504,8 @@ const SSHTerminal = ({ sessionId }) => {
         const xterm = xtermRef.current;
         if (!xterm || !isInitialized) return;
         xterm.options.lineHeight = lineHeight;
-    }, [lineHeight, isInitialized]);
+        scheduleResize();
+    }, [lineHeight, isInitialized, scheduleResize]);
 
     useEffect(() => {
         const xterm = xtermRef.current;
@@ -457,7 +518,8 @@ const SSHTerminal = ({ sessionId }) => {
         if (!xterm || !isInitialized) return;
         xterm.options.fontFamily = font;
         xterm.options.fontSize = fontSize;
-    }, [font, fontSize, isInitialized]);
+        scheduleResize();
+    }, [font, fontSize, isInitialized, scheduleResize]);
 
     useEffect(() => {
         const xterm = xtermRef.current;
@@ -478,7 +540,9 @@ const SSHTerminal = ({ sessionId }) => {
     const handleCopy = () => {
         const xterm = xtermRef.current;
         if (xterm && xterm.hasSelection()) {
-            writeText(xterm.getSelection());
+            writeText(xterm.getSelection()).catch((error) =>
+                console.warn('[ssh-terminal] clipboard write failed:', error)
+            );
         }
     };
 
