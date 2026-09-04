@@ -662,3 +662,82 @@ pub async fn shutdown_all_sessions(state: State<'_, AppState>) -> Result<(), Str
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn distinguishes_changed_and_unknown_host_keys() {
+        assert_eq!(
+            classify_known_host(CheckResult::Mismatch).unwrap(),
+            KnownHostStatus::Changed
+        );
+        assert_eq!(
+            classify_known_host(CheckResult::NotFound).unwrap(),
+            KnownHostStatus::Unknown
+        );
+        assert_eq!(
+            classify_known_host(CheckResult::Match).unwrap(),
+            KnownHostStatus::Trusted
+        );
+        assert!(classify_known_host(CheckResult::Failure).is_err());
+    }
+
+    #[test]
+    fn uses_openssh_default_port_host_name() {
+        assert_eq!(known_host_storage_name("192.168.7.5", 22), "192.168.7.5");
+        assert_eq!(
+            known_host_storage_name("192.168.7.5", 2222),
+            "[192.168.7.5]:2222"
+        );
+    }
+
+    #[test]
+    fn removes_the_stale_default_port_key_without_touching_other_hosts() {
+        let contents = concat!(
+            "# production hosts\n",
+            "192.168.7.5 ecdsa-sha2-nistp256 OLDKEY comment\n",
+            "server.example ssh-ed25519 OTHERKEY\n",
+        );
+
+        let result = remove_known_host_entries(contents, "192.168.7.5", 22);
+
+        assert_eq!(result.removed, 1);
+        assert_eq!(
+            result.contents,
+            "# production hosts\nserver.example ssh-ed25519 OTHERKEY\n"
+        );
+    }
+
+    #[test]
+    fn preserves_other_aliases_from_a_shared_known_hosts_line() {
+        let contents = "192.168.7.5,server.local ssh-ed25519 OLDKEY\r\n";
+
+        let result = remove_known_host_entries(contents, "192.168.7.5", 22);
+
+        assert_eq!(result.removed, 1);
+        assert_eq!(result.contents, "server.local ssh-ed25519 OLDKEY\r\n");
+    }
+
+    #[test]
+    fn a_non_default_port_does_not_delete_the_default_host_key() {
+        let contents = concat!(
+            "192.168.7.5 ssh-ed25519 DEFAULTKEY\n",
+            "[192.168.7.5]:2222 ssh-ed25519 PORTKEY\n",
+        );
+
+        let result = remove_known_host_entries(contents, "192.168.7.5", 2222);
+
+        assert_eq!(result.removed, 1);
+        assert_eq!(result.contents, "192.168.7.5 ssh-ed25519 DEFAULTKEY\n");
+    }
+
+    #[test]
+    fn recognizes_libssh2_algorithm_negotiation_failures() {
+        assert!(is_algorithm_negotiation_error(-5));
+        assert!(is_algorithm_negotiation_error(-8));
+        assert!(is_algorithm_negotiation_error(-51));
+        assert!(!is_algorithm_negotiation_error(-18));
+    }
+}
