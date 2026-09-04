@@ -1,12 +1,23 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { X, SplitSquareVertical, Plus, Layers, List } from 'lucide-react';
+import { Copy, Layers, List, Plus, RefreshCw, SplitSquareVertical, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useSplitStore, useTerminalStore, useSSHStore, useConfigStore, useAppStore } from '@/stores';
 import { useDraggable, useDroppable, useDndContext } from '@dnd-kit/core';
-import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu';
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuSeparator,
+    ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import RenameDialog from '@/components/ui/RenameDialog';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import {
+    getGroupCustomersToOpen,
+    getSSHSpawnConfig,
+    getTabTerminalId,
+} from '@/lib/tabActions';
 
 const getTabLabel = (tab, terminals, sessions) => {
     if (tab.type === 'single') {
@@ -31,7 +42,19 @@ const countTerminals = (tab) => {
     return count;
 };
 
-const TabItem = ({ tab, isActive, terminals, sessions, onTabClick, onRequestClose, onRename, compact = false }) => {
+const TabItem = ({
+    tab,
+    isActive,
+    terminals,
+    sessions,
+    onTabClick,
+    onRequestClose,
+    onRename,
+    onDuplicate,
+    onReconnect,
+    canReconnect,
+    compact = false,
+}) => {
     const label = getTabLabel(tab, terminals, sessions);
     const count = tab.type === 'split' ? countTerminals(tab) : 1;
     const tabText = tab.type === 'split' ? `${tab.label || 'Split'} (${count})` : label;
@@ -145,6 +168,15 @@ const TabItem = ({ tab, isActive, terminals, sessions, onTabClick, onRequestClos
                 </div>
             </ContextMenuTrigger>
             <ContextMenuContent className="w-44">
+                <ContextMenuItem onSelect={onDuplicate}>
+                    <Copy className="mr-2 h-3.5 w-3.5" />
+                    Duplicar aba
+                </ContextMenuItem>
+                <ContextMenuItem disabled={!canReconnect} onSelect={onReconnect}>
+                    <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                    Reconectar aba
+                </ContextMenuItem>
+                <ContextMenuSeparator />
                 <ContextMenuItem onSelect={onRename}>Renomear Aba</ContextMenuItem>
                 <ContextMenuItem onSelect={onRequestClose}>Fechar Aba</ContextMenuItem>
             </ContextMenuContent>
@@ -172,8 +204,10 @@ const GlobalTabBar = () => {
     const removeTab = useSplitStore((s) => s.removeTab);
     const closePaneInSplit = useSplitStore((s) => s.closePaneInSplit);
     const renameTab = useSplitStore((s) => s.renameTab);
+    const replaceActiveTerminalInTab = useSplitStore((s) => s.replaceActiveTerminalInTab);
 
     const groups = useConfigStore((s) => s.groups);
+    const customers = useConfigStore((s) => s.customers);
     const tabLayout = useAppStore((s) => s.settings.tabLayout ?? 'grouped');
     const setTabLayout = useAppStore((s) => s.setTabLayout);
 
@@ -190,6 +224,8 @@ const GlobalTabBar = () => {
     const sessions = useSSHStore((s) => s.sessions);
     const killPty = useTerminalStore((s) => s.killPty);
     const killSSH = useSSHStore((s) => s.killSSH);
+    const spawnPty = useTerminalStore((s) => s.spawnPty);
+    const spawnSSH = useSSHStore((s) => s.spawnSSH);
 
     const handleTabClose = async (tab) => {
         if (tab.type === 'split') {
@@ -213,12 +249,6 @@ const GlobalTabBar = () => {
         }
     };
 
-    const getTabTerminalId = (tab) => {
-        if (tab.type === 'single') return tab.terminalId;
-        const leaf = tab.nodes?.[tab.activePaneId];
-        return leaf?.type === 'leaf' ? leaf.terminalId : null;
-    };
-
     const isConnected = (terminalId) => {
         if (!terminalId) return false;
         if (terminals.has(terminalId)) return true;
@@ -231,6 +261,76 @@ const GlobalTabBar = () => {
             setTabToClose(tab);
         } else {
             handleTabClose(tab);
+        }
+    };
+
+    const handleDuplicateTab = async (tab) => {
+        const terminalId = getTabTerminalId(tab);
+        const terminal = terminals.get(terminalId);
+        const session = sessions.get(terminalId);
+
+        try {
+            if (terminal) {
+                await spawnPty(terminal.shell);
+                return;
+            }
+
+            const config = getSSHSpawnConfig(session, customers);
+            if (config) await spawnSSH(config);
+        } catch (error) {
+            useAppStore.getState().addNotification({
+                type: 'error',
+                title: 'Falha ao duplicar aba',
+                message: error?.message || String(error),
+            });
+        }
+    };
+
+    const handleReconnectTab = async (tab) => {
+        const terminalId = getTabTerminalId(tab);
+        const session = sessions.get(terminalId);
+        const config = getSSHSpawnConfig(session, customers);
+        if (!config) return;
+
+        try {
+            // Mantém a sessão atual até a nova conexão ser criada com sucesso.
+            const newSessionId = await spawnSSH(config);
+            if (!newSessionId) throw new Error('A nova sessão SSH não retornou um identificador.');
+            replaceActiveTerminalInTab(tab.id, newSessionId);
+            await killSSH(terminalId);
+        } catch (error) {
+            useAppStore.getState().addNotification({
+                type: 'error',
+                title: 'Falha ao reconectar aba',
+                message: error?.message || String(error),
+            });
+        }
+    };
+
+    const handleOpenGroup = async (groupId) => {
+        const pendingCustomers = getGroupCustomersToOpen(
+            customers,
+            groups.map((group) => group.id),
+            groupId,
+            sessions,
+        );
+        if (pendingCustomers.length === 0) return;
+
+        const results = await Promise.allSettled(pendingCustomers.map((customer) => spawnSSH({
+            host: customer.host,
+            port: customer.port || 22,
+            username: customer.username,
+            password: customer.password,
+            identityFile: customer.identityFile,
+        })));
+        const failed = results.filter((result) => result.status === 'rejected');
+
+        if (failed.length > 0) {
+            useAppStore.getState().addNotification({
+                type: 'error',
+                title: 'Algumas conexões falharam',
+                message: `${failed.length} de ${results.length} sessões não puderam ser abertas.`,
+            });
         }
     };
 
@@ -282,21 +382,38 @@ const GlobalTabBar = () => {
                     {tabGroups.map(group => {
                         const count = tabs.filter(t => (t.groupId ?? '__ungrouped__') === group.id).length;
                         const isActive = currentGroupId === group.id;
+                        const sessionsToOpen = getGroupCustomersToOpen(
+                            customers,
+                            groups.map((item) => item.id),
+                            group.id,
+                            sessions,
+                        ).length;
                         return (
-                            <button
-                                key={group.id}
-                                onClick={() => setActiveGroup(group.id)}
-                                className={cn(
-                                    "flex items-center gap-2 h-7 rounded-md px-2.5 cursor-pointer whitespace-nowrap select-none transition-all duration-150 shrink-0",
-                                    "border border-transparent dark:bg-[#25262B] dark:text-gray-400 text-gray-700 bg-gray-200",
-                                    "hover:dark:bg-[#2C2D32] dark:hover:text-gray-100 hover:text-gray-900",
-                                    isActive && "dark:bg-[#1A1B1E] dark:text-white dark:border-gray-800 bg-white text-gray-900 border-gray-300 shadow-sm"
-                                )}
-                            >
-                                <div className={cn("w-2 h-2 rounded-full flex-shrink-0", groupDotColor(group.id))} />
-                                <span className="text-xs font-semibold truncate max-w-[120px]">{group.label}</span>
-                                <span className="text-[10px] font-normal dark:text-gray-500 text-gray-400 flex-shrink-0">{count}</span>
-                            </button>
+                            <ContextMenu key={group.id}>
+                                <ContextMenuTrigger asChild>
+                                    <button
+                                        onClick={() => setActiveGroup(group.id)}
+                                        className={cn(
+                                            "flex items-center gap-2 h-7 rounded-md px-2.5 cursor-pointer whitespace-nowrap select-none transition-all duration-150 shrink-0",
+                                            "border border-transparent dark:bg-[#25262B] dark:text-gray-400 text-gray-700 bg-gray-200",
+                                            "hover:dark:bg-[#2C2D32] dark:hover:text-gray-100 hover:text-gray-900",
+                                            isActive && "dark:bg-[#1A1B1E] dark:text-white dark:border-gray-800 bg-white text-gray-900 border-gray-300 shadow-sm"
+                                        )}
+                                    >
+                                        <div className={cn("w-2 h-2 rounded-full flex-shrink-0", groupDotColor(group.id))} />
+                                        <span className="text-xs font-semibold truncate max-w-[120px]">{group.label}</span>
+                                        <span className="text-[10px] font-normal dark:text-gray-500 text-gray-400 flex-shrink-0">{count}</span>
+                                    </button>
+                                </ContextMenuTrigger>
+                                <ContextMenuContent className="w-60">
+                                    <ContextMenuItem
+                                        disabled={sessionsToOpen === 0}
+                                        onSelect={() => handleOpenGroup(group.id)}
+                                    >
+                                        Abrir todas as sessões do grupo
+                                    </ContextMenuItem>
+                                </ContextMenuContent>
+                            </ContextMenu>
                         );
                     })}
                 </div>
@@ -321,6 +438,9 @@ const GlobalTabBar = () => {
                         onTabClick={() => setActiveTab(tab.id)}
                         onRequestClose={() => requestTabClose(tab)}
                         onRename={() => handleRename(tab)}
+                        onDuplicate={() => handleDuplicateTab(tab)}
+                        onReconnect={() => handleReconnectTab(tab)}
+                        canReconnect={sessions.has(getTabTerminalId(tab))}
                         compact
                     />
                 ))}

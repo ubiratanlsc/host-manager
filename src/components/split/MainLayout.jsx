@@ -181,6 +181,27 @@ const MainLayout = () => {
         }
     }, [terminals, sessions, tabs, addSingleTab, removeTerminalFromAnyTab, setFocusedTerminal, setFocusedSession, rehydrated, isTerminalInit, isSSHInit]);
 
+    useEffect(() => {
+        const handleCloseRequest = (event) => {
+            const terminalId = event.detail?.terminalId;
+            if (!terminalId) return;
+
+            const splitStore = useSplitStore.getState();
+            const terminalStore = useTerminalStore.getState();
+            const sshStore = useSSHStore.getState();
+            splitStore.removeTerminalFromAnyTab(terminalId);
+
+            if (terminalStore.terminals.has(terminalId)) {
+                terminalStore.killPty(terminalId).catch(console.error);
+            } else if (sshStore.sessions.has(terminalId)) {
+                sshStore.killSSH(terminalId).catch(console.error);
+            }
+        };
+
+        window.addEventListener('terminal:request-close', handleCloseRequest);
+        return () => window.removeEventListener('terminal:request-close', handleCloseRequest);
+    }, []);
+
     // Handle tab activation while dragging over tab items
     const handleDragOver = useCallback((event) => {
         const { over } = event;
@@ -362,9 +383,9 @@ const MainLayout = () => {
             onDragCancel={() => setActiveDrag(null)}
             onDragEnd={handleDragEnd}
         >
-            <div className="flex flex-col h-full w-full overflow-hidden relative">
+            <div className="flex flex-col h-full min-h-0 w-full overflow-hidden relative">
                 <GlobalTabBar />
-                <div className="flex-1 overflow-hidden relative h-full">
+                <div className="flex-1 min-h-0 overflow-hidden relative">
                     <SplitPane />
                 </div>
                 {pendingSplitDrop && <SplitPositionMenu />}

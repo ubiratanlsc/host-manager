@@ -121,7 +121,7 @@ const Pane = ({ tabId, paneId, terminalId, isSplitLayout, isActiveTab = true }) 
         <div
             onClick={() => isActiveTab && isSplitLayout && setActivePaneInTab(tabId, paneId)}
             className={cn(
-                "relative flex flex-col h-full overflow-hidden transition-colors duration-150 bg-[#1A1B1E]",
+                "relative flex flex-col h-full min-h-0 overflow-hidden transition-colors duration-150 bg-[#1A1B1E]",
                 isSplitLayout && "border dark:border-[#2C2D32]/80 border-gray-300",
                 isFocusedPane && isSplitLayout && "border-blue-500/80 ring-1 ring-blue-500/20"
             )}
@@ -165,7 +165,7 @@ const Pane = ({ tabId, paneId, terminalId, isSplitLayout, isActiveTab = true }) 
             />
 
             {/* Terminal area */}
-            <div className="flex-1 relative overflow-hidden">
+            <div className="flex-1 min-h-0 relative overflow-hidden">
                 <div className="absolute inset-0">
                     {terminal && <LocalTerminal terminalId={terminalId} />}
                     {session && <SSHTerminal sessionId={terminalId} />}

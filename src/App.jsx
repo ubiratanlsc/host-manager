@@ -76,7 +76,7 @@ const App = () => {
     <div className="h-screen flex flex-col overflow-hidden text-gray-900 dark:text-gray-100 font-[IBM Plex Sans]">
       <MenuBar />
       <div
-        className="flex-1 flex flex-col overflow-hidden bg-background transition-colors duration-300"
+        className="flex-1 min-h-0 flex flex-col overflow-hidden bg-background transition-colors duration-300"
         inert={isOverlayActive ? "" : undefined}
       >
         <MainLayout />

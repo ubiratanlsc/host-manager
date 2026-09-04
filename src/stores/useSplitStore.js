@@ -5,6 +5,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { BaseDirectory, exists, mkdir, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import useTerminalStore from './useTerminalStore';
 import useSSHStore from './useSSHStore';
+import { replaceActiveTerminalInTabs } from '@/lib/tabActions';
 
 // ─── Tauri FS persistence helpers ─────────────────────────────────────
 
@@ -311,6 +312,12 @@ const useSplitStore = create(
                     );
                     return { tabs: newTabs };
                 });
+            },
+
+            replaceActiveTerminalInTab: (tabId, terminalId) => {
+                set((state) => ({
+                    tabs: replaceActiveTerminalInTabs(state.tabs, tabId, terminalId),
+                }));
             },
 
             // ========== SPLIT CREATION / EXPANSION ==========

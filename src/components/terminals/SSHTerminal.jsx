@@ -21,6 +21,7 @@ import {
     createXtgettcapReply,
     toTerminalBytes,
 } from '@/lib/terminalIo';
+import { isCloseTabShortcut } from '@/lib/tabActions';
 import '@xterm/xterm/css/xterm.css';
 
 const canUseWebgl = () => {
@@ -218,6 +219,13 @@ const SSHTerminal = ({ sessionId }) => {
 
         xterm.attachCustomKeyEventHandler((event) => {
             if (event.type !== 'keydown') return true;
+            if (isCloseTabShortcut(event)) {
+                event.preventDefault();
+                window.dispatchEvent(new CustomEvent('terminal:request-close', {
+                    detail: { terminalId: sessionId },
+                }));
+                return false;
+            }
             // Ctrl+F abre busca (preventDefault bloqueia find bar nativo do webview)
             if (event.ctrlKey && event.key === 'f') {
                 event.preventDefault();

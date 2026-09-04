@@ -5,6 +5,8 @@ import {
     getSSHSpawnConfig,
     getTabTerminalId,
     isCloseTabShortcut,
+    replaceActiveTabTerminal,
+    replaceActiveTerminalInTabs,
 } from './tabActions.js';
 
 test('resolves the active terminal from single and split tabs', () => {
@@ -17,6 +19,52 @@ test('resolves the active terminal from single and split tabs', () => {
             'pane-2': { type: 'leaf', terminalId: 'ssh-2' },
         },
     }), 'ssh-2');
+    assert.equal(getTabTerminalId(null), null);
+    assert.equal(getTabTerminalId({ type: 'split', activePaneId: 'missing', nodes: {} }), null);
+});
+
+test('replaces only the active terminal when reconnecting a split tab', () => {
+    const tab = {
+        id: 'tab-1',
+        type: 'split',
+        activePaneId: 'pane-2',
+        nodes: {
+            'pane-1': { id: 'pane-1', type: 'leaf', terminalId: 'ssh-1' },
+            'pane-2': { id: 'pane-2', type: 'leaf', terminalId: 'ssh-2' },
+            root: { id: 'root', type: 'branch', children: ['pane-1', 'pane-2'] },
+        },
+    };
+
+    const replaced = replaceActiveTabTerminal(tab, 'ssh-new');
+
+    assert.equal(replaced.nodes['pane-1'].terminalId, 'ssh-1');
+    assert.equal(replaced.nodes['pane-2'].terminalId, 'ssh-new');
+    assert.notEqual(replaced.nodes, tab.nodes);
+    assert.equal(tab.nodes['pane-2'].terminalId, 'ssh-2');
+});
+
+test('replaces a single tab terminal without losing its metadata', () => {
+    const tab = { id: 'tab-1', type: 'single', terminalId: 'old', groupId: 'ops', userLabel: 'Banco' };
+    assert.deepEqual(replaceActiveTabTerminal(tab, 'new'), {
+        id: 'tab-1',
+        type: 'single',
+        terminalId: 'new',
+        groupId: 'ops',
+        userLabel: 'Banco',
+    });
+});
+
+test('atomically removes a transient duplicate tab created during reconnect', () => {
+    const tabs = [
+        { id: 'source', type: 'single', terminalId: 'old', groupId: 'ops' },
+        { id: 'transient', type: 'single', terminalId: 'new', groupId: 'ops' },
+        { id: 'other', type: 'single', terminalId: 'keep', groupId: 'ops' },
+    ];
+
+    assert.deepEqual(
+        replaceActiveTerminalInTabs(tabs, 'source', 'new').map((tab) => [tab.id, tab.terminalId]),
+        [['source', 'new'], ['other', 'keep']],
+    );
 });
 
 test('recognizes only Ctrl+D as the close-tab shortcut', () => {
@@ -45,6 +93,12 @@ test('restores saved authentication data when duplicating or reconnecting SSH', 
         password: 'secret',
         identityFile: 'C:/keys/ana',
     });
+
+    assert.equal(getSSHSpawnConfig(null, []), null);
+    assert.deepEqual(
+        getSSHSpawnConfig({ config: { host: 'other', username: 'root' } }, []),
+        { host: 'other', port: 22, username: 'root' },
+    );
 });
 
 test('opens only missing connections from the selected group', () => {
@@ -74,4 +128,5 @@ test('treats customers without a valid group as ungrouped', () => {
         getGroupCustomersToOpen(customers, ['ops'], '__ungrouped__', new Map()).map((customer) => customer.id),
         ['none', 'stale'],
     );
+    assert.deepEqual(getGroupCustomersToOpen(customers, ['ops'], '__local__', []), []);
 });

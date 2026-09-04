@@ -49,15 +49,15 @@ const SplitPaneRenderer = ({ tabId, nodes, nodeId, isActiveTab }) => {
                 // Notificar relayout do terminal
                 window.dispatchEvent(new Event('terminal:relayout'));
             }}
-            className="w-full h-full"
+            className="w-full h-full min-h-0"
         >
-            <ResizablePanel className="z-[1] overflow-hidden" defaultSize={defaultSizes[0]} minSize={10}>
+            <ResizablePanel className="z-[1] min-h-0 overflow-hidden" defaultSize={defaultSizes[0]} minSize={10}>
                 <SplitPaneRenderer tabId={tabId} nodes={nodes} nodeId={node.children[0]} isActiveTab={isActiveTab} />
             </ResizablePanel>
 
             <CustomResizeHandle direction={node.direction} />
 
-            <ResizablePanel className="z-[2] overflow-hidden" defaultSize={defaultSizes[1]} minSize={10}>
+            <ResizablePanel className="z-[2] min-h-0 overflow-hidden" defaultSize={defaultSizes[1]} minSize={10}>
                 <SplitPaneRenderer tabId={tabId} nodes={nodes} nodeId={node.children[1]} isActiveTab={isActiveTab} />
             </ResizablePanel>
         </ResizablePanelGroup>
