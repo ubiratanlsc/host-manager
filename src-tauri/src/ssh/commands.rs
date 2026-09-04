@@ -4,8 +4,9 @@ use cuid2;
 use portable_pty::PtySize;
 use socket2::{SockRef, TcpKeepalive};
 use ssh2::{
-    CheckResult, HashType, KeyboardInteractivePrompt, KnownHostFileKind, KnownHostKeyFormat,
+    CheckResult, ErrorCode, HashType, HostKeyType, KeyboardInteractivePrompt, KnownHostFileKind,
 };
+use std::fs;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::thread;
@@ -45,7 +46,10 @@ fn get_known_hosts_path() -> Option<std::path::PathBuf> {
 
 fn base64_encode_sha256(hash: &[u8]) -> String {
     use base64::Engine;
-    base64::engine::general_purpose::STANDARD.encode(hash)
+    base64::engine::general_purpose::STANDARD
+        .encode(hash)
+        .trim_end_matches('=')
+        .to_string()
 }
 
 fn hex_encode_md5(hash: &[u8]) -> String {
@@ -53,6 +57,277 @@ fn hex_encode_md5(hash: &[u8]) -> String {
         .map(|b| format!("{:02x}", b))
         .collect::<Vec<_>>()
         .join(":")
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum KnownHostStatus {
+    Trusted,
+    Unknown,
+    Changed,
+}
+
+impl KnownHostStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Trusted => "trusted",
+            Self::Unknown => "unknown",
+            Self::Changed => "changed",
+        }
+    }
+}
+
+fn classify_known_host(result: CheckResult) -> Result<KnownHostStatus, String> {
+    match result {
+        CheckResult::Match => Ok(KnownHostStatus::Trusted),
+        CheckResult::NotFound => Ok(KnownHostStatus::Unknown),
+        CheckResult::Mismatch => Ok(KnownHostStatus::Changed),
+        CheckResult::Failure => {
+            Err("Não foi possível verificar a identidade do servidor no known_hosts".to_string())
+        }
+    }
+}
+
+fn known_host_storage_name(host: &str, port: u16) -> String {
+    if port == 22 {
+        host.to_string()
+    } else {
+        format!("[{}]:{}", host, port)
+    }
+}
+
+fn known_host_names_to_replace(host: &str, port: u16) -> Vec<String> {
+    if port == 22 {
+        vec![host.to_string(), format!("[{}]:22", host)]
+    } else {
+        vec![known_host_storage_name(host, port)]
+    }
+}
+
+fn hashed_host_matches(pattern: &str, candidates: &[String]) -> bool {
+    use base64::Engine;
+    use ring::hmac;
+
+    let parts = pattern.split('|').collect::<Vec<_>>();
+    if parts.len() != 4 || !parts[0].is_empty() || parts[1] != "1" {
+        return false;
+    }
+
+    let Ok(salt) = base64::engine::general_purpose::STANDARD.decode(parts[2]) else {
+        return false;
+    };
+    let Ok(expected_hash) = base64::engine::general_purpose::STANDARD.decode(parts[3]) else {
+        return false;
+    };
+    let key = hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, &salt);
+
+    candidates
+        .iter()
+        .any(|candidate| hmac::verify(&key, candidate.as_bytes(), &expected_hash).is_ok())
+}
+
+fn host_pattern_matches(pattern: &str, candidates: &[String]) -> bool {
+    if pattern.starts_with('!') {
+        return false;
+    }
+
+    candidates.iter().any(|candidate| pattern == candidate)
+        || hashed_host_matches(pattern, candidates)
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct KnownHostsRemoval {
+    contents: String,
+    removed: usize,
+}
+
+fn first_token_bounds(value: &str) -> Option<(usize, usize)> {
+    let start = value
+        .char_indices()
+        .find_map(|(index, character)| (!character.is_whitespace()).then_some(index))?;
+    let end = value[start..]
+        .char_indices()
+        .find_map(|(index, character)| character.is_whitespace().then_some(start + index))
+        .unwrap_or(value.len());
+    Some((start, end))
+}
+
+fn remove_known_host_entries(contents: &str, host: &str, port: u16) -> KnownHostsRemoval {
+    let candidates = known_host_names_to_replace(host, port);
+    let mut updated = String::with_capacity(contents.len());
+    let mut removed = 0;
+
+    for line in contents.split_inclusive('\n') {
+        let (body, line_ending) = if let Some(body) = line.strip_suffix("\r\n") {
+            (body, "\r\n")
+        } else if let Some(body) = line.strip_suffix('\n') {
+            (body, "\n")
+        } else {
+            (line, "")
+        };
+
+        let Some((host_start, host_end)) = first_token_bounds(body) else {
+            updated.push_str(line);
+            continue;
+        };
+        let host_field = &body[host_start..host_end];
+
+        // Marcadores como @revoked e @cert-authority são políticas de segurança,
+        // não chaves comuns do host. Nunca os removemos automaticamente.
+        if host_field.starts_with('@') || host_field.starts_with('#') {
+            updated.push_str(line);
+            continue;
+        }
+
+        let aliases = host_field.split(',').collect::<Vec<_>>();
+        let retained = aliases
+            .iter()
+            .copied()
+            .filter(|alias| !host_pattern_matches(alias, &candidates))
+            .collect::<Vec<_>>();
+        let removed_from_line = aliases.len() - retained.len();
+
+        if removed_from_line == 0 {
+            updated.push_str(line);
+            continue;
+        }
+
+        removed += removed_from_line;
+        if !retained.is_empty() {
+            updated.push_str(&body[..host_start]);
+            updated.push_str(&retained.join(","));
+            updated.push_str(&body[host_end..]);
+            updated.push_str(line_ending);
+        }
+    }
+
+    KnownHostsRemoval {
+        contents: updated,
+        removed,
+    }
+}
+
+fn openssh_key_type(host_key_type: HostKeyType) -> Result<&'static str, String> {
+    match host_key_type {
+        HostKeyType::Rsa => Ok("ssh-rsa"),
+        HostKeyType::Dss => Ok("ssh-dss"),
+        HostKeyType::Ecdsa256 => Ok("ecdsa-sha2-nistp256"),
+        HostKeyType::Ecdsa384 => Ok("ecdsa-sha2-nistp384"),
+        HostKeyType::Ecdsa521 => Ok("ecdsa-sha2-nistp521"),
+        HostKeyType::Ed25519 => Ok("ssh-ed25519"),
+        HostKeyType::Unknown => {
+            Err("O servidor apresentou um tipo de chave desconhecido".to_string())
+        }
+    }
+}
+
+fn persist_known_host(
+    sess: &Session,
+    path: &Path,
+    host: &str,
+    port: u16,
+    host_key: &[u8],
+    host_key_type: HostKeyType,
+    status: KnownHostStatus,
+) -> Result<(), String> {
+    use base64::Engine;
+
+    let (original, existed) = match fs::read_to_string(path) {
+        Ok(contents) => (contents, true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (String::new(), false),
+        Err(error) => {
+            return Err(format!(
+                "Não foi possível ler {}: {}",
+                path.display(),
+                error
+            ))
+        }
+    };
+
+    let mut updated = if status == KnownHostStatus::Changed {
+        let removal = remove_known_host_entries(&original, host, port);
+        if removal.removed == 0 && port == 22 {
+            return Err(format!(
+                "A chave antiga de {}:{} não foi localizada em {}. Remova-a manualmente e tente novamente.",
+                host,
+                port,
+                path.display()
+            ));
+        }
+        if removal.removed == 0 {
+            // O libssh2 usa a entrada genérica do host como fallback para uma
+            // porta não padrão. Mantemos essa chave (ela pode pertencer à
+            // porta 22) e criamos uma entrada específica para host:porta.
+            original.clone()
+        } else {
+            removal.contents
+        }
+    } else {
+        original.clone()
+    };
+
+    if !updated.is_empty() && !updated.ends_with('\n') {
+        updated.push('\n');
+    }
+    let encoded_key = base64::engine::general_purpose::STANDARD.encode(host_key);
+    updated.push_str(&format!(
+        "{} {} {} host-manager\n",
+        known_host_storage_name(host, port),
+        openssh_key_type(host_key_type)?,
+        encoded_key
+    ));
+
+    if status == KnownHostStatus::Changed && existed {
+        let backup_path = path.with_extension("host-manager.bak");
+        fs::copy(path, &backup_path).map_err(|error| {
+            format!(
+                "Não foi possível criar o backup {}: {}",
+                backup_path.display(),
+                error
+            )
+        })?;
+    }
+
+    fs::write(path, updated)
+        .map_err(|error| format!("Não foi possível atualizar {}: {}", path.display(), error))?;
+
+    let verification = (|| {
+        let mut known = sess.known_hosts().map_err(|error| error.to_string())?;
+        known
+            .read_file(path, KnownHostFileKind::OpenSSH)
+            .map_err(|error| error.to_string())?;
+        match classify_known_host(known.check_port(host, port, host_key))? {
+            KnownHostStatus::Trusted => Ok(()),
+            _ => Err("A chave salva não passou pela verificação final".to_string()),
+        }
+    })();
+
+    if let Err(error) = verification {
+        if existed {
+            let _ = fs::write(path, original);
+        } else {
+            let _ = fs::remove_file(path);
+        }
+        return Err(format!(
+            "Não foi possível confirmar a atualização do known_hosts: {}",
+            error
+        ));
+    }
+
+    Ok(())
+}
+
+fn known_host_recovery_command(host: &str, port: u16, path: &Path) -> String {
+    format!(
+        "ssh-keygen -R \"{}\" -f \"{}\"",
+        known_host_storage_name(host, port),
+        path.display()
+    )
+}
+
+fn is_algorithm_negotiation_error(code: i32) -> bool {
+    // Constantes estáveis do libssh2: KEX_FAILURE, KEY_EXCHANGE_FAILURE e
+    // ALGO_UNSUPPORTED. A crate ssh2 não as reexporta publicamente.
+    matches!(code, -5 | -8 | -51)
 }
 
 fn authenticate(
@@ -220,7 +495,33 @@ pub async fn spawn_ssh(
     let mut sess = Session::new().map_err(|e| e.to_string())?;
 
     sess.set_tcp_stream(tcp);
-    sess.handshake().map_err(|e| e.to_string())?;
+    if let Err(error) = sess.handshake() {
+        let detail = error.to_string();
+        let code = match error.code() {
+            ErrorCode::Session(code) | ErrorCode::SFTP(code) => code,
+        };
+
+        if is_algorithm_negotiation_error(code) {
+            let _ = app_handle.emit(
+                "ssh-connection-error",
+                serde_json::json!({
+                    "kind": "algorithm_negotiation",
+                    "host": host,
+                    "port": port,
+                    "details": detail,
+                }),
+            );
+            return Err(format!(
+                "Não foi possível negociar os algoritmos SSH com {}:{}. Consulte o aviso exibido para revisar a configuração do servidor.",
+                host, port
+            ));
+        }
+
+        return Err(format!(
+            "Falha ao iniciar a conexão SSH com {}:{}. Detalhes: {}",
+            host, port, detail
+        ));
+    }
 
     // Verificação de host key
     let (hostkey, hostkey_type) = sess.host_key().ok_or("Failed to get host key")?;
@@ -228,66 +529,77 @@ pub async fn spawn_ssh(
     let hash_sha256 = sess
         .host_key_hash(HashType::Sha256)
         .ok_or("Failed to get SHA256 hash")?;
-    let hash_md5 = sess
-        .host_key_hash(HashType::Md5)
-        .ok_or("Failed to get MD5 hash")?;
     let fingerprint_sha256 = base64_encode_sha256(hash_sha256);
-    let fingerprint_md5 = hex_encode_md5(hash_md5);
+    let fingerprint_md5 = sess.host_key_hash(HashType::Md5).map(hex_encode_md5);
 
-    let known_hosts_path = get_known_hosts_path();
-    let hostname = format!("[{}]:{}", host, port);
-
-    let (needs_prompt, known_hosts_path2) = {
+    let known_hosts_path = get_known_hosts_path().ok_or_else(|| {
+        "Não foi possível localizar a pasta do usuário para verificar o known_hosts".to_string()
+    })?;
+    let host_key_status = {
         let mut known = sess.known_hosts().map_err(|e| e.to_string())?;
-        if let Some(ref path) = known_hosts_path {
-            let _ = known.read_file(path, KnownHostFileKind::OpenSSH);
+        if known_hosts_path.exists() {
+            known
+                .read_file(&known_hosts_path, KnownHostFileKind::OpenSSH)
+                .map_err(|error| {
+                    format!(
+                        "Não foi possível ler {}: {}",
+                        known_hosts_path.display(),
+                        error
+                    )
+                })?;
         }
-        let check_result = known.check(&hostname, hostkey);
-        let needs = match check_result {
-            CheckResult::Match => {
-                println!("ponto: 8.5 - Host key conhecido");
-                false
-            }
-            _ => true,
-        };
-        (needs, known_hosts_path.clone())
+        classify_known_host(known.check_port(&host, port, hostkey))?
     };
 
-    if needs_prompt {
-        println!("ponto: 8.6 - Host key desconhecido, solicitando confirmação");
+    if host_key_status == KnownHostStatus::Trusted {
+        println!("ponto: 8.5 - Host key conhecido");
+    } else {
+        println!(
+            "ponto: 8.6 - Host key {}, solicitando confirmação",
+            host_key_status.as_str()
+        );
         let prompt_id = cuid2::create_id();
         let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
         {
             let mut pending = state.pending_hostkey.lock().await;
             pending.insert(prompt_id.clone(), tx);
         }
-        let _ = app_handle.emit(
+        if let Err(error) = app_handle.emit(
             "hostkey-prompt",
             serde_json::json!({
-                "prompt_id": prompt_id,
+                "prompt_id": prompt_id.clone(),
                 "host": host,
                 "port": port,
+                "status": host_key_status.as_str(),
                 "fingerprint_sha256": fingerprint_sha256,
                 "fingerprint_md5": fingerprint_md5,
                 "key_type": hostkey_type_str,
+                "known_hosts_path": known_hosts_path.display().to_string(),
+                "recovery_command": known_host_recovery_command(&host, port, &known_hosts_path),
             }),
-        );
+        ) {
+            state.pending_hostkey.lock().await.remove(&prompt_id);
+            return Err(format!(
+                "Não foi possível exibir a confirmação da chave do servidor: {}",
+                error
+            ));
+        }
         let accepted = rx
             .await
-            .map_err(|_| "Host key verification timed out".to_string())?;
+            .map_err(|_| "A confirmação da chave do servidor foi interrompida".to_string())?;
         if !accepted {
-            return Err("Conexão rejeitada pelo usuário".to_string());
+            return Err("Conexão cancelada: a chave do servidor não foi aceita".to_string());
         }
         println!("ponto: 8.7 - Host key aceito pelo usuário");
-        // Adicionar ao known_hosts (precisa de um novo KnownHosts pois o anterior foi dropado)
-        if let Some(ref path) = known_hosts_path2 {
-            if let Ok(mut known2) = sess.known_hosts() {
-                let _ = known2.read_file(path, KnownHostFileKind::OpenSSH);
-                let fmt: KnownHostKeyFormat = hostkey_type.into();
-                let _ = known2.add(&hostname, hostkey, &host, fmt);
-                let _ = known2.write_file(path, KnownHostFileKind::OpenSSH);
-            }
-        }
+        persist_known_host(
+            &sess,
+            &known_hosts_path,
+            &host,
+            port,
+            hostkey,
+            hostkey_type,
+            host_key_status,
+        )?;
     }
 
     authenticate(&mut sess, &username, &password, &identity_file)?;
@@ -685,6 +997,14 @@ mod tests {
     }
 
     #[test]
+    fn formats_sha256_fingerprint_like_openssh() {
+        assert_eq!(
+            base64_encode_sha256(&[0; 32]),
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        );
+    }
+
+    #[test]
     fn uses_openssh_default_port_host_name() {
         assert_eq!(known_host_storage_name("192.168.7.5", 22), "192.168.7.5");
         assert_eq!(
@@ -718,6 +1038,19 @@ mod tests {
 
         assert_eq!(result.removed, 1);
         assert_eq!(result.contents, "server.local ssh-ed25519 OLDKEY\r\n");
+    }
+
+    #[test]
+    fn removes_a_hashed_openssh_host_entry() {
+        let contents = concat!(
+            "|1|AAECAwQFBgcICQoLDA0ODxAREhM=|xLxQPIhT/0cSdK2FzF6Q8PHkiLo= ",
+            "ssh-ed25519 OLDKEY\n",
+        );
+
+        let result = remove_known_host_entries(contents, "192.168.7.5", 22);
+
+        assert_eq!(result.removed, 1);
+        assert!(result.contents.is_empty());
     }
 
     #[test]

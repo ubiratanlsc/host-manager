@@ -23,6 +23,7 @@ Um gerenciador de hosts multiplataforma com terminal embutido, construído com T
 - [Node.js](https://nodejs.org/) (v18+)
 - [Rust](https://www.rust-lang.org/) (latest stable)
 - [Tauri Prerequisites](https://tauri.app/v1/guides/getting-started/prerequisites)
+- No Windows, [Strawberry Perl](https://strawberryperl.com/) para compilar o OpenSSL vendorizado usado pelo SSH/Ed25519
 
 ## 🔧 Instalação
 
