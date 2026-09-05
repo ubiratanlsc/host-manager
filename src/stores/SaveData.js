@@ -1,4 +1,4 @@
-import { writeFile, readFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { mkdir, writeFile, readFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { create } from "zustand";
 import useConfigStore from './ConfigData';
 import useAppStore from './useAppStore';
@@ -6,6 +6,7 @@ import FontConfig from './FontConfig';
 import ThemeConfig from './ThemeConfig';
 import TerminalConfig from './TerminalConfig';
 import ClipboardConfig from './ClipboardConfig';
+import { writeConfigFile } from '../lib/configStorage';
 
 /**
  * Persists the entire ConfigStore state to config.json.
@@ -50,10 +51,10 @@ const persistConfig = async () => {
         externalTools: [...externalTools],
     };
 
-    await writeFile(
-        'config.json',
-        new TextEncoder().encode(JSON.stringify(dataToSave, null, 4)),
-        { baseDir: BaseDirectory.Resource }
+    await writeConfigFile(
+        { mkdir, writeFile },
+        BaseDirectory.AppData,
+        dataToSave,
     );
 };
 

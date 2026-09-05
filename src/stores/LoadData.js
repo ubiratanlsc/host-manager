@@ -1,4 +1,4 @@
-import { readFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { exists, mkdir, readFile, writeFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { isTauri } from '@tauri-apps/api/core';
 import { create } from "zustand";
 import useConfigStore from './ConfigData';
@@ -8,6 +8,7 @@ import FontConfig from './FontConfig';
 import ThemeConfig from './ThemeConfig';
 import TerminalConfig from './TerminalConfig';
 import ClipboardConfig from './ClipboardConfig';
+import { loadConfigFile } from '../lib/configStorage';
 
 const useLoadData = create((set) => ({
     loadData: async () => {
@@ -15,11 +16,18 @@ const useLoadData = create((set) => ({
             return;
         }
         try {
-            const file = await readFile('config.json', {
-                baseDir: BaseDirectory.Resource,
-            });
-            const contents = new TextDecoder().decode(file);
-            const data = JSON.parse(contents);
+            const data = await loadConfigFile(
+                { exists, mkdir, readFile, writeFile },
+                BaseDirectory.AppData,
+                BaseDirectory.Resource,
+            );
+
+            if (!data) {
+                useAppStore.getState().addNotification({ type: 'info', title: 'Configuração inicial', message: 'Arquivo de configuração não encontrado. Criando com valores padrão.' });
+                const { persist } = useSaveData.getState();
+                await persist();
+                return;
+            }
 
             // Carregar dados de entidades no ConfigStore
             const { setInitialData } = useConfigStore.getState();

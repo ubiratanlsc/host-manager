@@ -14,6 +14,7 @@ No plan file was supplied. The test journeys were derived from the reported unst
 8. Exiting a TUI restores the main screen without leaving mouse or focus reporting enabled in the shell.
 9. PTY diagnostics persist metadata useful for crashes without recording terminal contents or typed commands.
 10. Exiting a TUI releases synchronized output so later shell output is rendered immediately.
+11. An installed Windows build saves its configuration under the user's writable application-data directory and migrates a legacy resource configuration.
 
 ## RED evidence
 
@@ -30,6 +31,7 @@ No plan file was supplied. The test journeys were derived from the reported unst
 - The synchronized-output regression failed because the TUI cleanup did not include `DEC mode 2026`; logs showed OpenCode exited and 912 subsequent PTY bytes arrived without becoming visible.
 - Native Git Bash proved the renderer hypothesis incomplete: the Windows event log showed `conhost.exe` crashing with `0xc0000005`, and direct PTY writes then failed with `channel closed`.
 - The Rust diagnostic privacy tests first failed because the structured metadata logger and frontend event allowlist did not exist.
+- The installed-config regression initially failed with `ERR_MODULE_NOT_FOUND` because no storage policy existed to keep mutable configuration out of the read-only resource directory.
 
 ## GREEN evidence
 
@@ -60,8 +62,10 @@ No plan file was supplied. The test journeys were derived from the reported unst
 | Three consecutive OpenCode exit cycles retain both visible output and a writable PTY channel while using bundled `OpenConsole.exe` 1.24.260402001 | `scripts/native-opencode-exit-smoke.mjs` | Native WebView2/ConPTY E2E regression | PASS |
 | No new `conhost.exe` application crash is recorded after the bundled-ConPTY E2E cycles | Windows Application event log | system integration | PASS |
 | Exit recovery is persisted as `input_mode_recovered` alongside byte/event counters | `%LOCALAPPDATA%/com.host-manager.app/logs/terminal-diagnostics.log` | diagnostic integration | PASS |
+| `config.json` is written under `BaseDirectory.AppData`, current data wins, legacy resource data is migrated, and a missing config returns a clean first-run state | `src/lib/configStorage.test.js` | unit/regression | PASS (4/4) |
+| A native release launch creates the config at `%APPDATA%/com.host-manager.app/config.json` without elevation | release executable smoke test | native integration | PASS |
 
-`npm run test:coverage` passed 15/15 tests with 94.10% line, 91.41% branch and 94.44% function coverage for `src/lib/terminalIo.js`.
+`npm run test:coverage` passed 19/19 tests with 94.55% line, 91.85% branch and 94.87% function coverage overall. The new `src/lib/configStorage.js` module has 100% line, branch and function coverage.
 
 ## Known gaps
 
