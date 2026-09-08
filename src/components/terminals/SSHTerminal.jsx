@@ -103,6 +103,15 @@ const SSHTerminal = ({ sessionId }) => {
         } catch (e) {
             console.warn('[ssh-terminal] fit failed:', e);
         }
+
+        // fit() só redesenha se cols/rows mudarem. Forçamos um repaint total
+        // aqui porque o canvas (WebGL) pode ficar com conteúdo obsoleto/corrompido
+        // depois que a janela perde e recupera o foco, sem mudança de tamanho.
+        try {
+            xterm.refresh(0, xterm.rows - 1);
+        } catch (e) {
+            console.warn('[ssh-terminal] refresh failed:', e);
+        }
     }, []);
 
     const scheduleResize = useCallback(() => {
@@ -479,6 +488,23 @@ const SSHTerminal = ({ sessionId }) => {
         const handler = () => scheduleResize();
         window.addEventListener('terminal:relayout', handler);
         return () => window.removeEventListener('terminal:relayout', handler);
+    }, [isInitialized, scheduleResize]);
+
+    // Quando a janela perde e recupera o foco (ex: usar outro app e voltar),
+    // o canvas do terminal pode ficar com o conteúdo corrompido/obsoleto.
+    // Forçamos um repaint completo ao recuperar foco/visibilidade.
+    useEffect(() => {
+        if (!isInitialized) return;
+        const handleFocus = () => scheduleResize();
+        const handleVisibility = () => {
+            if (!document.hidden) scheduleResize();
+        };
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
     }, [isInitialized, scheduleResize]);
 
     useEffect(() => {

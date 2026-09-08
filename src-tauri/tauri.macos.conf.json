@@ -1,0 +1,17 @@
+{
+  "app": {
+    "windows": [
+      {
+        "title": "host-manager",
+        "width": 800,
+        "height": 600,
+        "decorations": true,
+        "resizable": true,
+        "devtools": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 12, "y": 20 }
+      }
+    ]
+  }
+}

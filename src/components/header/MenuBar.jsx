@@ -48,6 +48,12 @@ export function MenuBar({ className, disabled = false }) {
             return null;
         }
     }, []);
+    // macOS já mostra os botões nativos (semáforo) via decorations + titleBarStyle "Overlay",
+    // então os controles customizados abaixo só fazem sentido no Windows/Linux.
+    const isMac = React.useMemo(() => {
+        if (typeof navigator === "undefined") return false;
+        return /Mac|iPhone|iPod|iPad/.test(navigator.platform || "") || /Macintosh/.test(navigator.userAgent || "");
+    }, []);
 
     // Detect mobile
     React.useEffect(() => {
@@ -138,8 +144,10 @@ export function MenuBar({ className, disabled = false }) {
     return (
         <header
             // aqui tinha um fixed
+            data-tauri-drag-region
             className={cn(
-                " top-0 left-0 right-0 z-50 h-14 bg-background border-b border-border shadow-sm flex items-center justify-between px-4 select-none transition-colors duration-300 [app-region:drag]",
+                "top-0 left-0 right-0 z-50 h-14 bg-background border-b border-border shadow-sm flex items-center justify-between px-4 select-none transition-colors duration-300",
+                isMac && "pl-20",
                 className
             )}
         >
@@ -147,7 +155,7 @@ export function MenuBar({ className, disabled = false }) {
             <div className="flex items-center gap-4">
                 <Button
                     variant="ghost"
-                    className="flex items-center gap-2 hover:opacity-80 p-0 text-primary [app-region:drag]"
+                    className="flex items-center gap-2 hover:opacity-80 p-0 text-primary"
                     onClick={() => openModal("dashboard")}
                     disabled={disabled}
                 >
@@ -177,7 +185,7 @@ export function MenuBar({ className, disabled = false }) {
                                 <MenuIcon size={20} />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-56 [app-region:no-drag]">
+                        <DropdownMenuContent align="start" className="w-56">
                             {/* Navigation Items */}
                             <DropdownMenuItem onClick={() => openModal("connections")}>
                                 <Server className="mr-2 h-4 w-4" />
@@ -232,7 +240,7 @@ export function MenuBar({ className, disabled = false }) {
 
                 {/* Desktop Navigation */}
                 {!isMobile && (
-                    <div className="flex items-center gap-1 [app-region:no-drag]">
+                    <div className="flex items-center gap-1">
                         <Separator orientation="vertical" className="h-6 mx-2" />
 
                         {/* New Dropdown */}
@@ -348,7 +356,7 @@ export function MenuBar({ className, disabled = false }) {
             </div>
 
             {/* Right Section: Theme & Window Controls */}
-            <div className="flex items-center gap-2 [app-region:no-drag]">
+            <div className="flex items-center gap-2">
                 {!isMobile && (
                     <Button
                         variant="ghost"
@@ -376,36 +384,38 @@ export function MenuBar({ className, disabled = false }) {
                     )}
                 </Button>
 
-                <div className="flex items-center border-l border-border pl-2 ml-1">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-none hover:bg-black/5 dark:hover:bg-white/10"
-                        onClick={minimizeWindow}
-                    >
-                        <Minus className="h-4 w-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-none hover:bg-black/5 dark:hover:bg-white/10"
-                        onClick={maximizeWindow}
-                    >
-                        {openMax ? (
-                            <Square className="h-3.5 w-3.5" />
-                        ) : (
-                            <Copy className="h-3.5 w-3.5 rotate-90" />
-                        )}
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-none hover:bg-red-500 hover:text-white"
-                        onClick={closeWindow}
-                    >
-                        <Xmark className="h-4 w-4" />
-                    </Button>
-                </div>
+                {!isMac && (
+                    <div className="flex items-center border-l border-border pl-2 ml-1">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-none hover:bg-black/5 dark:hover:bg-white/10"
+                            onClick={minimizeWindow}
+                        >
+                            <Minus className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-none hover:bg-black/5 dark:hover:bg-white/10"
+                            onClick={maximizeWindow}
+                        >
+                            {openMax ? (
+                                <Square className="h-3.5 w-3.5" />
+                            ) : (
+                                <Copy className="h-3.5 w-3.5 rotate-90" />
+                            )}
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-none hover:bg-red-500 hover:text-white"
+                            onClick={closeWindow}
+                        >
+                            <Xmark className="h-4 w-4" />
+                        </Button>
+                    </div>
+                )}
             </div>
         </header>
     );

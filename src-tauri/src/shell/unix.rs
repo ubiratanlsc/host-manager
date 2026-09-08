@@ -25,7 +25,10 @@ pub fn get_available_shells() -> Vec<SystemShell> {
                             name: name.to_string(),
                             command: path.to_string(),
                             args: Vec::new(),
-                            env: HashMap::new(),
+                            env: HashMap::from([
+                                ("TERM".to_string(), "xterm-256color".to_string()),
+                                ("COLORTERM".to_string(), "truecolor".to_string()),
+                            ]),
                             cwd: None,
                             icon: ICON_MAPPINGS
                                 .get(name)
