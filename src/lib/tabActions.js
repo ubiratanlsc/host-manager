@@ -1,9 +1,16 @@
+import { getDescendantIds } from './groupTree.js';
+
 const normalizedPort = (port) => Number(port || 22);
 
 const matchesSession = (customer, session) => (
     customer?.host === session?.config?.host
     && normalizedPort(customer?.port) === normalizedPort(session?.config?.port)
     && (customer?.username || '') === (session?.config?.username || '')
+);
+
+/** Host salvo que corresponde à sessão (host + porta + usuário), se houver. */
+export const findCustomerForSession = (customers, session) => (
+    (customers || []).find((customer) => matchesSession(customer, session)) || null
 );
 
 export const getTabTerminalId = (tab) => {
@@ -61,16 +68,18 @@ export function getSSHSpawnConfig(session, customers = []) {
     };
 }
 
-export function getGroupCustomersToOpen(customers, validGroupIds, groupId, sessions) {
+/** Hosts do grupo (e dos subgrupos, se 1049089 for passado) ainda sem sessão ativa. */
+export function getGroupCustomersToOpen(customers, validGroupIds, groupId, sessions, groups) {
     if (groupId === '__local__') return [];
     const validGroups = new Set(validGroupIds || []);
+    const targetGroups = groups ? getDescendantIds(groups, groupId) : new Set([groupId]);
     const activeSessions = sessions instanceof Map ? [...sessions.values()] : [...(sessions || [])];
 
     return (customers || []).filter((customer) => {
         const customerGroups = customer.groups || [];
         const belongsToGroup = groupId === '__ungrouped__'
             ? customerGroups.length === 0 || !customerGroups.some((id) => validGroups.has(id))
-            : customerGroups.includes(groupId);
+            : customerGroups.some((id) => targetGroups.has(id));
         if (!belongsToGroup) return false;
 
         return !activeSessions.some((session) => !session.disconnected && matchesSession(customer, session));

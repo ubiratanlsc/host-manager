@@ -130,3 +130,26 @@ test('treats customers without a valid group as ungrouped', () => {
     );
     assert.deepEqual(getGroupCustomersToOpen(customers, ['ops'], '__local__', []), []);
 });
+
+test('opening a client group also opens the hosts of its subgroups', () => {
+    const groups = [
+        { id: 'brb', name: 'Brb' },
+        { id: 'omni', name: 'Omni', parentId: 'brb' },
+        { id: 'acme', name: 'Acme' },
+    ];
+    const customers = [
+        { id: 'root-host', host: '10.0.0.1', groups: ['brb'] },
+        { id: 'omni-host', host: '10.0.0.2', groups: ['omni'] },
+        { id: 'other', host: '10.0.0.3', groups: ['acme'] },
+    ];
+    const ids = groups.map((group) => group.id);
+
+    assert.deepEqual(
+        getGroupCustomersToOpen(customers, ids, 'brb', new Map(), groups).map((c) => c.id),
+        ['root-host', 'omni-host'],
+    );
+    assert.deepEqual(
+        getGroupCustomersToOpen(customers, ids, 'omni', new Map(), groups).map((c) => c.id),
+        ['omni-host'],
+    );
+});

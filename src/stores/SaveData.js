@@ -7,6 +7,8 @@ import ThemeConfig from './ThemeConfig';
 import TerminalConfig from './TerminalConfig';
 import ClipboardConfig from './ClipboardConfig';
 import { writeConfigFile } from '../lib/configStorage';
+import { cloneGroup } from '../lib/groupTree';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Persists the entire ConfigStore state to config.json.
@@ -82,14 +84,73 @@ const useSaveData = create(() => ({
         }
     },
 
-    saveGroup: async (id, name, username, password) => {
+    saveGroup: async (id, name, username, password, parentId) => {
         try {
             const { addGroup } = useConfigStore.getState();
-            addGroup(id, name, username, password);
+            addGroup(id, name, username, password, parentId);
             await persistConfig();
             useAppStore.getState().addNotification({ type: 'success', title: 'Grupo salvo', message: `${name} foi salvo com sucesso.` });
         } catch (error) {
             useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao salvar grupo', message: error.message || error });
+        }
+    },
+
+    updateGroup: async (id, data) => {
+        try {
+            useConfigStore.getState().editGroup(id, data);
+            await persistConfig();
+            useAppStore.getState().addNotification({ type: 'success', title: 'Grupo atualizado', message: `${data.name || 'Grupo'} foi atualizado com sucesso.` });
+        } catch (error) {
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao atualizar grupo', message: error.message || error });
+        }
+    },
+
+    // Duplica um grupo (com os subgrupos, se pedido) ou um subgrupo. Hosts não
+    // são copiados. Para subgrupos, `parentIds` cria uma cópia em cada cliente.
+    cloneGroup: async (id, { parentIds, ...options } = {}) => {
+        try {
+            const groups = useConfigStore.getState().groups;
+            const targets = parentIds?.length ? parentIds : [options.parentId];
+            const created = targets.flatMap((parentId) => cloneGroup(groups, id, { ...options, parentId, createId: uuidv4 }));
+            if (created.length === 0) return [];
+            useConfigStore.getState().addGroups(created);
+            await persistConfig();
+            useAppStore.getState().addNotification({
+                type: 'success',
+                title: 'Grupo duplicado',
+                message: `${created.length} grupo${created.length === 1 ? '' : 's'} criado${created.length === 1 ? '' : 's'}.`,
+            });
+            return created;
+        } catch (error) {
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao duplicar grupo', message: error.message || error });
+            return [];
+        }
+    },
+
+    deleteGroup: async (id) => {
+        try {
+            useConfigStore.getState().removeGroup(id);
+            await persistConfig();
+            useAppStore.getState().addNotification({ type: 'success', title: 'Grupo excluído', message: 'O grupo foi excluído.' });
+        } catch (error) {
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao excluir grupo', message: error.message || error });
+        }
+    },
+
+    // Adiciona vários hosts e persiste uma única vez. Retorna quantos entraram
+    // (duplicados de host + porta + usuário são ignorados pelo addCustomer).
+    importHosts: async (hosts) => {
+        try {
+            const store = useConfigStore.getState();
+            const before = store.customers.length;
+            hosts.forEach((h) => store.addCustomer(h.id, h.name, h.host, h.port, h.username, h.password, h.group, h.tagId, h.identityFile));
+            const added = useConfigStore.getState().customers.length - before;
+            await persistConfig();
+            useAppStore.getState().addNotification({ type: 'success', title: 'Hosts importados', message: `${added} host${added === 1 ? '' : 's'} importado${added === 1 ? '' : 's'}.` });
+            return added;
+        } catch (error) {
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao importar hosts', message: error.message || error });
+            return 0;
         }
     },
 

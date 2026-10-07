@@ -1,6 +1,16 @@
 import { remove } from "@tauri-apps/plugin-fs";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { removeGroupFromConfig } from "../lib/groupTree";
+
+const samePort = (a, b) => Number(a || 22) === Number(b || 22);
+
+/** Mesmo destino SSH: host + porta + usuário. */
+export const isSameHost = (customer, { host, port, username }) => (
+    customer.host === host
+    && samePort(customer.port, port)
+    && (customer.username || '') === (username || '')
+);
 
 const useConfigStore = create((set) => ({
     customers: [],
@@ -10,7 +20,7 @@ const useConfigStore = create((set) => ({
     configs: {},
     externalTools: [],
     addCustomer: (id, name, host, port, username, password, group, tagId, identityFile) => set((state) => ({
-        customers: state.customers.some(c => c.id === id || c.host === host)
+        customers: state.customers.some(c => c.id === id || isSameHost(c, { host, port, username }))
             ? state.customers
             : [...state.customers, { id, name, host, port, username, password, groups: group ? [group] : [], tagId, identityFile }],
     })),
@@ -20,17 +30,19 @@ const useConfigStore = create((set) => ({
     removeCustomer: (id) => set((state) => ({
         customers: state.customers.filter(customer => customer.id !== id),
     })),
-    addGroup: (id, name, username, password) => set((state) => ({
+    addGroup: (id, name, username, password, parentId) => set((state) => ({
         groups: state.groups.some(g => g.id === id)
             ? state.groups
-            : [...state.groups, { id, name, username, password }],
+            : [...state.groups, { id, name, username, password, ...(parentId ? { parentId } : {}) }],
+    })),
+    addGroups: (newGroups) => set((state) => ({
+        groups: [...state.groups, ...newGroups.filter(g => !state.groups.some(existing => existing.id === g.id))],
     })),
     editGroup: (id, updatedData) => set((state) => ({
         groups: state.groups.map(group => group.id === id ? { ...group, ...updatedData } : group),
     })),
-    removeGroup: (id) => set((state) => ({
-        groups: state.groups.filter(group => group.id !== id),
-    })),
+    // Remove também os subgrupos; hosts que estavam neles ficam "Sem grupo".
+    removeGroup: (id) => set((state) => removeGroupFromConfig(state, id)),
     addTag: (id, name, description, color) => set((state) => ({
         tags: state.tags.some(t => t.id === id)
             ? state.tags

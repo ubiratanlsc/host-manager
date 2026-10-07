@@ -23,6 +23,7 @@ import { useSaveData, useConfigStore, useModalStore } from "@/stores";
 import { open } from '@tauri-apps/plugin-dialog';
 import { isTauri } from '@tauri-apps/api/core';
 import { FolderOpen } from "lucide-react";
+import GroupSelect from "@/components/Group/GroupSelect";
 
 export default function DialogHost() {
     const { saveHost, updateHost } = useSaveData();
@@ -50,7 +51,7 @@ export default function DialogHost() {
         }
     };
 
-    const { modals, closeModal, editingCustomer, setEditingCustomer } = useModalStore();
+    const { modals, closeModal, editingCustomer, setEditingCustomer, hostDraft, setHostDraft } = useModalStore();
     const { groups } = useConfigStore();
 
     const isEditing = !!editingCustomer;
@@ -66,16 +67,16 @@ export default function DialogHost() {
             setTag(editingCustomer.tagId || "");
             setIdentityFile(editingCustomer.identityFile || "");
         } else {
-            setName("");
-            setGroup("");
-            setHost("");
-            setPort(22);
-            setUsername("");
-            setPassword("");
+            setName(hostDraft?.name || "");
+            setGroup(hostDraft?.group || "");
+            setHost(hostDraft?.host || "");
+            setPort(hostDraft?.port || 22);
+            setUsername(hostDraft?.username || "");
+            setPassword(hostDraft?.password || "");
             setTag("");
-            setIdentityFile("");
+            setIdentityFile(hostDraft?.identityFile || "");
         }
-    }, [editingCustomer, modals.host]);
+    }, [editingCustomer, hostDraft, modals.host]);
 
     const handleSubmit = (e) => {
         if (e) e.preventDefault();
@@ -85,12 +86,14 @@ export default function DialogHost() {
             saveHost(uuidv4(), name.trim(), host.trim(), parseInt(port), username.trim(), password, group || '', tag, identityFile.trim() || undefined);
         }
         setEditingCustomer(null);
+        setHostDraft(null);
         closeModal('host');
     };
 
     const handleOpenChange = (open) => {
         if (!open) {
             setEditingCustomer(null);
+            setHostDraft(null);
             closeModal('host');
         }
     };
@@ -117,16 +120,7 @@ export default function DialogHost() {
                         </div>
                         <div className="grid gap-2 w-1/3">
                             <Label htmlFor="group">Grupo</Label>
-                            <Select value={group} onValueChange={setGroup}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {groups.map((group) => (
-                                        <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <GroupSelect id="group" groups={groups} value={group} onChange={setGroup} />
                         </div>
                     </div>
 
@@ -211,7 +205,7 @@ export default function DialogHost() {
                     </Tabs>
 
                     <DialogFooter>
-                        <Button type="button" variant="secondary" onClick={() => closeModal('host')}>
+                        <Button type="button" variant="secondary" onClick={() => handleOpenChange(false)}>
                             Cancel
                         </Button>
                         <Button type="submit">Salvar</Button>

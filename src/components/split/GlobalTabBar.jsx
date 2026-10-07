@@ -1,8 +1,8 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { Copy, Layers, List, Plus, RefreshCw, SplitSquareVertical, X } from 'lucide-react';
+import { Copy, Layers, List, Plus, RefreshCw, Server, SplitSquareVertical, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useSplitStore, useTerminalStore, useSSHStore, useConfigStore, useAppStore } from '@/stores';
+import { useSplitStore, useTerminalStore, useSSHStore, useConfigStore, useAppStore, useModalStore } from '@/stores';
 import { useDraggable, useDroppable, useDndContext } from '@dnd-kit/core';
 import {
     ContextMenu,
@@ -11,22 +11,54 @@ import {
     ContextMenuSeparator,
     ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import { toast } from 'sonner';
 import RenameDialog from '@/components/ui/RenameDialog';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import {
+    findCustomerForSession,
     getGroupCustomersToOpen,
     getSSHSpawnConfig,
     getTabTerminalId,
 } from '@/lib/tabActions';
+import { getRootGroupId } from '@/lib/groupTree';
 
-const getTabLabel = (tab, terminals, sessions) => {
+// Botão do meio (scroll) do mouse.
+const MIDDLE_BUTTON = 1;
+
+// Evita o auto-scroll do Windows ao pressionar o botão do meio.
+const preventMiddleAutoScroll = (event) => {
+    if (event.button === MIDDLE_BUTTON) event.preventDefault();
+};
+
+const onMiddleClick = (handler) => (event) => {
+    if (event.button !== MIDDLE_BUTTON) return;
+    event.preventDefault();
+    event.stopPropagation();
+    handler();
+};
+
+const getTabTerminalIds = (tab) => (
+    tab.type === 'single'
+        ? [tab.terminalId]
+        : Object.values(tab.nodes || {}).filter((node) => node.type === 'leaf').map((node) => node.terminalId)
+);
+
+const getTabLabel = (tab, terminals, sessions, customers = [], groups = []) => {
     if (tab.type === 'single') {
         if (tab.userLabel) return tab.userLabel;
         const terminalId = tab.terminalId;
         const t = terminals.get(terminalId);
         const s = sessions.get(terminalId);
         if (t) return t.shell?.name || 'Terminal';
-        if (s) return s.title || (s.config ? `${s.config.username}@${s.config.host}` : 'SSH');
+        if (s) {
+            const title = s.title || (s.config ? `${s.config.username}@${s.config.host}` : 'SSH');
+            // Host de subgrupo: prefixa a plataforma (ex.: "Omni · root@10.0.0.1").
+            const groupId = findCustomerForSession(customers, s)?.groups?.[0];
+            const subgroup = groupId && getRootGroupId(groups, groupId) !== groupId
+                ? groups.find((g) => g.id === groupId)
+                : null;
+            return subgroup ? `${subgroup.name} · ${title}` : title;
+        }
         return tab.label || 'Terminal';
     } else {
         return tab.label || 'Split';
@@ -53,9 +85,10 @@ const TabItem = ({
     onDuplicate,
     onReconnect,
     canReconnect,
+    hostAction,
+    label,
     compact = false,
 }) => {
-    const label = getTabLabel(tab, terminals, sessions);
     const count = tab.type === 'split' ? countTerminals(tab) : 1;
     const tabText = tab.type === 'split' ? `${tab.label || 'Split'} (${count})` : label;
 
@@ -111,6 +144,9 @@ const TabItem = ({
                     ref={setRefs}
                     style={style}
                     onClick={onTabClick}
+                    onMouseDown={preventMiddleAutoScroll}
+                    onAuxClick={onMiddleClick(onRequestClose)}
+                    title={`${tabText} — botão do meio fecha a aba`}
                     className={cn(
                         "group relative flex items-center gap-2 cursor-pointer whitespace-nowrap select-none transition-all duration-150",
                         compact ? [
@@ -167,7 +203,7 @@ const TabItem = ({
                     </Button>
                 </div>
             </ContextMenuTrigger>
-            <ContextMenuContent className="w-44">
+            <ContextMenuContent className="w-52">
                 <ContextMenuItem onSelect={onDuplicate}>
                     <Copy className="mr-2 h-3.5 w-3.5" />
                     Duplicar aba
@@ -176,6 +212,12 @@ const TabItem = ({
                     <RefreshCw className="mr-2 h-3.5 w-3.5" />
                     Reconectar aba
                 </ContextMenuItem>
+                {hostAction && (
+                    <ContextMenuItem onSelect={hostAction.onSelect}>
+                        <Server className="mr-2 h-3.5 w-3.5" />
+                        {hostAction.label}
+                    </ContextMenuItem>
+                )}
                 <ContextMenuSeparator />
                 <ContextMenuItem onSelect={onRename}>Renomear Aba</ContextMenuItem>
                 <ContextMenuItem onSelect={onRequestClose}>Fechar Aba</ContextMenuItem>
@@ -214,6 +256,10 @@ const GlobalTabBar = () => {
     const [renameOpen, setRenameOpen] = useState(false);
     const [tabToRename, setTabToRename] = useState(null);
     const [tabToClose, setTabToClose] = useState(null);
+    // { id, label, customers } aguardando confirmação para abrir todas as sessões.
+    const [groupToOpen, setGroupToOpen] = useState(null);
+    // { id, label, tabs } aguardando confirmação para fechar todas as abas.
+    const [groupToClose, setGroupToClose] = useState(null);
 
     const handleRename = (tab) => {
         setTabToRename(tab);
@@ -307,31 +353,88 @@ const GlobalTabBar = () => {
         }
     };
 
-    const handleOpenGroup = async (groupId) => {
+    // Abrir todas as sessões pede confirmação: um clique distraído podia abrir
+    // dezenas de conexões de uma vez.
+    const requestOpenGroup = (group) => {
         const pendingCustomers = getGroupCustomersToOpen(
             customers,
-            groups.map((group) => group.id),
-            groupId,
+            groups.map((item) => item.id),
+            group.id,
             sessions,
+            groups,
         );
         if (pendingCustomers.length === 0) return;
+        setGroupToOpen({ id: group.id, label: group.label, customers: pendingCustomers });
+    };
 
+    const handleOpenGroup = async (pendingCustomers) => {
+        const progressId = toast.loading(`Abrindo ${pendingCustomers.length} sessões...`);
         const results = await Promise.allSettled(pendingCustomers.map((customer) => spawnSSH({
             host: customer.host,
             port: customer.port || 22,
             username: customer.username,
             password: customer.password,
             identityFile: customer.identityFile,
-        })));
+        }, undefined, { notify: false })));
         const failed = results.filter((result) => result.status === 'rejected');
+        toast.dismiss(progressId);
 
         if (failed.length > 0) {
+            const failedNames = results
+                .map((result, index) => (result.status === 'rejected' ? pendingCustomers[index].name || pendingCustomers[index].host : null))
+                .filter(Boolean);
             useAppStore.getState().addNotification({
                 type: 'error',
                 title: 'Algumas conexões falharam',
-                message: `${failed.length} de ${results.length} sessões não puderam ser abertas.`,
+                message: `${failed.length} de ${results.length} sessões não puderam ser abertas: ${failedNames.slice(0, 5).join(', ')}${failedNames.length > 5 ? '…' : ''}`,
+                duration: 8000,
             });
         }
+    };
+
+    // Fecha a aba inteira (todos os painéis de um split).
+    const closeWholeTab = async (tab) => {
+        removeTab(tab.id);
+        await Promise.allSettled(getTabTerminalIds(tab).map((terminalId) => {
+            if (terminals.has(terminalId)) return killPty(terminalId);
+            if (sessions.has(terminalId)) return killSSH(terminalId);
+            return null;
+        }));
+    };
+
+    const requestGroupClose = (group) => {
+        const groupTabs = tabs.filter((t) => (t.groupId ?? '__ungrouped__') === group.id);
+        if (groupTabs.length === 0) return;
+        setGroupToClose({ id: group.id, label: group.label, tabs: groupTabs });
+    };
+
+    const openModal = useModalStore((s) => s.openModal);
+    const setEditingCustomer = useModalStore((s) => s.setEditingCustomer);
+    const setHostDraft = useModalStore((s) => s.setHostDraft);
+
+    // "Cadastrar host": completa no Novo Host os dados (grupo, nome...) de uma
+    // conexão aberta. Se ela já está salva (ex.: criada por "Nova conexão"),
+    // abre a edição desse host.
+    const getHostAction = (tab) => {
+        const session = sessions.get(getTabTerminalId(tab));
+        if (!session?.config) return null;
+        const customer = findCustomerForSession(customers, session);
+        if (customer) {
+            const hasGroup = (customer.groups || []).some((id) => groups.some((g) => g.id === id));
+            return {
+                label: hasGroup ? 'Editar host…' : 'Cadastrar host…',
+                onSelect: () => { setEditingCustomer(customer); openModal('host'); },
+            };
+        }
+        return {
+            label: 'Cadastrar host…',
+            onSelect: () => {
+                const { host, port, username } = session.config;
+                setEditingCustomer(null);
+                setHostDraft({ name: host, host, port: port || 22, username });
+                openModal('host');
+            },
+        };
     };
 
     // Build ordered group list from existing tabs
@@ -343,7 +446,7 @@ const GlobalTabBar = () => {
             const gid = tab.groupId ?? '__ungrouped__';
             if (!seen.has(gid)) {
                 seen.add(gid);
-                const label = GROUP_LABELS[gid] ?? groups.find(g => g.id === gid)?.name ?? gid;
+                const label = GROUP_LABELS[gid] ?? groups.find(g => g.id === gid)?.name ?? 'Grupo removido';
                 result.push({ id: gid, label });
             }
         }
@@ -387,12 +490,16 @@ const GlobalTabBar = () => {
                             groups.map((item) => item.id),
                             group.id,
                             sessions,
+                            groups,
                         ).length;
                         return (
                             <ContextMenu key={group.id}>
                                 <ContextMenuTrigger asChild>
                                     <button
                                         onClick={() => setActiveGroup(group.id)}
+                                        onMouseDown={preventMiddleAutoScroll}
+                                        onAuxClick={onMiddleClick(() => requestGroupClose(group))}
+                                        title="Botão do meio fecha todas as abas do grupo"
                                         className={cn(
                                             "flex items-center gap-2 h-7 rounded-md px-2.5 cursor-pointer whitespace-nowrap select-none transition-all duration-150 shrink-0",
                                             "border border-transparent dark:bg-[#25262B] dark:text-gray-400 text-gray-700 bg-gray-200",
@@ -405,12 +512,15 @@ const GlobalTabBar = () => {
                                         <span className="text-[10px] font-normal dark:text-gray-500 text-gray-400 flex-shrink-0">{count}</span>
                                     </button>
                                 </ContextMenuTrigger>
-                                <ContextMenuContent className="w-60">
+                                <ContextMenuContent className="w-72">
                                     <ContextMenuItem
                                         disabled={sessionsToOpen === 0}
-                                        onSelect={() => handleOpenGroup(group.id)}
+                                        onSelect={() => requestOpenGroup(group)}
                                     >
-                                        Abrir todas as sessões do grupo
+                                        Abrir todas as sessões do grupo{sessionsToOpen > 0 ? ` (${sessionsToOpen})` : ''}
+                                    </ContextMenuItem>
+                                    <ContextMenuItem onSelect={() => requestGroupClose(group)}>
+                                        Fechar todas as abas do grupo ({count})
                                     </ContextMenuItem>
                                 </ContextMenuContent>
                             </ContextMenu>
@@ -441,6 +551,8 @@ const GlobalTabBar = () => {
                         onDuplicate={() => handleDuplicateTab(tab)}
                         onReconnect={() => handleReconnectTab(tab)}
                         canReconnect={sessions.has(getTabTerminalId(tab))}
+                        hostAction={getHostAction(tab)}
+                        label={getTabLabel(tab, terminals, sessions, customers, groups)}
                         compact
                     />
                 ))}
@@ -465,10 +577,41 @@ const GlobalTabBar = () => {
                 }}
             />
             <ConfirmDialog
+                open={!!groupToOpen}
+                onOpenChange={(o) => { if (!o) setGroupToOpen(null); }}
+                title={`Abrir ${groupToOpen?.customers.length ?? 0} sessões de "${groupToOpen?.label ?? ''}"?`}
+                description={groupToOpen ? (() => {
+                    const names = groupToOpen.customers.map((c) => c.name || c.host);
+                    const preview = names.slice(0, 8).join(', ') + (names.length > 8 ? ` e mais ${names.length - 8}` : '');
+                    return `Serão abertas ${names.length} conexões SSH ao mesmo tempo: ${preview}.`;
+                })() : ''}
+                confirmLabel={`Abrir ${groupToOpen?.customers.length ?? 0}`}
+                cancelLabel="Cancelar"
+                onConfirm={() => {
+                    const g = groupToOpen;
+                    setGroupToOpen(null);
+                    if (g) handleOpenGroup(g.customers);
+                }}
+            />
+            <ConfirmDialog
+                open={!!groupToClose}
+                onOpenChange={(o) => { if (!o) setGroupToClose(null); }}
+                title={`Fechar todas as abas de "${groupToClose?.label ?? ''}"?`}
+                description={`${groupToClose?.tabs.length ?? 0} aba(s) serão fechadas e as sessões abertas nelas serão encerradas.`}
+                confirmLabel="Fechar todas"
+                cancelLabel="Cancelar"
+                destructive
+                onConfirm={() => {
+                    const g = groupToClose;
+                    setGroupToClose(null);
+                    if (g) g.tabs.forEach((t) => closeWholeTab(t));
+                }}
+            />
+            <ConfirmDialog
                 open={!!tabToClose}
                 onOpenChange={(o) => { if (!o) setTabToClose(null); }}
                 title="Fechar aba?"
-                description={`A sessão "${tabToClose ? getTabLabel(tabToClose, terminals, sessions) : ''}" será encerrada.`}
+                description={`A sessão "${tabToClose ? getTabLabel(tabToClose, terminals, sessions, customers, groups) : ''}" será encerrada.`}
                 confirmLabel="Fechar"
                 cancelLabel="Cancelar"
                 onConfirm={() => {

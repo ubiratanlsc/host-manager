@@ -4,6 +4,14 @@ import SplitPane from './SplitPane';
 import GlobalTabBar from './GlobalTabBar';
 import SplitPositionMenu from './SplitPositionMenu';
 import { GripVertical } from 'lucide-react';
+import { getRootGroupId } from '@/lib/groupTree';
+import { findCustomerForSession } from '@/lib/tabActions';
+
+// Abas SSH ficam no grupo raiz (cliente) do host salvo da sessão.
+const getSessionTabGroup = (session, customers, groups) => {
+    const customer = findCustomerForSession(customers, session);
+    return getRootGroupId(groups, customer?.groups?.[0]) || '__ungrouped__';
+};
 import {
     DndContext,
     PointerSensor,
@@ -89,6 +97,23 @@ const MainLayout = () => {
     const terminals = useMemo(() => Array.from(terminalsMap.values()), [terminalsMap]);
     const sessions = useMemo(() => Array.from(sessionsMap.values()), [sessionsMap]);
 
+    // Quando o host de uma sessão aberta muda de grupo (ou é cadastrado pela
+    // aba), a aba acompanha o novo cliente.
+    const customers = useConfigStore((s) => s.customers);
+    const groups = useConfigStore((s) => s.groups);
+    const setTabGroups = useSplitStore((s) => s.setTabGroups);
+    useEffect(() => {
+        const updates = {};
+        tabs.forEach((tab) => {
+            if (tab.type !== 'single' || tab.groupId === '__local__') return;
+            const session = sessionsMap.get(tab.terminalId);
+            if (!session) return;
+            const groupId = getSessionTabGroup(session, customers, groups);
+            if (groupId !== (tab.groupId ?? '__ungrouped__')) updates[tab.id] = groupId;
+        });
+        setTabGroups(updates);
+    }, [tabs, sessionsMap, customers, groups, setTabGroups]);
+
     // Track active drag element
     const [activeDrag, setActiveDrag] = useState(null);
 
@@ -151,15 +176,11 @@ const MainLayout = () => {
         });
 
         // Add tabs for any new SSH sessions (resolve group from saved customer)
-        const customers = useConfigStore.getState().customers;
+        const { customers, groups } = useConfigStore.getState();
         sessions.forEach((s) => {
             if (!allTabTerminalIds.has(s.id)) {
                 const title = s.title || (s.config ? `${s.config.username}@${s.config.host}` : 'SSH');
-                const customer = customers.find(c =>
-                    c.host === s.config?.host && c.username === s.config?.username
-                );
-                const groupId = customer?.groups?.[0] || '__ungrouped__';
-                addSingleTab(s.id, title, groupId);
+                addSingleTab(s.id, title, getSessionTabGroup(s, customers, groups));
                 setFocusedSession(s.id);
             }
         });

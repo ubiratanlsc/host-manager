@@ -257,6 +257,22 @@ const useSplitStore = create(
             },
 
             /**
+             * Atualiza o grupo de várias abas de uma vez ({ [tabId]: groupId }).
+             * Usado quando o host de uma sessão aberta muda de grupo.
+             */
+            setTabGroups: (updates) => {
+                const ids = Object.keys(updates || {});
+                if (ids.length === 0) return;
+                set((state) => {
+                    const tabs = state.tabs.map((tab) => (
+                        ids.includes(tab.id) ? { ...tab, groupId: updates[tab.id] } : tab
+                    ));
+                    const activeTab = tabs.find((tab) => tab.id === state.activeTabId);
+                    return { tabs, activeGroupId: activeTab?.groupId ?? state.activeGroupId };
+                });
+            },
+
+            /**
              * Removes a tab by ID. Adjusts activeTabId if necessary.
              */
             removeTab: (tabId) => {
