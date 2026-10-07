@@ -1,19 +1,19 @@
+use super::io_buffer::WriteBuffer;
 use super::*;
 use crate::AppState;
 use cuid2;
 use portable_pty::PtySize;
 use socket2::{SockRef, TcpKeepalive};
 use ssh2::{
-    CheckResult, ErrorCode, HashType, HostKeyType, KeyboardInteractivePrompt, KnownHostFileKind,
+    BlockDirections, CheckResult, ErrorCode, HashType, HostKeyType, KeyboardInteractivePrompt,
+    KnownHostFileKind,
 };
 use std::fs;
-use std::sync::Arc;
-use std::sync::Mutex as StdMutex;
+use std::io::{Read, Write};
+use std::path::Path;
 use std::thread;
 use std::time::Duration;
-use std::{io::Read, path::Path};
 use tauri::Emitter;
-use tokio::sync::mpsc;
 
 struct PasswordPrompt(String);
 
@@ -330,6 +330,30 @@ fn is_algorithm_negotiation_error(code: i32) -> bool {
     matches!(code, -5 | -8 | -51)
 }
 
+/// Código LIBSSH2_ERROR_TIMEOUT.
+const LIBSSH2_ERROR_TIMEOUT: i32 = -9;
+
+fn is_timeout(error: &ssh2::Error) -> bool {
+    error.code() == ErrorCode::Session(LIBSSH2_ERROR_TIMEOUT)
+}
+
+fn auth_error(error: &ssh2::Error) -> String {
+    if is_timeout(error) {
+        return format!(
+            "O servidor não concluiu a autenticação em {}s. Verifique usuário e senha ou se ele exige outro método de login.",
+            SSH_OPERATION_TIMEOUT_MS / 1000
+        );
+    }
+    format!("Falha na autenticação: {}", error)
+}
+
+fn session_error(step: &str, error: &ssh2::Error) -> String {
+    if is_timeout(error) {
+        return format!("O servidor não respondeu ao {} em {}s.", step, SSH_OPERATION_TIMEOUT_MS / 1000);
+    }
+    format!("Falha ao {}: {}", step, error)
+}
+
 fn authenticate(
     sess: &mut Session,
     username: &str,
@@ -346,7 +370,7 @@ fn authenticate(
                 let mut prompt = PasswordPrompt(pass.clone());
                 sess.userauth_keyboard_interactive(username, &mut prompt)
             })
-            .map_err(|e| format!("Authentication failed: {}", e))?;
+            .map_err(|e| auth_error(&e))?;
     } else {
         println!("ponto: 5 - Tentando autenticação por chave");
 
@@ -374,7 +398,7 @@ fn authenticate(
                     }
                     Err(e) => {
                         println!("ponto: 5.3 - Chave personalizada falhou: {}", e);
-                        return Err(format!("Authentication failed: {}", e));
+                        return Err(auth_error(&e));
                     }
                 }
             } else {
@@ -494,6 +518,13 @@ pub async fn spawn_ssh(
 
     let mut sess = Session::new().map_err(|e| e.to_string())?;
 
+    // Limite para cada operação bloqueante (handshake, autenticação, abertura
+    // do canal). Sem isto um servidor que não responde — ex.: um prompt
+    // keyboard-interactive que nunca termina — deixa o spawn pendurado para
+    // sempre e o frontend sem retorno. Depois do shell o modo é não-bloqueante
+    // e o timeout deixa de se aplicar.
+    sess.set_timeout(SSH_OPERATION_TIMEOUT_MS);
+
     sess.set_tcp_stream(tcp);
     if let Err(error) = sess.handshake() {
         let detail = error.to_string();
@@ -604,7 +635,7 @@ pub async fn spawn_ssh(
 
     authenticate(&mut sess, &username, &password, &identity_file)?;
 
-    let mut channel = sess.channel_session().map_err(|e| e.to_string())?;
+    let mut channel = sess.channel_session().map_err(|e| session_error("abrir o canal", &e))?;
 
     // PTY interativo real: usamos os modos padrão do servidor (echo ligado,
     // line discipline, etc). Assim o shell remoto cuida do echo, edição de
@@ -619,136 +650,28 @@ pub async fn spawn_ssh(
     // Configurar modo não-bloqueante
     sess.set_blocking(false);
 
-    let channel = Arc::new(StdMutex::new(channel));
-    let (stdin_tx, mut stdin_rx) = mpsc::channel::<Vec<u8>>(100);
-
+    let (cmd_tx, cmd_rx) = std_mpsc::channel::<SshCommand>();
     let connected = Arc::new(StdMutex::new(true));
 
-    // Task dedicada para escrita
-    let channel_write = Arc::clone(&channel);
-    let connected_write = Arc::clone(&connected);
-    let stdin_task = tokio::task::spawn_blocking(move || {
-        println!("ponto: 28 - Iniciando task de escrita");
-        'outer: while let Some(mut data) = stdin_rx.blocking_recv() {
-            // Coalesce: junta o que já está na fila num único write (menos
-            // pacotes SSH; digitação/backspace rápidos não saturam o canal).
-            while data.len() < 8192 {
-                match stdin_rx.try_recv() {
-                    Ok(more) => data.extend_from_slice(&more),
-                    Err(_) => break,
-                }
-            }
-
-            // Canal é non-blocking: write pode aceitar só parte dos bytes ou
-            // retornar WouldBlock quando a janela SSH está cheia (digitação
-            // rápida). Nunca descartamos dados — avançamos o offset e
-            // repetimos até entregar tudo ou a sessão cair.
-            let mut written = 0;
-            while written < data.len() {
-                if !connected_write.lock().map(|c| *c).unwrap_or(false) {
-                    break 'outer;
-                }
-
-                let mut channel_guard = match channel_write.lock() {
-                    Ok(guard) => guard,
-                    Err(e) => {
-                        println!("ponto: 29.1 - Erro ao obter lock do canal: {}", e);
-                        break 'outer;
-                    }
-                };
-
-                match channel_guard.write(&data[written..]) {
-                    Ok(0) => {
-                        drop(channel_guard);
-                        thread::sleep(Duration::from_millis(5));
-                    }
-                    Ok(n) => {
-                        written += n;
-                        let _ = channel_guard.flush();
-                    }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        // Janela cheia: solta o lock (deixa a task de leitura
-                        // drenar ACKs do servidor) e tenta de novo.
-                        drop(channel_guard);
-                        thread::sleep(Duration::from_millis(5));
-                    }
-                    Err(e) => {
-                        println!("ponto: 30.3 - Erro fatal na escrita: {}", e);
-                        // Sinaliza desconexão: o loop de leitura encerra e
-                        // emite SSH_EXIT para o frontend.
-                        if let Ok(mut c) = connected_write.lock() {
-                            *c = false;
-                        }
-                        break 'outer;
-                    }
-                }
-            }
-        }
-        println!("ponto: 33 - Task de escrita finalizada");
-    });
-
-    // Task dedicada para leitura
-    let channel_read = Arc::clone(&channel);
-    let connected_read = Arc::clone(&connected);
+    // Thread única de I/O: dona exclusiva do canal. Escrita, leitura, resize e
+    // close acontecem aqui, em sequência — nunca em paralelo.
+    let connected_io = Arc::clone(&connected);
     let app_handle_clone = app_handle.clone();
     let id_clone = id.clone();
-    let stdout_task = tokio::task::spawn_blocking(move || {
-        println!("ponto: 21 - Iniciando task de leitura");
-        let mut buf = vec![0; MAX_PIPE_CHUNK_SIZE];
-
-        loop {
-            // Encerramento gracioso: kill_ssh/shutdown setam `connected = false`.
-            if !connected_read.lock().map(|c| *c).unwrap_or(false) {
-                break;
-            }
-
-            let mut channel_guard = match channel_read.lock() {
-                Ok(guard) => guard,
-                Err(e) => {
-                    println!("ponto: 21.1 - Erro ao obter lock do canal: {}", e);
-                    thread::sleep(Duration::from_millis(100));
-                    continue;
-                }
-            };
-
-            match channel_guard.read(&mut buf) {
-                Ok(0) => {
-                    // 0 bytes pode ser EOF real (canal fechado / `exit` remoto)
-                    // ou apenas ausência momentânea de dados.
-                    let eof = channel_guard.eof();
-                    drop(channel_guard);
-                    if eof {
-                        println!("ponto: 25 - Canal SSH em EOF (fechado pelo remoto)");
-                        break;
-                    }
-                    thread::sleep(Duration::from_millis(10));
-                    continue;
-                }
-                Ok(n) => {
-                    let _ = app_handle_clone.emit(
-                        SSH_STDOUT_EVENT,
-                        SshStdoutPayload {
-                            id: id_clone.clone(),
-                            bytes: buf[..n].to_vec(),
-                        },
-                    );
-                }
-                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    drop(channel_guard);
-                    thread::sleep(Duration::from_millis(10));
-                    continue;
-                }
-                Err(e) => {
-                    println!("ponto: 26 - Erro na leitura: {}", e);
-                    break;
-                }
-            }
-
-            drop(channel_guard);
-        }
+    let io_task = tokio::task::spawn_blocking(move || {
+        println!("ponto: 21 - Iniciando task de I/O");
+        run_ssh_io_loop(sess, channel, cmd_rx, |bytes| {
+            let _ = app_handle_clone.emit(
+                SSH_STDOUT_EVENT,
+                SshStdoutPayload {
+                    id: id_clone.clone(),
+                    bytes,
+                },
+            );
+        });
 
         // Marca como desconectado e avisa o frontend (emitido uma única vez).
-        if let Ok(mut c) = connected_read.lock() {
+        if let Ok(mut c) = connected_io.lock() {
             *c = false;
         }
         let _ = app_handle_clone.emit(
@@ -759,7 +682,7 @@ pub async fn spawn_ssh(
                 code: None,
             },
         );
-        println!("ponto: 27 - Task de leitura finalizada (SSH_EXIT emitido)");
+        println!("ponto: 27 - Task de I/O finalizada (SSH_EXIT emitido)");
     });
 
     let session = SshSession {
@@ -768,29 +691,14 @@ pub async fn spawn_ssh(
         host: host.clone(),
         port,
         username: username.clone(),
-        channel: Arc::clone(&channel),
-        stdin_tx,
-        stdin_task,
-        stdout_task,
+        cmd_tx,
+        io_task,
         connected,
     };
 
     // Armazenar sessão
     let mut ssh_sessions = state.ssh_sessions.lock().await;
     ssh_sessions.insert(id.clone(), session);
-
-    // Ok(id)
-
-    // let mut ssh_sessions = state.ssh_sessions.lock().await;
-    // ssh_sessions.insert(
-    //     id.clone(),
-    //     SshSession {
-    //         id: id.clone(),
-    //         stdin_tx,
-    //         stdin_task,
-    //         stdout_task,
-    //     },
-    // );
 
     app_handle
         .emit(
@@ -808,19 +716,158 @@ pub async fn spawn_ssh(
     Ok(id)
 }
 
+/// Código LIBSSH2_ERROR_EAGAIN.
+const LIBSSH2_ERROR_EAGAIN: i32 = -37;
+
+fn is_eagain(error: &ssh2::Error) -> bool {
+    error.code() == ErrorCode::Session(LIBSSH2_ERROR_EAGAIN)
+}
+
+/// Depois de um EAGAIN: se o libssh2 está esperando o socket aceitar a saída,
+/// há um pacote parcialmente enviado e NENHUMA outra operação pode ser feita
+/// antes de completá-lo (senão o pacote é corrompido e o servidor derruba a
+/// conexão — era o "transport read").
+fn outbound_blocked(sess: &Session) -> bool {
+    matches!(
+        sess.block_directions(),
+        BlockDirections::Outbound | BlockDirections::Both
+    )
+}
+
+fn run_ssh_io_loop(
+    sess: Session,
+    mut channel: ssh2::Channel,
+    cmd_rx: std_mpsc::Receiver<SshCommand>,
+    mut emit_stdout: impl FnMut(Vec<u8>),
+) {
+    let mut writes = WriteBuffer::new(8192);
+    let mut pending_resize: Option<(u32, u32, Option<u32>, Option<u32>)> = None;
+    let mut buf = vec![0; MAX_PIPE_CHUNK_SIZE];
+
+    'io: loop {
+        // 1) Drena comandos pendentes.
+        let mut close_requested = false;
+        loop {
+            match cmd_rx.try_recv() {
+                Ok(SshCommand::Data(data)) => writes.push(&data),
+                Ok(SshCommand::Resize {
+                    cols,
+                    rows,
+                    width_px,
+                    height_px,
+                }) => pending_resize = Some((cols, rows, width_px, height_px)),
+                Ok(SshCommand::Close) | Err(std_mpsc::TryRecvError::Disconnected) => {
+                    close_requested = true;
+                    break;
+                }
+                Err(std_mpsc::TryRecvError::Empty) => break,
+            }
+        }
+        if close_requested {
+            close_channel(&mut channel);
+            break 'io;
+        }
+
+        let mut progressed = false;
+        let mut blocked_out = false;
+
+        // 2) Escrita. Em EAGAIN o buffer em voo fica intacto para o retry.
+        if let Some(chunk) = writes.next_chunk() {
+            match channel.write(chunk) {
+                Ok(0) => {}
+                Ok(n) => {
+                    writes.advance(n);
+                    progressed = true;
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    blocked_out = outbound_blocked(&sess);
+                }
+                Err(e) => {
+                    println!("ponto: 30.3 - Erro fatal na escrita: {}", e);
+                    break 'io;
+                }
+            }
+        }
+
+        // 3) Resize, só entre escritas completas.
+        if !blocked_out && !writes.is_mid_write() {
+            if let Some((cols, rows, width_px, height_px)) = pending_resize {
+                match channel.request_pty_size(cols, rows, width_px, height_px) {
+                    Ok(()) => {
+                        pending_resize = None;
+                        progressed = true;
+                    }
+                    Err(ref e) if is_eagain(e) => blocked_out = outbound_blocked(&sess),
+                    Err(e) => {
+                        println!("ponto: 31 - Falha no resize do PTY: {}", e);
+                        pending_resize = None;
+                    }
+                }
+            }
+        }
+
+        // 4) Leitura (nunca com um pacote de saída pela metade).
+        if !blocked_out {
+            match channel.read(&mut buf) {
+                Ok(0) => {
+                    // 0 bytes pode ser EOF real (canal fechado / `exit` remoto)
+                    // ou apenas ausência momentânea de dados.
+                    if channel.eof() {
+                        println!("ponto: 25 - Canal SSH em EOF (fechado pelo remoto)");
+                        break 'io;
+                    }
+                }
+                Ok(n) => {
+                    emit_stdout(buf[..n].to_vec());
+                    progressed = true;
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(e) => {
+                    println!("ponto: 26 - Erro na leitura: {}", e);
+                    break 'io;
+                }
+            }
+        }
+
+        if !progressed {
+            // Com saída bloqueada o socket libera rápido; senão, espera ociosa.
+            thread::sleep(Duration::from_millis(if blocked_out { 2 } else { 8 }));
+        }
+    }
+}
+
+/// EOF + close best-effort, repetindo EAGAIN por no máximo ~500ms.
+fn close_channel(channel: &mut ssh2::Channel) {
+    let deadline = std::time::Instant::now() + Duration::from_millis(500);
+    let retry = |op: &mut dyn FnMut() -> Result<(), ssh2::Error>| loop {
+        match op() {
+            Err(ref e) if is_eagain(e) && std::time::Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(5));
+            }
+            _ => break,
+        }
+    };
+    retry(&mut || channel.send_eof());
+    retry(&mut || channel.close());
+}
+
+fn session_command_sender(
+    sessions: &std::collections::HashMap<String, SshSession>,
+    id: &str,
+) -> Result<(std_mpsc::Sender<SshCommand>, Arc<StdMutex<bool>>), String> {
+    let session = sessions
+        .get(id)
+        .ok_or_else(|| "SSH session not found".to_string())?;
+    Ok((session.cmd_tx.clone(), Arc::clone(&session.connected)))
+}
+
 #[tauri::command]
 pub async fn write_ssh(
     state: State<'_, AppState>,
     id: String,
     data: String,
 ) -> Result<usize, String> {
-    let (stdin_tx, connected) = {
-        let ssh_sessions = state.ssh_sessions.lock().await;
-        let session = ssh_sessions
-            .get(&id)
-            .ok_or_else(|| "SSH session not found".to_string())?;
-        (session.stdin_tx.clone(), Arc::clone(&session.connected))
-    };
+    let (cmd_tx, connected) = session_command_sender(&*state.ssh_sessions.lock().await, &id)?;
 
     // Verificar se a sessão está conectada
     if let Ok(connected) = connected.lock() {
@@ -834,9 +881,8 @@ pub async fn write_ssh(
     let bytes = data.into_bytes();
     let len = bytes.len();
 
-    stdin_tx
-        .send(bytes)
-        .await
+    cmd_tx
+        .send(SshCommand::Data(bytes))
         .map_err(|e| format!("Failed to send data: {}", e))?;
 
     Ok(len)
@@ -848,40 +894,19 @@ pub async fn resize_ssh(
     id: String,
     size: PtySize,
 ) -> Result<(), String> {
-    let channel = {
-        let ssh_sessions = state.ssh_sessions.lock().await;
-        let session = ssh_sessions
-            .get(&id)
-            .ok_or_else(|| "SSH session not found".to_string())?;
-        Arc::clone(&session.channel)
-    };
+    let (cmd_tx, _) = session_command_sender(&*state.ssh_sessions.lock().await, &id)?;
 
-    tokio::task::spawn_blocking(move || {
-        let mut channel_guard = channel
-            .lock()
-            .map_err(|_| "Failed to lock SSH channel".to_string())?;
+    let width_px = (size.pixel_width > 0).then_some(size.pixel_width as u32);
+    let height_px = (size.pixel_height > 0).then_some(size.pixel_height as u32);
 
-        let width_px = if size.pixel_width > 0 {
-            Some(size.pixel_width as u32)
-        } else {
-            None
-        };
-        let height_px = if size.pixel_height > 0 {
-            Some(size.pixel_height as u32)
-        } else {
-            None
-        };
-
-        channel_guard
-            .request_pty_size(size.cols as u32, size.rows as u32, width_px, height_px)
-            .map_err(|e| e.to_string())?;
-
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|e| e.to_string())??;
-
-    Ok(())
+    cmd_tx
+        .send(SshCommand::Resize {
+            cols: size.cols as u32,
+            rows: size.rows as u32,
+            width_px,
+            height_px,
+        })
+        .map_err(|e| format!("Failed to resize: {}", e))
 }
 
 #[tauri::command]
@@ -895,29 +920,9 @@ pub async fn kill_ssh(state: State<'_, AppState>, id: String) -> Result<(), Stri
 
     if let Some(session) = session {
         println!("ponto: 44 - Sessão encontrada, encerrando graciosamente");
-
-        // 1) Sinaliza o loop de leitura a parar (sem isto, a thread bloqueante
-        //    continuaria girando para sempre segurando o canal).
-        if let Ok(mut c) = session.connected.lock() {
-            *c = false;
-        }
-
-        // 2) Fecha o canal de forma limpa no servidor (best-effort) numa thread
-        //    bloqueante, para o sshd liberar a sessão imediatamente em vez de
-        //    esperar o timeout de TCP.
-        let channel = Arc::clone(&session.channel);
-        let _ = tokio::task::spawn_blocking(move || {
-            if let Ok(mut ch) = channel.lock() {
-                let _ = ch.send_eof();
-                let _ = ch.close();
-            }
-        })
-        .await;
-
-        // 3) Dropar a SshSession fecha o stdin_tx (encerra a task de escrita) e
-        //    libera o último Arc do canal. abort como salvaguarda.
-        session.stdin_task.abort();
-        session.stdout_task.abort();
+        // A thread de I/O envia EOF/close ao servidor (para o sshd liberar a
+        // sessão imediatamente) e encerra.
+        let _ = tokio::task::spawn_blocking(move || session.shutdown()).await;
     }
 
     println!("ponto: 45 - Sessão encerrada");
