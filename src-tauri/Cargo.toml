@@ -1,8 +1,8 @@
 [package]
 name = "host-manager"
-version = "1.0.8"
+version = "1.1.0"
 description = "Cross-platform host manager with embedded terminal"
-authors = ["ubiratanlsc"]
+authors = ["ubiratanlsc", "GustavoAniel"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
