@@ -258,6 +258,9 @@ const SSHTerminal = ({ sessionId }) => {
             }
             // Ctrl+V cola
             if (event.ctrlKey && event.key === 'v') {
+                // Sem preventDefault o navegador também dispara o "colar"
+                // nativo no textarea do xterm e o texto entra duas vezes.
+                event.preventDefault();
                 readText().then((text) => {
                     if (text) useSSHStore.getState().writeSSH(sessionId, text);
                 }).catch((error) => console.warn('[ssh-terminal] clipboard read failed:', error));
