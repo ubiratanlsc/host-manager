@@ -5,11 +5,12 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEffect, useState, useMemo } from "react";
-import { Terminal, Server, Globe, Edit2, LayoutList, LayoutGrid, Rows3, Search, RefreshCw, Send, CheckSquare } from "lucide-react";
+import { Terminal, Server, Globe, Edit2, LayoutList, LayoutGrid, Rows3, Search, RefreshCw, Send, CheckSquare, FileInput } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useConfigStore, useModalStore, useSSHStore } from "@/stores";
 import HostCard from "../Cards/Hostscard";
+import { buildGroupOptions, getDescendantIds, getGroupPath } from "@/lib/groupTree";
 
 const statusDot = (status) => {
     const colors = {
@@ -32,7 +33,8 @@ function HostListRow({ customer, groupName }) {
 
     const handleConnect = async () => {
         closeModal('connections');
-        await spawnSSH({ host: customer.host, port: customer.port || 22, username: customer.username, password: customer.password, identityFile: customer.identityFile });
+        // O spawnSSH já exibe o progresso e o erro.
+        await spawnSSH({ host: customer.host, port: customer.port || 22, username: customer.username, password: customer.password, identityFile: customer.identityFile }).catch(() => {});
     };
 
     const handleEdit = () => {
@@ -74,7 +76,8 @@ function HostDetailCard({ customer, groupName }) {
 
     const handleConnect = async () => {
         closeModal('connections');
-        await spawnSSH({ host: customer.host, port: customer.port || 22, username: customer.username, password: customer.password, identityFile: customer.identityFile });
+        // O spawnSSH já exibe o progresso e o erro.
+        await spawnSSH({ host: customer.host, port: customer.port || 22, username: customer.username, password: customer.password, identityFile: customer.identityFile }).catch(() => {});
     };
 
     const handleEdit = () => {
@@ -141,17 +144,22 @@ export default function DialogListConections() {
         }
     }, [modals.connections]);
 
+    const groupLabel = (c) => getGroupPath(groups, c.groups?.[0]) || 'Sem grupo';
+
     const searchFilter = (c) => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
-        return (c.name || '').toLowerCase().includes(q) || (c.host || '').toLowerCase().includes(q);
+        return (c.name || '').toLowerCase().includes(q)
+            || (c.host || '').toLowerCase().includes(q)
+            || groupLabel(c).toLowerCase().includes(q);
     };
 
     const tabs = useMemo(() => {
         const result = [];
         if (groups.length > 0) {
             result.push({ id: '__all__', name: 'Todos' });
-            groups.forEach(g => result.push({ id: g.id, name: g.name }));
+            // Grupo (cliente) seguido dos subgrupos (plataformas), indentados.
+            buildGroupOptions(groups).forEach(o => result.push({ id: o.id, name: o.name, depth: o.depth }));
         }
         const ungrouped = customers.filter(c =>
             !c.groups || c.groups.length === 0 || !groups.some(g => c.groups.includes(g.id))
@@ -211,7 +219,9 @@ export default function DialogListConections() {
                     !c.groups || c.groups.length === 0 || !groups.some(g => c.groups.includes(g.id))
                 );
             }
-            return customers.filter(c => c.groups && c.groups.includes(tabId));
+            // A aba de um grupo inclui os hosts dos subgrupos.
+            const ids = getDescendantIds(groups, tabId);
+            return customers.filter(c => (c.groups || []).some(id => ids.has(id)));
         })();
         return base.filter(searchFilter);
     };
@@ -220,7 +230,7 @@ export default function DialogListConections() {
         if (!open) closeModal('connections');
     };
 
-    const renderCustomers = (filteredCustomers, groupName) => {
+    const renderCustomers = (filteredCustomers) => {
         if (filteredCustomers.length === 0) return null;
 
         const withStatus = filteredCustomers.map(c => ({ ...c, status: c.status || 'unknown' }));
@@ -242,7 +252,7 @@ export default function DialogListConections() {
             return (
                 <div className="flex flex-col gap-1.5">
                     {withStatus.map(customer => wrapWithSelect(customer,
-                        <HostListRow key={customer.id} customer={customer} groupName={groupName} />
+                        <HostListRow key={customer.id} customer={customer} groupName={groupLabel(customer)} />
                     ))}
                 </div>
             );
@@ -252,7 +262,7 @@ export default function DialogListConections() {
             return (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {withStatus.map(customer => wrapWithSelect(customer,
-                        <HostDetailCard key={customer.id} customer={customer} groupName={groupName} />
+                        <HostDetailCard key={customer.id} customer={customer} groupName={groupLabel(customer)} />
                     ))}
                 </div>
             );
@@ -268,7 +278,7 @@ export default function DialogListConections() {
                 {withStatus.map(customer => wrapWithSelect(customer,
                     <HostCard
                         key={customer.id}
-                        host={{ status: customer.status, hostname: customer.name, group: groupName, ip: customer.host, port: customer.port }}
+                        host={{ status: customer.status, hostname: customer.name, group: groupLabel(customer), ip: customer.host, port: customer.port }}
                         onEdit={() => handleEdit(customer)}
                     />
                 ))}
@@ -278,14 +288,23 @@ export default function DialogListConections() {
 
     return (
         <Dialog open={modals.connections} onOpenChange={handleOpenChange}>
-            <DialogContent className="w-[calc(100vw-2rem)] md:w-[88vw] lg:w-[85vw] xl:w-[80vw] max-w-[1200px] max-h-[88vh] overflow-hidden flex flex-col p-0">
+            <DialogContent className="w-[calc(100vw-2rem)] md:w-[88vw] lg:w-[85vw] xl:w-[80vw] max-w-[1200px] h-[88vh] overflow-hidden flex flex-col gap-0 p-0">
                 <DialogTitle className="sr-only">Lista de Conexões</DialogTitle>
-                <div className="flex h-full min-h-[500px]">
-                    <Tabs defaultValue={defaultTab || undefined} orientation="vertical" className="flex w-full" onValueChange={(v) => setDefaultTab(v)}>
-                        <TabsList className="flex flex-col h-full justify-start w-48 rounded-none border-r bg-background p-2 space-y-1">
-                            {tabs.map(({ id, name }) => (
-                                <TabsTrigger key={id} value={id} className="w-full justify-start data-[state=active]:bg-muted">
-                                    {name}
+                {/* Altura fixa: a barra de grupos e a lista de hosts rolam cada uma por si. */}
+                <div className="flex flex-1 min-h-0">
+                    <Tabs defaultValue={defaultTab || undefined} orientation="vertical" className="flex w-full min-h-0" onValueChange={(v) => setDefaultTab(v)}>
+                        <TabsList className="flex flex-col h-full items-stretch justify-start w-52 shrink-0 overflow-y-auto overflow-x-hidden rounded-none border-r bg-background p-2 space-y-1">
+                            {tabs.map(({ id, name, depth }) => (
+                                <TabsTrigger
+                                    key={id}
+                                    value={id}
+                                    title={name}
+                                    className={cn(
+                                        "w-full shrink-0 justify-start data-[state=active]:bg-muted",
+                                        depth > 0 && "pl-6 text-xs text-muted-foreground"
+                                    )}
+                                >
+                                    <span className="truncate">{depth > 0 ? `↳ ${name}` : name}</span>
                                 </TabsTrigger>
                             ))}
                             {tabs.length === 0 && (
@@ -294,7 +313,7 @@ export default function DialogListConections() {
                                 </div>
                             )}
                         </TabsList>
-                        <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
                             <div className="flex items-center gap-2 p-2 border-b shrink-0">
                                 <div className="flex items-center gap-1">
                                     {viewModes.map(mode => (
@@ -332,6 +351,13 @@ export default function DialogListConections() {
                                     >
                                         <CheckSquare className="w-3.5 h-3.5" />
                                     </button>
+                                    <button
+                                        onClick={() => openModal('importSsh')}
+                                        className="p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent"
+                                        title="Importar do ~/.ssh/config"
+                                    >
+                                        <FileInput className="w-3.5 h-3.5" />
+                                    </button>
                                 </div>
                                 <div className="relative flex-1 max-w-md mx-auto">
                                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -346,7 +372,7 @@ export default function DialogListConections() {
                             <div className="flex-1 overflow-auto p-4 bg-background">
                                 {tabs.map(({ id, name }) => {
                                     const filteredCustomers = getCustomersForTab(id);
-                                    const content = renderCustomers(filteredCustomers, name);
+                                    const content = renderCustomers(filteredCustomers);
 
                                     return (
                                         <TabsContent key={id} value={id} className="mt-0 h-full">

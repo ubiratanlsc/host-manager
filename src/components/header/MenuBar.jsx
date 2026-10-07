@@ -1,7 +1,7 @@
 import * as React from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Server, FolderTree, Tags, Settings, Sun, Moon, Menu as MenuIcon, Download, Wrench, } from 'lucide-react'
+import { Server, FolderTree, Tags, Settings, Sun, Moon, Menu as MenuIcon, Download, Wrench, FileInput } from 'lucide-react'
 import {
     Copy,
     Minus,
@@ -67,7 +67,7 @@ export function MenuBar({ className, disabled = false }) {
     }, []);
 
     // Keyboard shortcuts extracted to custom hook
-    useGlobalShortcuts(disabled, openModal);
+    useGlobalShortcuts(disabled);
     const handleSpawnTerminal = async () => {
 
         if (!isInitialized) {
@@ -156,7 +156,7 @@ export function MenuBar({ className, disabled = false }) {
                 <Button
                     variant="ghost"
                     className="flex items-center gap-2 hover:opacity-80 p-0 text-primary"
-                    onClick={() => openModal("dashboard")}
+                    onClick={() => openModal("connections")}
                     disabled={disabled}
                 >
                     <img src={BrandLogo} alt="host-manager" className="w-7 h-7 rounded-md flex-shrink-0" />
@@ -234,6 +234,10 @@ export function MenuBar({ className, disabled = false }) {
                                 <Tags className="mr-2 h-4 w-4" />
                                 <span>Nova Tag</span>
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openModal("importSsh")}>
+                                <FileInput className="mr-2 h-4 w-4" />
+                                <span>Importar do SSH config</span>
+                            </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 )}
@@ -258,7 +262,7 @@ export function MenuBar({ className, disabled = false }) {
                                     Novo
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-48">
+                            <DropdownMenuContent align="start" className="w-56">
                                 <DropdownMenuItem onClick={() => openModal("connect")}>
                                     <TerminalTag className="mr-2 h-4 w-4" />
                                     <span>Conexão</span>
@@ -278,6 +282,11 @@ export function MenuBar({ className, disabled = false }) {
                                 <DropdownMenuItem onClick={() => openModal("tag")}>
                                     <Tags className="mr-2 h-4 w-4" />
                                     <span>Tag</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => openModal("importSsh")}>
+                                    <FileInput className="mr-2 h-4 w-4" />
+                                    <span>Importar do SSH config</span>
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>

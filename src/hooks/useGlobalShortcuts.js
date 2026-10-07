@@ -1,12 +1,29 @@
 import { useEffect } from 'react';
 import useSplitStore from '@/stores/useSplitStore';
+import useModalStore from '@/stores/useModalStore';
+
+// Modais de navegação da barra superior (Alt+1/2/3).
+const NAV_MODALS = ['connections', 'groupsList', 'tagList'];
+
+/**
+ * Alt+N alterna o modal: abre se estiver fechado, fecha se já estiver aberto.
+ * Se outro modal de navegação estiver aberto, troca direto para o pedido.
+ */
+export function toggleNavModal(modalId) {
+    const { modals, openModal, closeModal } = useModalStore.getState();
+    if (modals[modalId]) {
+        closeModal(modalId);
+        return;
+    }
+    NAV_MODALS.filter((id) => id !== modalId && modals[id]).forEach(closeModal);
+    openModal(modalId);
+}
 
 /**
  * Hook customizado para gerenciar atalhos globais de teclado da aplicação.
  * @param {boolean} disabled - Se os atalhos devem estar desativados.
- * @param {function} openModal - Função chamada para abrir modais específicos.
  */
-export function useGlobalShortcuts(disabled, openModal) {
+export function useGlobalShortcuts(disabled) {
     useEffect(() => {
         const handleKeyboard = (e) => {
             if (disabled) return;
@@ -22,15 +39,15 @@ export function useGlobalShortcuts(disabled, openModal) {
                 switch (e.key) {
                     case "1":
                         e.preventDefault();
-                        openModal("connections");
+                        toggleNavModal("connections");
                         break;
                     case "2":
                         e.preventDefault();
-                        openModal("groupsList");
+                        toggleNavModal("groupsList");
                         break;
                     case "3":
                         e.preventDefault();
-                        openModal("tagList");
+                        toggleNavModal("tagList");
                         break;
                     case "n":
                     case "N":
@@ -45,5 +62,5 @@ export function useGlobalShortcuts(disabled, openModal) {
 
         window.addEventListener("keydown", handleKeyboard);
         return () => window.removeEventListener("keydown", handleKeyboard);
-    }, [disabled, openModal]);
+    }, [disabled]);
 }

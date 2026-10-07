@@ -47,6 +47,48 @@ async fn check_host_connectivity(host: String, port: u16) -> bool {
     .unwrap_or(false)
 }
 
+#[derive(serde::Serialize)]
+struct SshConfigFile {
+    path: String,
+    home: String,
+    contents: String,
+}
+
+/// Lê um arquivo no formato ~/.ssh/config para a importação de hosts.
+/// Sem `path`, usa o padrão `<home>/.ssh/config`.
+#[tauri::command]
+async fn read_ssh_config(path: Option<String>) -> Result<SshConfigFile, String> {
+    const MAX_SIZE: u64 = 1024 * 1024;
+
+    #[cfg(target_os = "windows")]
+    let home = std::env::var("USERPROFILE").unwrap_or_default();
+    #[cfg(not(target_os = "windows"))]
+    let home = std::env::var("HOME").unwrap_or_default();
+
+    let path = match path.filter(|p| !p.trim().is_empty()) {
+        Some(p) => std::path::PathBuf::from(p),
+        None if !home.is_empty() => std::path::Path::new(&home).join(".ssh").join("config"),
+        None => return Err("Não foi possível localizar a pasta do usuário".to_string()),
+    };
+
+    let metadata = std::fs::metadata(&path)
+        .map_err(|e| format!("Não foi possível abrir {}: {}", path.display(), e))?;
+    if !metadata.is_file() {
+        return Err(format!("{} não é um arquivo", path.display()));
+    }
+    if metadata.len() > MAX_SIZE {
+        return Err(format!("{} é grande demais para ser um ssh config", path.display()));
+    }
+    let bytes = std::fs::read(&path)
+        .map_err(|e| format!("Não foi possível ler {}: {}", path.display(), e))?;
+
+    Ok(SshConfigFile {
+        path: path.display().to_string(),
+        home,
+        contents: String::from_utf8_lossy(&bytes).into_owned(),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // let storage = match ui::commands::init_storage() {
@@ -98,6 +140,7 @@ pub fn run() {
             ssh::commands::respond_hostkey,
             ssh::commands::shutdown_all_sessions,
             check_host_connectivity,
+            read_ssh_config,
             external_tools::launch_external_tool,
             open_here::take_open_here_path,
         ])
