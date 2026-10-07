@@ -71,7 +71,7 @@ export default function DialogConection() {
             setPort(22);
         } catch (error) {
             console.error('[DialogConection] Error spawning SSH:', error);
-            useAppStore.getState().addNotification({ type: 'error', title: 'Falha na conexão', message: error.message || error });
+            if (!error?.notified) useAppStore.getState().addNotification({ type: 'error', title: 'Falha na conexão', message: error.message || error });
         } finally {
             setIsLoading(false);
         }

@@ -52,7 +52,7 @@ const HostCard = ({ host, onEdit, onConnect }) => {
 
         } catch (error) {
             console.error('[HostCard] Error spawning SSH:', error);
-            useAppStore.getState().addNotification({ type: 'error', title: 'Falha na conexão', message: error.message || error });
+            if (!error?.notified) useAppStore.getState().addNotification({ type: 'error', title: 'Falha na conexão', message: error.message || error });
         }
     };
 

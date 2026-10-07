@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { toast } from 'sonner';
 import useAppStore from './useAppStore';
 import { appendTerminalChunk, createOrderedAsyncQueue } from '@/lib/terminalIo';
 
@@ -277,7 +278,9 @@ const useSSHStore = create(
              * @param {string} config.username - Usuário
              * @param {string} config.password - Senha (ou null para usar chave)
              */
-            spawnSSH: async (config, pendingCommand) => {
+            spawnSSH: async (config, pendingCommand, { notify = true } = {}) => {
+                let toastId = null;
+                const target = (config?.username ? config.username + '@' : '') + (config?.host || '');
                 try {
                     if (!isTauri()) {
                         const id = crypto.randomUUID();
@@ -316,6 +319,9 @@ const useSSHStore = create(
                         return id;
                     }
                     const { windowId, host, port = 22, username, password, identityFile } = config;
+                    // Feedback visível: sem isto um host lento ou com falha não dava
+                    // nenhum retorno (ex.: conectar pelo Ctrl+K).
+                    if (notify) toastId = toast.loading('Conectando a ' + target + '...');
                     const sessionId = await invoke(SSH_SPAWN_COMMAND, {
                         windowId: windowId || crypto.randomUUID(),
                         host,
@@ -331,9 +337,21 @@ const useSSHStore = create(
                             return { pendingCommands: next };
                         });
                     }
+                    if (toastId !== null) toast.dismiss(toastId);
                     return sessionId;
                 } catch (error) {
                     console.error('[SSHStore] Failed to spawn SSH:', error);
+                    if (notify) {
+                        const message = typeof error === 'string' ? error : error?.message || String(error);
+                        toast.error('Falha ao conectar em ' + target, {
+                            ...(toastId !== null ? { id: toastId } : {}),
+                            description: message,
+                            duration: 8000,
+                        });
+                        // Marca o erro como já exibido para quem chamou não repetir o aviso.
+                        if (error && typeof error === 'object') error.notified = true;
+                        else error = Object.assign(new Error(message), { notified: true });
+                    }
                     throw error;
                 }
             },
