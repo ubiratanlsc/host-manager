@@ -4,6 +4,9 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
 import useAppStore from './useAppStore';
+import useConfigStore, { isSameHost } from './ConfigData';
+import useModalStore from './useModalStore';
+import { errorMessage, needsPassword } from '@/lib/sshErrors';
 import { appendTerminalChunk, createOrderedAsyncQueue } from '@/lib/terminalIo';
 
 // Constants
@@ -342,7 +345,26 @@ const useSSHStore = create(
                 } catch (error) {
                     console.error('[SSHStore] Failed to spawn SSH:', error);
                     if (notify) {
-                        const message = typeof error === 'string' ? error : error?.message || String(error);
+                        const message = errorMessage(error);
+                        // Login falhou num host salvo sem senha: abre a edição dele
+                        // com o campo de senha em foco em vez de só mostrar o erro.
+                        const customer = needsPassword(error, config)
+                            ? useConfigStore.getState().customers.find((c) => isSameHost(c, { host: config.host, port: config.port, username: config.username }))
+                            : null;
+                        if (customer) {
+                            toast.warning('Senha necessária para ' + (customer.name || target), {
+                                ...(toastId !== null ? { id: toastId } : {}),
+                                description: 'O login sem senha não foi aceito. Cadastre a senha deste host para conectar.',
+                                duration: 8000,
+                            });
+                            useModalStore.getState().requestHostPassword(
+                                customer,
+                                'O servidor recusou o login sem senha. Informe a senha deste host para conectar.',
+                            );
+                            if (error && typeof error === 'object') error.notified = true;
+                            else error = Object.assign(new Error(message), { notified: true });
+                            throw error;
+                        }
                         toast.error('Falha ao conectar em ' + target, {
                             ...(toastId !== null ? { id: toastId } : {}),
                             description: message,

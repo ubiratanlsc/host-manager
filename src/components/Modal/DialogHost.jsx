@@ -19,10 +19,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState, useEffect, useRef } from "react";
 import { v4 as uuidv4 } from 'uuid';
-import { useSaveData, useConfigStore, useModalStore } from "@/stores";
+import { useSaveData, useConfigStore, useModalStore, useSSHStore, useAppStore } from "@/stores";
 import { open } from '@tauri-apps/plugin-dialog';
 import { isTauri } from '@tauri-apps/api/core';
-import { FolderOpen } from "lucide-react";
+import { AlertTriangle, FolderOpen } from "lucide-react";
+import { cn } from "@/lib/utils";
 import GroupSelect from "@/components/Group/GroupSelect";
 
 export default function DialogHost() {
@@ -36,6 +37,7 @@ export default function DialogHost() {
     const [tag, setTag] = useState("");
     const [identityFile, setIdentityFile] = useState("");
     const identityFileInputRef = useRef(null);
+    const passwordRef = useRef(null);
 
     const handleSelectIdentityFile = async () => {
         if (isTauri()) {
@@ -51,7 +53,9 @@ export default function DialogHost() {
         }
     };
 
-    const { modals, closeModal, editingCustomer, setEditingCustomer, hostDraft, setHostDraft } = useModalStore();
+    const { modals, closeModal, editingCustomer, setEditingCustomer, hostDraft, setHostDraft, hostPrompt, setHostPrompt } = useModalStore();
+    // Aberto porque o login falhou sem senha: destaca e foca o campo de senha.
+    const askingPassword = hostPrompt?.field === 'password';
     const { groups } = useConfigStore();
 
     const isEditing = !!editingCustomer;
@@ -78,15 +82,32 @@ export default function DialogHost() {
         }
     }, [editingCustomer, hostDraft, modals.host]);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         if (e) e.preventDefault();
+        if (askingPassword && !password.trim()) {
+            useAppStore.getState().addNotification({ type: 'warning', title: 'Senha obrigatória', message: 'Informe a senha deste host para conectar.' });
+            passwordRef.current?.focus();
+            return;
+        }
         if (isEditing) {
-            updateHost(editingCustomer.id, { name: name.trim(), host: host.trim(), port: parseInt(port), username: username.trim(), password, groups: group ? [group] : [], tagId: tag || undefined, identityFile: identityFile.trim() || undefined });
+            const data = { name: name.trim(), host: host.trim(), port: parseInt(port), username: username.trim(), password, groups: group ? [group] : [], tagId: tag || undefined, identityFile: identityFile.trim() || undefined };
+            await updateHost(editingCustomer.id, data);
+            // Veio de um login recusado por falta de senha: tenta de novo já com ela.
+            if (askingPassword && hostPrompt?.reconnect) {
+                useSSHStore.getState().spawnSSH({
+                    host: data.host,
+                    port: data.port || 22,
+                    username: data.username,
+                    password: data.password,
+                    identityFile: data.identityFile,
+                }).catch(() => { /* o spawnSSH já exibe o erro */ });
+            }
         } else {
             saveHost(uuidv4(), name.trim(), host.trim(), parseInt(port), username.trim(), password, group || '', tag, identityFile.trim() || undefined);
         }
         setEditingCustomer(null);
         setHostDraft(null);
+        setHostPrompt(null);
         closeModal('host');
     };
 
@@ -94,19 +115,33 @@ export default function DialogHost() {
         if (!open) {
             setEditingCustomer(null);
             setHostDraft(null);
+            setHostPrompt(null);
             closeModal('host');
         }
     };
 
     return (
         <Dialog open={modals.host} onOpenChange={handleOpenChange}>
-            <DialogContent className="w-[calc(100vw-2rem)] sm:w-[75vw] md:w-[60vw] lg:w-[50vw] xl:w-[40vw] max-w-[800px]">
+            <DialogContent
+                className="w-[calc(100vw-2rem)] sm:w-[75vw] md:w-[60vw] lg:w-[50vw] xl:w-[40vw] max-w-[800px]"
+                onOpenAutoFocus={(event) => {
+                    if (!askingPassword) return;
+                    event.preventDefault();
+                    setTimeout(() => passwordRef.current?.focus(), 0);
+                }}
+            >
                 <DialogHeader>
                     <DialogTitle>{isEditing ? 'Editar Host' : 'Novo Host'}</DialogTitle>
                     <DialogDescription>
                         {isEditing ? 'Atualize as informações do host abaixo.' : 'Digite as informações do host que serão salvas.'}
                     </DialogDescription>
                 </DialogHeader>
+                {askingPassword && (
+                    <div role="alert" className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
+                        <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                        <span>{hostPrompt.message || 'É preciso cadastrar a senha deste host.'}</span>
+                    </div>
+                )}
                 <form onSubmit={handleSubmit} className="grid gap-4 py-4">
                     <div className="flex gap-4">
                         <div className="grid gap-2 flex-grow">
@@ -166,6 +201,8 @@ export default function DialogHost() {
                                 <Label htmlFor="password">Senha</Label>
                                 <Input
                                     id="password"
+                                    ref={passwordRef}
+                                    className={cn(askingPassword && !password && "border-amber-500 focus-visible:ring-amber-500")}
                                     type="password"
                                     placeholder="************"
                                     value={password}

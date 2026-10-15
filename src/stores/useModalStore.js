@@ -91,6 +91,22 @@ const useModalStore = create((set, get) => ({
     // Valores iniciais para um Novo Host (ex.: cadastrar a partir de uma aba aberta).
     hostDraft: null,
     setHostDraft: (draft) => set({ hostDraft: draft }),
+
+    // Pedido para completar um host (ex.: login falhou por falta de senha):
+    // { field: 'password', message, reconnect }.
+    hostPrompt: null,
+    setHostPrompt: (prompt) => set({ hostPrompt: prompt }),
+
+    /** Abre a edição do host com o campo de senha em foco e um aviso. */
+    requestHostPassword: (customer, message) => {
+        blurActiveElement();
+        set((state) => ({
+            editingCustomer: customer,
+            hostDraft: null,
+            hostPrompt: { field: 'password', message, reconnect: true },
+            modals: { ...state.modals, host: true },
+        }));
+    },
 }));
 
 export default useModalStore;
