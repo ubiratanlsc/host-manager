@@ -8,6 +8,7 @@ import TerminalConfig from './TerminalConfig';
 import ClipboardConfig from './ClipboardConfig';
 import { writeConfigFile } from '../lib/configStorage';
 import { cloneGroup } from '../lib/groupTree';
+import { patchChanges } from '../lib/customerList';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -70,6 +71,31 @@ const useSaveData = create(() => ({
             useAppStore.getState().addNotification({ type: 'success', title: 'Host atualizado', message: `${data.name || 'Host'} foi atualizado com sucesso.` });
         } catch (error) {
             useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao atualizar host', message: error.message || error });
+        }
+    },
+
+    /**
+     * Edição em lote: aplica `patch` em todos os `ids` e grava uma única vez.
+     * @returns {Promise<boolean>} true só quando a gravação concluiu.
+     */
+    updateHosts: async (ids, patch) => {
+        const before = useConfigStore.getState().customers;
+        try {
+            const affected = patchChanges(before, ids, patch).filter(({ changes }) => changes.length > 0).length;
+            if (affected === 0) {
+                useAppStore.getState().addNotification({ type: 'info', title: 'Nada para atualizar', message: 'Os hosts selecionados já estão com esses valores.' });
+                return false;
+            }
+            useConfigStore.getState().editCustomers(ids, patch);
+            await persistConfig();
+            useAppStore.getState().addNotification({ type: 'success', title: 'Hosts atualizados', message: `${affected} host${affected === 1 ? '' : 's'} atualizado${affected === 1 ? '' : 's'}.` });
+            return true;
+        } catch (error) {
+            // Falhou a gravação: volta a lista ao que está no disco, senão a
+            // memória segue alterada e a próxima gravação persiste o engano.
+            useConfigStore.setState({ customers: before });
+            useAppStore.getState().addNotification({ type: 'error', title: 'Erro ao atualizar hosts', message: error.message || error });
+            return false;
         }
     },
 

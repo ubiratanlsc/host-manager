@@ -14,6 +14,7 @@ const MODAL_IDS = [
     'tagList',
     'saveCommand',
     'importSsh',
+    'bulkEditHosts',
 ];
 
 const closedModals = () => Object.fromEntries(MODAL_IDS.map((id) => [id, false]));
@@ -87,6 +88,25 @@ const useModalStore = create((set, get) => ({
 
     editingCustomer: null,
     setEditingCustomer: (customer) => set({ editingCustomer: customer }),
+
+    // Hosts escolhidos para a edição em lote. `bulkEditApplied` é só um
+    // contador de gravações: a lista observa a mudança para limpar a seleção.
+    bulkEditIds: [],
+    bulkEditApplied: 0,
+
+    startBulkEdit: (ids) => {
+        blurActiveElement();
+        set((state) => ({
+            bulkEditIds: [...ids],
+            modals: { ...state.modals, bulkEditHosts: true },
+        }));
+    },
+
+    finishBulkEdit: (applied = false) => set((state) => ({
+        bulkEditIds: [],
+        bulkEditApplied: applied ? state.bulkEditApplied + 1 : state.bulkEditApplied,
+        modals: { ...state.modals, bulkEditHosts: false },
+    })),
 
     // Valores iniciais para um Novo Host (ex.: cadastrar a partir de uma aba aberta).
     hostDraft: null,

@@ -4,8 +4,8 @@ import {
     DialogTitle
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { memo, useEffect, useState, useMemo } from "react";
-import { Terminal, Server, Globe, Edit2, LayoutList, LayoutGrid, Rows3, Search, RefreshCw, Send, CheckSquare, FileInput } from "lucide-react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { Terminal, Server, Globe, Edit2, LayoutList, LayoutGrid, Rows3, Search, RefreshCw, Send, CheckSquare, FileInput, PencilLine, Check, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useConfigStore, useModalStore, useSSHStore } from "@/stores";
@@ -135,11 +135,15 @@ export default function DialogListConections() {
     const isOpen = useModalStore((s) => s.modals.connections);
     const closeModal = useModalStore((s) => s.closeModal);
     const openModal = useModalStore((s) => s.openModal);
+    const startBulkEdit = useModalStore((s) => s.startBulkEdit);
+    const bulkEditApplied = useModalStore((s) => s.bulkEditApplied);
     const [viewMode, setViewMode] = useState('blocks');
     const [search, setSearch] = useState('');
     const [checking, setChecking] = useState(false);
-    const [broadcastMode, setBroadcastMode] = useState(false);
+    // Seleção múltipla: 'broadcast' dispara um comando, 'edit' edita em lote.
+    const [selectMode, setSelectMode] = useState(null);
     const [selectedIds, setSelectedIds] = useState(new Set());
+    const lastClickedId = useRef(null);
     const [broadcastCmd, setBroadcastCmd] = useState('');
     const [broadcasting, setBroadcasting] = useState(false);
     const spawnSSH = useSSHStore((s) => s.spawnSSH);
@@ -183,13 +187,56 @@ export default function DialogListConections() {
     // Se a aba escolhida sumir (grupo excluído), volta para a primeira.
     const activeTab = tabs.some((t) => t.id === selectedTab) ? selectedTab : tabs[0]?.id;
 
-    const toggleSelect = (id) => {
+    const toggleSelect = (id, { shiftKey = false, visibleIds = [] } = {}) => {
+        // A âncora é lida aqui, fora do updater: o React pode adiar o updater
+        // para o render, quando a ref já teria o id deste clique.
+        const from = lastClickedId.current ? visibleIds.indexOf(lastClickedId.current) : -1;
+        const to = visibleIds.indexOf(id);
+        const range = shiftKey && from !== -1 && to !== -1
+            ? visibleIds.slice(Math.min(from, to), Math.max(from, to) + 1)
+            : null;
+        lastClickedId.current = id;
+
         setSelectedIds(prev => {
             const next = new Set(prev);
+            // Shift-clique marca o intervalo visível entre o clique anterior e este.
+            if (range) {
+                range.forEach((visibleId) => next.add(visibleId));
+                return next;
+            }
             next.has(id) ? next.delete(id) : next.add(id);
             return next;
         });
     };
+
+    const clearSelection = () => {
+        setSelectedIds(new Set());
+        lastClickedId.current = null;
+    };
+
+    /** Clicar no modo já ativo desliga: os dois modos não convivem. */
+    const enterSelectMode = (mode) => {
+        setSelectMode((current) => (current === mode ? null : mode));
+        clearSelection();
+    };
+
+    const exitSelectMode = () => {
+        setSelectMode(null);
+        clearSelection();
+    };
+
+    // Depois de gravar a edição em lote a seleção já cumpriu o papel. A porta
+    // pode ter mudado, então o status de conectividade é testado de novo.
+    useEffect(() => {
+        if (bulkEditApplied === 0) return;
+        setSelectMode(null);
+        setSelectedIds(new Set());
+        lastClickedId.current = null;
+        setChecking(true);
+        checkAllConnectivity({ force: true })
+            .catch(() => { /* o status fica como estava */ })
+            .finally(() => setChecking(false));
+    }, [bulkEditApplied, checkAllConnectivity]);
 
     const handleBroadcast = async () => {
         if (!broadcastCmd.trim() || selectedIds.size === 0) return;
@@ -210,8 +257,7 @@ export default function DialogListConections() {
             }
         }));
         setBroadcasting(false);
-        setBroadcastMode(false);
-        setSelectedIds(new Set());
+        exitSelectMode();
         setBroadcastCmd('');
         closeModal('connections');
     };
@@ -232,28 +278,85 @@ export default function DialogListConections() {
     };
 
     const handleOpenChange = (open) => {
-        if (!open) closeModal('connections');
+        if (!open) {
+            exitSelectMode();
+            closeModal('connections');
+        }
     };
+
+    // Uma filtragem por render: a lista da aba ativa alimenta os cards e a
+    // barra de seleção, e não refaz o filtro a cada tecla do broadcast.
+    const visibleCustomers = useMemo(
+        () => (activeTab ? getCustomersForTab(activeTab) : []),
+        // getCustomersForTab é recriada em todo render; o que importa são
+        // estes valores, dos quais ela depende.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [customers, groups, activeTab, search],
+    );
+
+    const selectVisible = () => setSelectedIds((prev) => new Set([...prev, ...visibleCustomers.map((customer) => customer.id)]));
+
+    const hiddenSelected = (() => {
+        if (!selectMode || selectedIds.size === 0) return 0;
+        const visible = new Set(visibleCustomers.map((customer) => customer.id));
+        return [...selectedIds].filter((id) => !visible.has(id)).length;
+    })();
 
     const renderCustomers = (filteredCustomers) => {
         if (filteredCustomers.length === 0) return null;
+        const visibleIds = filteredCustomers.map((customer) => customer.id);
 
-        const wrapWithSelect = (customer, el) => broadcastMode ? (
-            <div
-                key={customer.id}
-                className={cn("relative cursor-pointer rounded-lg ring-2 transition-all", selectedIds.has(customer.id) ? "ring-primary" : "ring-transparent")}
-                onClick={() => toggleSelect(customer.id)}
-            >
-                <div className="absolute top-1.5 left-1.5 z-10">
-                    <input type="checkbox" readOnly checked={selectedIds.has(customer.id)} className="w-3.5 h-3.5 accent-primary pointer-events-none" />
+        // Em modo de seleção o card inteiro é a caixa de marcação: também
+        // pelo teclado (Tab para percorrer, Espaço/Enter para marcar,
+        // Shift+Espaço para o intervalo). O conteúdo fica `inert` para os
+        // botões de conectar e editar não roubarem o Tab, e recebe um recuo
+        // para o marcador ter calha própria em vez de cobrir o card.
+        const wrapWithSelect = (customer, el) => {
+            if (!selectMode) return el;
+            const isSelected = selectedIds.has(customer.id);
+            const mark = (event) => toggleSelect(customer.id, { shiftKey: event.shiftKey, visibleIds });
+
+            return (
+                <div
+                    key={customer.id}
+                    role="checkbox"
+                    aria-checked={isSelected}
+                    aria-label={customer.name || customer.host}
+                    tabIndex={0}
+                    className={cn(
+                        "group relative cursor-pointer rounded-lg transition-all duration-150",
+                        "ring-2 ring-offset-1 ring-offset-background focus:outline-none focus-visible:ring-ring",
+                        isSelected ? "ring-primary" : "ring-transparent hover:ring-primary/30",
+                    )}
+                    onClick={mark}
+                    onKeyDown={(event) => {
+                        if (event.key !== ' ' && event.key !== 'Enter') return;
+                        event.preventDefault();
+                        mark(event);
+                    }}
+                >
+                    <span
+                        aria-hidden="true"
+                        className={cn(
+                            "absolute left-1 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border-2 transition-colors",
+                            isSelected
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-muted-foreground/40 bg-background group-hover:border-primary/60",
+                        )}
+                    >
+                        <Check className={cn("h-3 w-3 transition-opacity", isSelected ? "opacity-100" : "opacity-0")} strokeWidth={3} />
+                    </span>
+                    <div className="pointer-events-none select-none pl-7" inert="">{el}</div>
+                    {isSelected && <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-lg bg-primary/5" />}
                 </div>
-                <div className="pointer-events-none select-none">{el}</div>
-            </div>
-        ) : el;
+            );
+        };
 
         if (viewMode === 'list') {
             return (
-                <div className="flex flex-col gap-1.5">
+                // Em modo de seleção as linhas respiram mais: o anel de cada
+                // uma precisa de folga para não encostar na vizinha.
+                <div className={cn("flex flex-col", selectMode ? "gap-2.5" : "gap-1.5")}>
                     {filteredCustomers.map(customer => wrapWithSelect(customer,
                         <HostListRow key={customer.id} customer={customer} status={hostStatus[customer.id]} />
                     ))}
@@ -287,7 +390,15 @@ export default function DialogListConections() {
 
     return (
         <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-            <DialogContent className="w-[calc(100vw-2rem)] md:w-[88vw] lg:w-[85vw] xl:w-[80vw] max-w-[1200px] h-[88vh] overflow-hidden flex flex-col gap-0 p-0">
+            <DialogContent
+                className="w-[calc(100vw-2rem)] md:w-[88vw] lg:w-[85vw] xl:w-[80vw] max-w-[1200px] h-[88vh] overflow-hidden flex flex-col gap-0 p-0"
+                onEscapeKeyDown={(event) => {
+                    // Com seleção ativa, Esc desliga o modo em vez de fechar a lista.
+                    if (!selectMode) return;
+                    event.preventDefault();
+                    exitSelectMode();
+                }}
+            >
                 <DialogTitle className="sr-only">Lista de Conexões</DialogTitle>
                 {/* Altura fixa: a barra de grupos e a lista de hosts rolam cada uma por si. */}
                 <div className="flex flex-1 min-h-0">
@@ -338,18 +449,35 @@ export default function DialogListConections() {
                                     >
                                         <RefreshCw className={cn("w-3.5 h-3.5", checking && "animate-spin")} />
                                     </button>
+                                    {/* Os dois modos de seleção ficam juntos, separados das visualizações. */}
+                                    <span className="mx-0.5 h-4 w-px bg-border" />
                                     <button
-                                        onClick={() => { setBroadcastMode(v => !v); setSelectedIds(new Set()); }}
+                                        onClick={() => enterSelectMode('broadcast')}
                                         className={cn(
                                             "p-1 rounded-md transition-colors",
-                                            broadcastMode
-                                                ? "bg-primary text-primary-foreground"
+                                            selectMode === 'broadcast'
+                                                ? "bg-primary text-primary-foreground shadow-sm"
                                                 : "text-muted-foreground hover:text-foreground hover:bg-accent"
                                         )}
                                         title="Selecionar hosts para broadcast"
+                                        aria-pressed={selectMode === 'broadcast'}
                                     >
                                         <CheckSquare className="w-3.5 h-3.5" />
                                     </button>
+                                    <button
+                                        onClick={() => enterSelectMode('edit')}
+                                        className={cn(
+                                            "p-1 rounded-md transition-colors",
+                                            selectMode === 'edit'
+                                                ? "bg-primary text-primary-foreground shadow-sm"
+                                                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                                        )}
+                                        title="Selecionar hosts para editar em lote"
+                                        aria-pressed={selectMode === 'edit'}
+                                    >
+                                        <PencilLine className="w-3.5 h-3.5" />
+                                    </button>
+                                    <span className="mx-0.5 h-4 w-px bg-border" />
                                     <button
                                         onClick={() => openModal('importSsh')}
                                         className="p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -372,8 +500,7 @@ export default function DialogListConections() {
                                 {/* Só a aba ativa é montada: filtrar e renderizar todas a cada
                                     atualização trava a lista quando há centenas de hosts. */}
                                 {tabs.filter(({ id }) => id === activeTab).map(({ id }) => {
-                                    const filteredCustomers = getCustomersForTab(id);
-                                    const content = renderCustomers(filteredCustomers);
+                                    const content = renderCustomers(visibleCustomers);
 
                                     return (
                                         <TabsContent key={id} value={id} className="mt-0 h-full">
@@ -409,26 +536,63 @@ export default function DialogListConections() {
                         </div>
                     </Tabs>
                 </div>
-                {broadcastMode && (
-                    <div className="border-t bg-muted/40 p-3 flex items-center gap-2 shrink-0">
-                        <span className="text-xs text-muted-foreground shrink-0">
-                            {selectedIds.size} host{selectedIds.size !== 1 ? 's' : ''} selecionado{selectedIds.size !== 1 ? 's' : ''}
+                {selectMode && (
+                    <div className="border-t bg-muted/40 px-3 py-2.5 flex items-center gap-2 shrink-0 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                        <span className={cn(
+                            "inline-flex items-center gap-1.5 h-8 shrink-0 rounded-full px-2.5 text-xs font-medium transition-colors",
+                            selectedIds.size > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+                        )}>
+                            {selectMode === 'broadcast' ? <Send className="w-3.5 h-3.5" /> : <PencilLine className="w-3.5 h-3.5" />}
+                            {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
                         </span>
-                        <input
-                            value={broadcastCmd}
-                            onChange={e => setBroadcastCmd(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && handleBroadcast()}
-                            placeholder="Comando para executar em todos..."
-                            className="flex-1 h-7 px-2 text-xs rounded-md border bg-background placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring font-mono"
-                        />
-                        <button
-                            onClick={handleBroadcast}
-                            disabled={broadcasting || selectedIds.size === 0 || !broadcastCmd.trim()}
-                            className="flex items-center gap-1.5 px-3 h-7 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
-                        >
-                            <Send className="w-3 h-3" />
-                            {broadcasting ? 'Executando...' : 'Executar'}
-                        </button>
+                        {hiddenSelected > 0 && (
+                            <span className="inline-flex items-center gap-1 shrink-0 text-[11px] text-amber-600 dark:text-amber-400" title="A seleção inclui hosts que a aba ou a busca atual não mostram">
+                                <AlertTriangle className="w-3 h-3" />
+                                {hiddenSelected} fora desta aba ou do filtro
+                            </span>
+                        )}
+                        <span className="h-5 w-px bg-border shrink-0" />
+                        <Button variant="outline" size="sm" className="h-8 text-xs shrink-0" onClick={selectVisible} disabled={visibleCustomers.length === 0}>
+                            Selecionar visíveis
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8 text-xs shrink-0" onClick={clearSelection} disabled={selectedIds.size === 0}>
+                            Limpar
+                        </Button>
+                        {selectMode === 'broadcast' ? (
+                            <>
+                                <input
+                                    value={broadcastCmd}
+                                    onChange={e => setBroadcastCmd(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleBroadcast()}
+                                    placeholder="Comando para executar em todos..."
+                                    className="flex-1 min-w-0 h-8 px-2.5 text-xs rounded-md border bg-background placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                                />
+                                <Button
+                                    size="sm"
+                                    className="h-8 gap-1.5 text-xs shrink-0"
+                                    onClick={handleBroadcast}
+                                    disabled={broadcasting || selectedIds.size === 0 || !broadcastCmd.trim()}
+                                >
+                                    <Send className="w-3 h-3" />
+                                    {broadcasting ? 'Executando...' : 'Executar'}
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <span className="flex-1 min-w-0 truncate text-[11px] leading-tight text-muted-foreground">
+                                    Shift+clique marca um intervalo · nome e endereço ficam de fora · Esc sai da seleção
+                                </span>
+                                <Button
+                                    size="sm"
+                                    className="h-8 gap-1.5 text-xs shrink-0"
+                                    onClick={() => startBulkEdit([...selectedIds])}
+                                    disabled={selectedIds.size === 0}
+                                >
+                                    <PencilLine className="w-3 h-3" />
+                                    Editar selecionados
+                                </Button>
+                            </>
+                        )}
                     </div>
                 )}
             </DialogContent>

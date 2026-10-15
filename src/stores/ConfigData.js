@@ -3,7 +3,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { removeGroupFromConfig } from "../lib/groupTree";
 import { checkConnectivity } from "../lib/connectivity";
-import { appendCustomers, toCustomer } from "../lib/customerList";
+import { appendCustomers, applyPatch, toCustomer } from "../lib/customerList";
 
 const samePort = (a, b) => Number(a || 22) === Number(b || 22);
 
@@ -36,6 +36,9 @@ const useConfigStore = create((set) => ({
     editCustomer: (id, updatedData) => set((state) => ({
         customers: state.customers.map(customer => customer.id === id ? { ...customer, ...updatedData } : customer),
     })),
+    // Edição em lote: um único set com os campos de `patch` (porta, usuário,
+    // senha, chave, grupo) nos hosts de `ids`. Nome e endereço nunca entram.
+    editCustomers: (ids, patch) => set((state) => ({ customers: applyPatch(state.customers, ids, patch) })),
     removeCustomer: (id) => set((state) => ({
         customers: state.customers.filter(customer => customer.id !== id),
     })),
@@ -90,9 +93,15 @@ const useConfigStore = create((set) => ({
     // Status de conectividade por id de host. Fica fora de `customers` para
     // não re-renderizar tudo que depende da lista nem ir para o config.json.
     hostStatus: {},
-    checkAllConnectivity: () => {
+    checkAllConnectivity: ({ force = false } = {}) => {
         if (!isTauri()) return Promise.resolve();
-        if (connectivityRun) return connectivityRun;
+        // Sem `force`, reabrir o modal reaproveita a verificação em andamento.
+        // Com `force` (depois de uma edição em lote), espera a atual terminar
+        // e roda outra: a que está correndo sondava as portas antigas.
+        if (connectivityRun) {
+            if (!force) return connectivityRun;
+            return connectivityRun.then(() => useConfigStore.getState().checkAllConnectivity());
+        }
         connectivityRun = checkConnectivity(
             useConfigStore.getState().customers,
             (host, port) => invoke('check_host_connectivity', { host, port }),

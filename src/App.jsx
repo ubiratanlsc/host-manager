@@ -20,6 +20,7 @@ import { Toaster } from 'sonner';
 import QuickSearch from '@/components/Modal/QuickSearch';
 import HostKeyDialog from '@/components/Modal/HostKeyDialog';
 import CommandModals from '@/components/Modal/CommandModals';
+import DialogBulkEditHosts from '@/components/Modal/DialogBulkEditHosts';
 import DialogImportSshConfig from '@/components/Modal/DialogImportSshConfig';
 
 
@@ -91,6 +92,7 @@ const App = () => {
       <DialogSettings onClose={() => closeModal('settings')} />
       <DialogTag onClose={() => closeModal('tag')} />
       <DialogImportSshConfig />
+      <DialogBulkEditHosts />
       <QuickSearch open={quickSearchOpen} onClose={() => setQuickSearchOpen(false)} />
       <HostKeyDialog />
       <CommandModals />
