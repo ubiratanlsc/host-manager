@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppStore, useConfigStore, useSaveData } from "@/stores";
-import { getChildren, getRootGroups, isRootGroup } from "@/lib/groupTree";
+import { findDuplicateGroupName, getChildren, getRootGroups, isRootGroup } from "@/lib/groupTree";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,14 +47,20 @@ export default function CloneGroupDialog({ group, onClose }) {
             useAppStore.getState().addNotification({ type: 'warning', title: 'Campo obrigatório', message: 'Informe o nome da cópia.' });
             return;
         }
-        if (!isRoot && parentIds.length === 0) {
+        if (isRoot && findDuplicateGroupName(groups, { name })) {
+            useAppStore.getState().addNotification({ type: 'warning', title: 'Nome já existe', message: `Já existe um grupo principal chamado "${name.trim()}".` });
+            return;
+        }
+        // Destinos que já têm um subgrupo com esse nome ficam de fora.
+        const targets = parentIds.filter((parentId) => !findDuplicateGroupName(groups, { name, parentId }));
+        if (!isRoot && targets.length === 0) {
             useAppStore.getState().addNotification({ type: 'warning', title: 'Escolha o destino', message: 'Selecione ao menos um grupo para receber a cópia.' });
             return;
         }
         setSaving(true);
         await cloneGroup(group.id, isRoot
             ? { name: name.trim(), includeChildren }
-            : { name: name.trim(), parentIds });
+            : { name: name.trim(), parentIds: targets });
         setSaving(false);
         onClose();
     };
@@ -112,17 +118,16 @@ export default function CloneGroupDialog({ group, onClose }) {
                             </div>
                             <div className="max-h-56 overflow-y-auto rounded-md border p-1">
                                 {roots.map((root) => {
-                                    const alreadyHas = getChildren(groups, root.id).some((child) => (
-                                        (child.name || '').trim().toLowerCase() === name.trim().toLowerCase()
-                                    ));
+                                    const alreadyHas = !!findDuplicateGroupName(groups, { name, parentId: root.id });
                                     return (
                                         <label
                                             key={root.id}
-                                            className={cn("flex items-center gap-2 px-2 py-1.5 rounded text-sm cursor-pointer hover:bg-accent/50")}
+                                            className={cn("flex items-center gap-2 px-2 py-1.5 rounded text-sm", alreadyHas ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-accent/50")}
                                         >
                                             <input
                                                 type="checkbox"
-                                                checked={parentIds.includes(root.id)}
+                                                checked={!alreadyHas && parentIds.includes(root.id)}
+                                                disabled={alreadyHas}
                                                 onChange={() => toggleParent(root.id)}
                                                 className="accent-primary"
                                             />

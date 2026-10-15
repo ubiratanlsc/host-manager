@@ -124,3 +124,22 @@ export function cloneGroup(groups, id, { name, parentId, includeChildren = true,
 
     return [copyOf(source, { name: name || source.name, parentId: parentId || source.parentId })];
 }
+
+const normalizeName = (name) => (name || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
+
+/**
+ * Grupo irmão com o mesmo nome (ignora maiúsculas e espaços extras):
+ * dois grupos principais iguais, ou dois subgrupos iguais no mesmo pai.
+ * O mesmo nome em pais diferentes é permitido (ex.: "BRB" em Omni e Manager).
+ * `excludeId` ignora o próprio grupo ao editar. Retorna o grupo repetido ou null.
+ */
+export function findDuplicateGroupName(groups, { name, parentId, excludeId }) {
+    const target = normalizeName(name);
+    if (!target) return null;
+    const parent = parentId || null;
+    return (groups || []).find((group) => (
+        group.id !== excludeId
+        && (group.parentId || null) === parent
+        && normalizeName(group.name) === target
+    )) || null;
+}

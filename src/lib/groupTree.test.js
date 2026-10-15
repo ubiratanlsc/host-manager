@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
     buildGroupOptions,
     cloneGroup,
+    findDuplicateGroupName,
     getDescendantIds,
     getGroupPath,
     getRootGroupId,
@@ -87,4 +88,13 @@ test('cloning a subgroup can place the copy under another client', () => {
     const created = cloneGroup(groups, 'omni', { name: 'Omnichannel', parentId: 'acme', createId: () => 'c1' });
     assert.deepEqual(created, [{ id: 'c1', name: 'Omnichannel', parentId: 'acme' }]);
     assert.deepEqual(cloneGroup(groups, 'missing', { createId: () => 'z' }), []);
+});
+
+test('blocks duplicate names among siblings but allows them under other parents', () => {
+    assert.equal(findDuplicateGroupName(groups, { name: '  brb ' })?.id, 'brb');
+    assert.equal(findDuplicateGroupName(groups, { name: 'SIP', parentId: 'brb' })?.id, 'sip');
+    assert.equal(findDuplicateGroupName(groups, { name: 'SIP', parentId: 'acme' }), null);
+    assert.equal(findDuplicateGroupName(groups, { name: 'SIP' }), null);
+    assert.equal(findDuplicateGroupName(groups, { name: 'Omnichannel', parentId: 'brb', excludeId: 'omni' }), null);
+    assert.equal(findDuplicateGroupName(groups, { name: '' }), null);
 });

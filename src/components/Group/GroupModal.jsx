@@ -12,8 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
 import { useAppStore, useConfigStore } from "@/stores";
-import { getChildren } from "@/lib/groupTree";
+import { findDuplicateGroupName, getChildren } from "@/lib/groupTree";
 import GroupSelect from "./GroupSelect";
+import { cn } from "@/lib/utils";
 
 /**
  * Cria/edita um grupo. `defaultParentId` pré-seleciona o grupo pai ao criar
@@ -30,6 +31,15 @@ export function GroupModal({ isOpen, onClose, onSave, group, defaultParentId = "
 
     const hasChildren = !!group && getChildren(groups, group.id).length > 0;
     const isSubgroup = !!parentId;
+
+    // Nome igual a um grupo irmão (mesmo nível e mesmo pai) não é permitido.
+    const duplicate = findDuplicateGroupName(groups, { name, parentId, excludeId: group?.id });
+    const parentName = groups.find((g) => g.id === parentId)?.name;
+    const duplicateMessage = duplicate
+        ? (isSubgroup
+            ? `Já existe o subgrupo "${duplicate.name}" em "${parentName}".`
+            : `Já existe um grupo principal chamado "${duplicate.name}".`)
+        : '';
 
     useEffect(() => {
         if (group) {
@@ -48,6 +58,11 @@ export function GroupModal({ isOpen, onClose, onSave, group, defaultParentId = "
     const handleSave = () => {
         if (!name.trim()) {
             useAppStore.getState().addNotification({ type: 'warning', title: 'Campo obrigatório', message: 'O nome do grupo é obrigatório.' });
+            return;
+        }
+
+        if (duplicate) {
+            useAppStore.getState().addNotification({ type: 'warning', title: 'Nome já existe', message: duplicateMessage });
             return;
         }
 
@@ -94,9 +109,13 @@ export function GroupModal({ isOpen, onClose, onSave, group, defaultParentId = "
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
-                            placeholder={isSubgroup ? "Ex.: Omnichannel" : "Ex.: Brb"}
-                            className="rounded-lg"
+                            placeholder="Digite o nome do grupo"
+                            aria-invalid={!!duplicate}
+                            className={cn("rounded-lg", duplicate && "border-destructive focus-visible:ring-destructive")}
                         />
+                        {duplicate && (
+                            <p className="text-xs text-destructive">{duplicateMessage}</p>
+                        )}
                     </div>
 
                     <div className="space-y-2">
