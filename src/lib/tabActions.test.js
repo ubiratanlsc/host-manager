@@ -5,6 +5,7 @@ import {
     getSSHSpawnConfig,
     getTabTerminalId,
     isCloseTabShortcut,
+    isDuplicateTabShortcut,
     replaceActiveTabTerminal,
     replaceActiveTerminalInTabs,
 } from './tabActions.js';
@@ -152,4 +153,12 @@ test('opening a client group also opens the hosts of its subgroups', () => {
         getGroupCustomersToOpen(customers, ids, 'omni', new Map(), groups).map((c) => c.id),
         ['omni-host'],
     );
+});
+
+test('Ctrl+Shift+D duplicates the session without clashing with Ctrl+D', () => {
+    assert.equal(isDuplicateTabShortcut({ key: 'D', ctrlKey: true, shiftKey: true }), true);
+    assert.equal(isDuplicateTabShortcut({ key: 'd', ctrlKey: true, shiftKey: true }), true);
+    assert.equal(isDuplicateTabShortcut({ key: 'd', ctrlKey: true }), false);
+    assert.equal(isDuplicateTabShortcut({ key: 'D', ctrlKey: true, shiftKey: true, altKey: true }), false);
+    assert.equal(isCloseTabShortcut({ key: 'D', ctrlKey: true, shiftKey: true }), false);
 });

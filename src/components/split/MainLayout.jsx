@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { useTerminalStore, useSSHStore, useSplitStore, useConfigStore } from '@/stores';
+import { useTerminalStore, useSSHStore, useSplitStore, useConfigStore, useAppStore } from '@/stores';
 import SplitPane from './SplitPane';
 import GlobalTabBar from './GlobalTabBar';
 import SplitPositionMenu from './SplitPositionMenu';
 import { GripVertical } from 'lucide-react';
 import { getRootGroupId } from '@/lib/groupTree';
-import { findCustomerForSession } from '@/lib/tabActions';
+import { findCustomerForSession, getSSHSpawnConfig } from '@/lib/tabActions';
 
 // Abas SSH ficam no grupo raiz (cliente) do host salvo da sessão.
 const getSessionTabGroup = (session, customers, groups) => {
@@ -221,6 +221,37 @@ const MainLayout = () => {
 
         window.addEventListener('terminal:request-close', handleCloseRequest);
         return () => window.removeEventListener('terminal:request-close', handleCloseRequest);
+    }, []);
+
+    // Abre uma nova sessão igual à indicada (Ctrl+Shift+D e "Duplicar aba").
+    useEffect(() => {
+        const handleDuplicateRequest = async (event) => {
+            const terminalId = event.detail?.terminalId;
+            if (!terminalId) return;
+
+            const terminalStore = useTerminalStore.getState();
+            const sshStore = useSSHStore.getState();
+            try {
+                const terminal = terminalStore.terminals.get(terminalId);
+                if (terminal) {
+                    await terminalStore.spawnPty(terminal.shell);
+                    return;
+                }
+                const config = getSSHSpawnConfig(sshStore.sessions.get(terminalId), useConfigStore.getState().customers);
+                if (config) await sshStore.spawnSSH(config);
+            } catch (error) {
+                // Falha de SSH já foi exibida pelo spawnSSH.
+                if (error?.notified) return;
+                useAppStore.getState().addNotification({
+                    type: 'error',
+                    title: 'Falha ao duplicar aba',
+                    message: error?.message || String(error),
+                });
+            }
+        };
+
+        window.addEventListener('terminal:request-duplicate', handleDuplicateRequest);
+        return () => window.removeEventListener('terminal:request-duplicate', handleDuplicateRequest);
     }, []);
 
     // Handle tab activation while dragging over tab items

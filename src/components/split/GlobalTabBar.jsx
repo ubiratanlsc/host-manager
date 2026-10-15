@@ -270,7 +270,6 @@ const GlobalTabBar = () => {
     const sessions = useSSHStore((s) => s.sessions);
     const killPty = useTerminalStore((s) => s.killPty);
     const killSSH = useSSHStore((s) => s.killSSH);
-    const spawnPty = useTerminalStore((s) => s.spawnPty);
     const spawnSSH = useSSHStore((s) => s.spawnSSH);
 
     const handleTabClose = async (tab) => {
@@ -310,26 +309,11 @@ const GlobalTabBar = () => {
         }
     };
 
-    const handleDuplicateTab = async (tab) => {
-        const terminalId = getTabTerminalId(tab);
-        const terminal = terminals.get(terminalId);
-        const session = sessions.get(terminalId);
-
-        try {
-            if (terminal) {
-                await spawnPty(terminal.shell);
-                return;
-            }
-
-            const config = getSSHSpawnConfig(session, customers);
-            if (config) await spawnSSH(config);
-        } catch (error) {
-            useAppStore.getState().addNotification({
-                type: 'error',
-                title: 'Falha ao duplicar aba',
-                message: error?.message || String(error),
-            });
-        }
+    // Mesmo fluxo do Ctrl+Shift+D (tratado no MainLayout).
+    const handleDuplicateTab = (tab) => {
+        window.dispatchEvent(new CustomEvent('terminal:request-duplicate', {
+            detail: { terminalId: getTabTerminalId(tab) },
+        }));
     };
 
     const handleReconnectTab = async (tab) => {

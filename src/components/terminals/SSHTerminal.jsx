@@ -21,7 +21,7 @@ import {
     createXtgettcapReply,
     toTerminalBytes,
 } from '@/lib/terminalIo';
-import { isCloseTabShortcut } from '@/lib/tabActions';
+import { isCloseTabShortcut, isDuplicateTabShortcut } from '@/lib/tabActions';
 import '@xterm/xterm/css/xterm.css';
 
 const canUseWebgl = () => {
@@ -228,6 +228,14 @@ const SSHTerminal = ({ sessionId }) => {
 
         xterm.attachCustomKeyEventHandler((event) => {
             if (event.type !== 'keydown') return true;
+            // Ctrl+Shift+D abre uma nova sessão igual a esta
+            if (isDuplicateTabShortcut(event)) {
+                event.preventDefault();
+                window.dispatchEvent(new CustomEvent('terminal:request-duplicate', {
+                    detail: { terminalId: sessionId },
+                }));
+                return false;
+            }
             if (isCloseTabShortcut(event)) {
                 event.preventDefault();
                 window.dispatchEvent(new CustomEvent('terminal:request-close', {

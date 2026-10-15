@@ -54,6 +54,15 @@ export const isCloseTabShortcut = (event) => (
     && event?.key?.toLowerCase() === 'd'
 );
 
+/** Ctrl+Shift+D: abre uma nova sessão igual à atual. */
+export const isDuplicateTabShortcut = (event) => (
+    event?.ctrlKey === true
+    && event?.shiftKey === true
+    && event?.metaKey !== true
+    && event?.altKey !== true
+    && event?.key?.toLowerCase() === 'd'
+);
+
 export function getSSHSpawnConfig(session, customers = []) {
     if (!session?.config) return null;
     const customer = customers.find((candidate) => matchesSession(candidate, session));
