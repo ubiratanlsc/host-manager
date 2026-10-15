@@ -2,6 +2,8 @@ import { remove } from "@tauri-apps/plugin-fs";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { removeGroupFromConfig } from "../lib/groupTree";
+import { checkConnectivity } from "../lib/connectivity";
+import { appendCustomers, toCustomer } from "../lib/customerList";
 
 const samePort = (a, b) => Number(a || 22) === Number(b || 22);
 
@@ -11,6 +13,10 @@ export const isSameHost = (customer, { host, port, username }) => (
     && samePort(customer.port, port)
     && (customer.username || '') === (username || '')
 );
+
+// Uma verificação de conectividade por vez: reabrir o modal durante uma
+// verificação reaproveita a que já está rodando.
+let connectivityRun = null;
 
 const useConfigStore = create((set) => ({
     customers: [],
@@ -22,8 +28,11 @@ const useConfigStore = create((set) => ({
     addCustomer: (id, name, host, port, username, password, group, tagId, identityFile) => set((state) => ({
         customers: state.customers.some(c => c.id === id || isSameHost(c, { host, port, username }))
             ? state.customers
-            : [...state.customers, { id, name, host, port, username, password, groups: group ? [group] : [], tagId, identityFile }],
+            : [...state.customers, toCustomer({ id, name, host, port, username, password, group, tagId, identityFile })],
     })),
+    // Inserção em lote (importação): um único set, ignorando duplicados de
+    // id ou de host + porta + usuário, inclusive dentro do próprio lote.
+    addCustomers: (hosts) => set((state) => ({ customers: appendCustomers(state.customers, hosts) })),
     editCustomer: (id, updatedData) => set((state) => ({
         customers: state.customers.map(customer => customer.id === id ? { ...customer, ...updatedData } : customer),
     })),
@@ -70,28 +79,27 @@ const useConfigStore = create((set) => ({
         colors: { ...state.colors, [id]: { id: id, name: obj?.name, colors: obj?.colors } },
     })),
     setInitialData: (data) => set(() => ({
-        customers: data.customers || [],
+        // Versões antigas gravavam `status` no host; hoje ele vive em hostStatus.
+        customers: (data.customers || []).map(({ status: _status, ...customer }) => customer),
         groups: data.groups || [],
         tags: data.tags || [],
         colors: data.colors || {},
         configs: data.configs || {},
         externalTools: data.externalTools || [],
     })),
-    updateCustomerStatus: (id, status) => set((state) => ({
-        customers: state.customers.map(c => c.id === id ? { ...c, status } : c),
-    })),
-    checkAllConnectivity: async () => {
-        if (!isTauri()) return;
-        const customers = useConfigStore.getState().customers;
-        await Promise.all(customers.map(async (c) => {
-            try {
-                const online = await invoke('check_host_connectivity', { host: c.host, port: c.port || 22 });
-                useConfigStore.getState().updateCustomerStatus(c.id, online ? 'online' : 'offline');
-            } catch {
-                useConfigStore.getState().updateCustomerStatus(c.id, 'unknown');
-            }
-        }));
-    }
+    // Status de conectividade por id de host. Fica fora de `customers` para
+    // não re-renderizar tudo que depende da lista nem ir para o config.json.
+    hostStatus: {},
+    checkAllConnectivity: () => {
+        if (!isTauri()) return Promise.resolve();
+        if (connectivityRun) return connectivityRun;
+        connectivityRun = checkConnectivity(
+            useConfigStore.getState().customers,
+            (host, port) => invoke('check_host_connectivity', { host, port }),
+            { onResults: (patch) => set((state) => ({ hostStatus: { ...state.hostStatus, ...patch } })) },
+        ).finally(() => { connectivityRun = null; });
+        return connectivityRun;
+    },
 }));
 
 export default useConfigStore;

@@ -143,7 +143,7 @@ const useSaveData = create(() => ({
         try {
             const store = useConfigStore.getState();
             const before = store.customers.length;
-            hosts.forEach((h) => store.addCustomer(h.id, h.name, h.host, h.port, h.username, h.password, h.group, h.tagId, h.identityFile));
+            store.addCustomers(hosts);
             const added = useConfigStore.getState().customers.length - before;
             await persistConfig();
             useAppStore.getState().addNotification({ type: 'success', title: 'Hosts importados', message: `${added} host${added === 1 ? '' : 's'} importado${added === 1 ? '' : 's'}.` });

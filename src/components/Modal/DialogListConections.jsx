@@ -4,7 +4,7 @@ import {
     DialogTitle
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useEffect, useState, useMemo } from "react";
+import { memo, useEffect, useState, useMemo } from "react";
 import { Terminal, Server, Globe, Edit2, LayoutList, LayoutGrid, Rows3, Search, RefreshCw, Send, CheckSquare, FileInput } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -27,9 +27,11 @@ const viewModes = [
     { id: 'details', icon: Rows3, label: 'Detalhes' },
 ];
 
-function HostListRow({ customer, groupName }) {
+const HostListRow = memo(function HostListRow({ customer, status }) {
     const spawnSSH = useSSHStore((state) => state.spawnSSH);
-    const { closeModal, openModal, setEditingCustomer } = useModalStore();
+    const closeModal = useModalStore((s) => s.closeModal);
+    const openModal = useModalStore((s) => s.openModal);
+    const setEditingCustomer = useModalStore((s) => s.setEditingCustomer);
 
     const handleConnect = async () => {
         closeModal('connections');
@@ -45,7 +47,7 @@ function HostListRow({ customer, groupName }) {
     return (
         <div className="flex items-center justify-between p-2 px-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors group">
             <div className="flex items-center gap-2.5 min-w-0">
-                <div className={statusDot(customer.status)} />
+                <div className={statusDot(status)} />
                 <Server className="w-4 h-4 text-muted-foreground shrink-0" />
                 <span className="text-sm font-medium truncate">{customer.name}</span>
                 <span className="text-xs text-muted-foreground hidden sm:inline">{customer.host}:{customer.port || 22}</span>
@@ -68,11 +70,13 @@ function HostListRow({ customer, groupName }) {
             </div>
         </div>
     );
-}
+});
 
-function HostDetailCard({ customer, groupName }) {
+const HostDetailCard = memo(function HostDetailCard({ customer, status, groupName }) {
     const spawnSSH = useSSHStore((state) => state.spawnSSH);
-    const { closeModal, openModal, setEditingCustomer } = useModalStore();
+    const closeModal = useModalStore((s) => s.closeModal);
+    const openModal = useModalStore((s) => s.openModal);
+    const setEditingCustomer = useModalStore((s) => s.setEditingCustomer);
 
     const handleConnect = async () => {
         closeModal('connections');
@@ -94,7 +98,7 @@ function HostDetailCard({ customer, groupName }) {
                     </div>
                     <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                            <div className={statusDot(customer.status)} />
+                            <div className={statusDot(status)} />
                             <h3 className="font-semibold text-sm truncate">{customer.name}</h3>
                         </div>
                         <span className="text-xs text-muted-foreground truncate block">{groupName}</span>
@@ -121,11 +125,16 @@ function HostDetailCard({ customer, groupName }) {
             </div>
         </div>
     );
-}
+});
 
 export default function DialogListConections() {
-    const { customers, groups, checkAllConnectivity } = useConfigStore();
-    const { modals, closeModal, openModal, setEditingCustomer } = useModalStore();
+    const customers = useConfigStore((s) => s.customers);
+    const groups = useConfigStore((s) => s.groups);
+    const hostStatus = useConfigStore((s) => s.hostStatus);
+    const checkAllConnectivity = useConfigStore((s) => s.checkAllConnectivity);
+    const isOpen = useModalStore((s) => s.modals.connections);
+    const closeModal = useModalStore((s) => s.closeModal);
+    const openModal = useModalStore((s) => s.openModal);
     const [viewMode, setViewMode] = useState('blocks');
     const [search, setSearch] = useState('');
     const [checking, setChecking] = useState(false);
@@ -138,11 +147,11 @@ export default function DialogListConections() {
     const writeSSH = useSSHStore((s) => s.writeSSH);
 
     useEffect(() => {
-        if (modals.connections) {
+        if (isOpen) {
             setChecking(true);
             checkAllConnectivity().finally(() => setChecking(false));
         }
-    }, [modals.connections]);
+    }, [isOpen, checkAllConnectivity]);
 
     const groupLabel = (c) => getGroupPath(groups, c.groups?.[0]) || 'Sem grupo';
 
@@ -170,13 +179,9 @@ export default function DialogListConections() {
         return result;
     }, [customers, groups]);
 
-    const [defaultTab, setDefaultTab] = useState(null);
-
-    useEffect(() => {
-        if (tabs.length > 0 && defaultTab === null) {
-            setDefaultTab(tabs[0].id);
-        }
-    }, [tabs, defaultTab]);
+    const [selectedTab, setSelectedTab] = useState(null);
+    // Se a aba escolhida sumir (grupo excluído), volta para a primeira.
+    const activeTab = tabs.some((t) => t.id === selectedTab) ? selectedTab : tabs[0]?.id;
 
     const toggleSelect = (id) => {
         setSelectedIds(prev => {
@@ -233,8 +238,6 @@ export default function DialogListConections() {
     const renderCustomers = (filteredCustomers) => {
         if (filteredCustomers.length === 0) return null;
 
-        const withStatus = filteredCustomers.map(c => ({ ...c, status: c.status || 'unknown' }));
-
         const wrapWithSelect = (customer, el) => broadcastMode ? (
             <div
                 key={customer.id}
@@ -251,8 +254,8 @@ export default function DialogListConections() {
         if (viewMode === 'list') {
             return (
                 <div className="flex flex-col gap-1.5">
-                    {withStatus.map(customer => wrapWithSelect(customer,
-                        <HostListRow key={customer.id} customer={customer} groupName={groupLabel(customer)} />
+                    {filteredCustomers.map(customer => wrapWithSelect(customer,
+                        <HostListRow key={customer.id} customer={customer} status={hostStatus[customer.id]} />
                     ))}
                 </div>
             );
@@ -261,25 +264,21 @@ export default function DialogListConections() {
         if (viewMode === 'details') {
             return (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {withStatus.map(customer => wrapWithSelect(customer,
-                        <HostDetailCard key={customer.id} customer={customer} groupName={groupLabel(customer)} />
+                    {filteredCustomers.map(customer => wrapWithSelect(customer,
+                        <HostDetailCard key={customer.id} customer={customer} status={hostStatus[customer.id]} groupName={groupLabel(customer)} />
                     ))}
                 </div>
             );
         }
 
-        const handleEdit = (customer) => {
-            setEditingCustomer(customer);
-            openModal('host');
-        };
-
         return (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {withStatus.map(customer => wrapWithSelect(customer,
+                {filteredCustomers.map(customer => wrapWithSelect(customer,
                     <HostCard
                         key={customer.id}
-                        host={{ status: customer.status, hostname: customer.name, group: groupLabel(customer), ip: customer.host, port: customer.port }}
-                        onEdit={() => handleEdit(customer)}
+                        customer={customer}
+                        status={hostStatus[customer.id]}
+                        groupName={groupLabel(customer)}
                     />
                 ))}
             </div>
@@ -287,12 +286,12 @@ export default function DialogListConections() {
     };
 
     return (
-        <Dialog open={modals.connections} onOpenChange={handleOpenChange}>
+        <Dialog open={isOpen} onOpenChange={handleOpenChange}>
             <DialogContent className="w-[calc(100vw-2rem)] md:w-[88vw] lg:w-[85vw] xl:w-[80vw] max-w-[1200px] h-[88vh] overflow-hidden flex flex-col gap-0 p-0">
                 <DialogTitle className="sr-only">Lista de Conexões</DialogTitle>
                 {/* Altura fixa: a barra de grupos e a lista de hosts rolam cada uma por si. */}
                 <div className="flex flex-1 min-h-0">
-                    <Tabs defaultValue={defaultTab || undefined} orientation="vertical" className="flex w-full min-h-0" onValueChange={(v) => setDefaultTab(v)}>
+                    <Tabs value={activeTab} orientation="vertical" className="flex w-full min-h-0" onValueChange={setSelectedTab}>
                         <TabsList className="flex flex-col h-full items-stretch justify-start w-52 shrink-0 overflow-y-auto overflow-x-hidden rounded-none border-r bg-background p-2 space-y-1">
                             {tabs.map(({ id, name, depth }) => (
                                 <TabsTrigger
@@ -370,7 +369,9 @@ export default function DialogListConections() {
                                 </div>
                             </div>
                             <div className="flex-1 overflow-auto p-4 bg-background">
-                                {tabs.map(({ id, name }) => {
+                                {/* Só a aba ativa é montada: filtrar e renderizar todas a cada
+                                    atualização trava a lista quando há centenas de hosts. */}
+                                {tabs.filter(({ id }) => id === activeTab).map(({ id }) => {
                                     const filteredCustomers = getCustomersForTab(id);
                                     const content = renderCustomers(filteredCustomers);
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { memo } from 'react';
 import { Terminal, Edit2, Server, Globe, Wrench } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,26 +20,24 @@ const statusDot = {
     unknown: 'bg-amber-500',
 };
 
-const HostCard = ({ host, onEdit, onConnect }) => {
-    const { closeModal } = useModalStore();
+/**
+ * Card de um host na lista de conexões. Recebe o próprio host (com senha/chave)
+ * e o status por props; é memoizado porque a lista pode ter centenas de cards.
+ */
+const HostCard = memo(function HostCard({ customer, status, groupName }) {
+    const closeModal = useModalStore((s) => s.closeModal);
+    const openModal = useModalStore((s) => s.openModal);
+    const setEditingCustomer = useModalStore((s) => s.setEditingCustomer);
     const spawnSSH = useSSHStore((state) => state.spawnSSH);
-    const { customers } = useConfigStore();
     const externalTools = useConfigStore((s) => s.externalTools);
 
-    // Customer real (com senha/chave) ou fallback básico a partir do card
-    const customer = customers.find(c => c.host === host.ip)
-        || { host: host.ip, port: host.port, name: host.hostname };
+    const handleEdit = () => {
+        setEditingCustomer(customer);
+        openModal('host');
+    };
 
     const handleConnect = async () => {
         try {
-            const customer = customers.find(c => c.host === host.ip);
-
-            if (!customer) {
-                console.error('[HostCard] Customer credentials not found');
-                useAppStore.getState().addNotification({ type: 'error', title: 'Credenciais não encontradas', message: 'Configure a conexão novamente antes de conectar.' });
-                return;
-            }
-
             closeModal('connections');
 
             await spawnSSH({
@@ -63,25 +61,25 @@ const HostCard = ({ host, onEdit, onConnect }) => {
             <CardContent className="p-3">
                 <div className="flex items-center justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2 min-w-0">
-                        <div className={cn("w-2 h-2 rounded-full shrink-0", statusDot[host.status] || statusDot.unknown)} />
+                        <div className={cn("w-2 h-2 rounded-full shrink-0", statusDot[status] || statusDot.unknown)} />
                         <Server className="w-4 h-4 text-muted-foreground shrink-0" />
                         <div className="min-w-0">
-                            <h3 className="font-semibold text-sm truncate">{host.hostname}</h3>
-                            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide truncate block">{host.group}</span>
+                            <h3 className="font-semibold text-sm truncate">{customer.name}</h3>
+                            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide truncate block">{groupName}</span>
                         </div>
                     </div>
                     <div className="flex gap-1 shrink-0">
                         <Button variant="secondary" size="icon" className="h-7 w-7" onClick={handleConnect} title="Conectar">
                             <Terminal className="w-3.5 h-3.5" />
                         </Button>
-                        <Button variant="secondary" size="icon" className="h-7 w-7" onClick={onEdit} title="Editar">
+                        <Button variant="secondary" size="icon" className="h-7 w-7" onClick={handleEdit} title="Editar">
                             <Edit2 className="w-3.5 h-3.5" />
                         </Button>
                     </div>
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Globe className="w-3.5 h-3.5 shrink-0" />
-                    <span className="font-mono truncate bg-muted px-1.5 py-0.5 rounded flex-1 min-w-0">{host.ip}:{host.port || 22}</span>
+                    <span className="font-mono truncate bg-muted px-1.5 py-0.5 rounded flex-1 min-w-0">{customer.host}:{customer.port || 22}</span>
                 </div>
             </CardContent>
         </Card>
@@ -91,7 +89,7 @@ const HostCard = ({ host, onEdit, onConnect }) => {
                     <Terminal className="mr-2 h-4 w-4" />
                     Conectar
                 </ContextMenuItem>
-                <ContextMenuItem onSelect={onEdit}>
+                <ContextMenuItem onSelect={handleEdit}>
                     <Edit2 className="mr-2 h-4 w-4" />
                     Editar
                 </ContextMenuItem>
@@ -111,6 +109,6 @@ const HostCard = ({ host, onEdit, onConnect }) => {
             </ContextMenuContent>
         </ContextMenu>
     );
-};
+});
 
 export default HostCard;

@@ -33,13 +33,19 @@ function parseLine(rawLine) {
 
 const splitAliases = (value) => (value.match(/"[^"]*"|\S+/g) || []).map(unquote).filter(Boolean);
 
-/** Glob simples do OpenSSH (`*` e `?`), com negação `!`. */
-function matchesPatterns(patterns, alias) {
-    let matched = false;
-    for (const pattern of patterns) {
+/** Glob simples do OpenSSH (`*` e `?`), com negação `!`, compilado uma vez por bloco. */
+function compilePatterns(patterns) {
+    return patterns.map((pattern) => {
         const negated = pattern.startsWith('!');
         const body = negated ? pattern.slice(1) : pattern;
         const regex = new RegExp(`^${body.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')}$`, 'i');
+        return { negated, regex };
+    });
+}
+
+function matchesPatterns(matchers, alias) {
+    let matched = false;
+    for (const { negated, regex } of matchers) {
         if (regex.test(alias)) {
             if (negated) return false;
             matched = true;
@@ -98,16 +104,17 @@ export function parseSshConfig(text, { homeDir = '' } = {}) {
         else if (WARN_ON[key]) current.warnings.push(WARN_ON[key]);
     });
 
-    const aliases = [];
+    const aliases = new Set();
     blocks.forEach((block) => block.patterns.forEach((alias) => {
-        if (!isPattern(alias) && !aliases.includes(alias)) aliases.push(alias);
+        if (!isPattern(alias)) aliases.add(alias);
     }));
+    const compiled = blocks.map((block) => ({ ...block, matchers: compilePatterns(block.patterns) }));
 
-    const hosts = aliases.map((alias) => {
+    const hosts = [...aliases].map((alias) => {
         const resolved = {};
         const warnings = [];
-        blocks.forEach((block) => {
-            if (!matchesPatterns(block.patterns, alias)) return;
+        compiled.forEach((block) => {
+            if (!matchesPatterns(block.matchers, alias)) return;
             block.options.forEach(({ key, value }) => {
                 if (resolved[key] === undefined) resolved[key] = value;
             });

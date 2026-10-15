@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { v4 as uuidv4 } from "uuid";
@@ -86,7 +86,10 @@ export default function DialogImportSshConfig() {
         if (selected) load(selected);
     };
 
-    const updateRow = (key, patch) => setRows((current) => current.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+    const updateRow = useCallback(
+        (key, patch) => setRows((current) => current.map((row) => (row.key === key ? { ...row, ...patch } : row))),
+        [],
+    );
 
     const importable = rows.filter((row) => !row.exists);
     const selectedRows = rows.filter((row) => row.selected && !row.exists);
@@ -212,53 +215,7 @@ export default function DialogImportSshConfig() {
                                 </thead>
                                 <tbody>
                                     {rows.map((row) => (
-                                        <tr key={row.key} className={cn("border-b last:border-0 align-middle", row.exists && "opacity-50")}>
-                                            <td className="py-1.5 pr-2">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={row.selected}
-                                                    disabled={row.exists}
-                                                    onChange={(e) => updateRow(row.key, { selected: e.target.checked })}
-                                                    className="accent-primary"
-                                                    aria-label={`Selecionar ${row.alias}`}
-                                                />
-                                            </td>
-                                            <td className="py-1.5 pr-2">
-                                                <Input
-                                                    value={row.name}
-                                                    disabled={row.exists}
-                                                    onChange={(e) => updateRow(row.key, { name: e.target.value })}
-                                                    className="h-7 text-xs"
-                                                />
-                                            </td>
-                                            <td className="py-1.5 pr-2 font-mono whitespace-nowrap">
-                                                {row.username ? `${row.username}@` : ""}{row.host}:{row.port}
-                                                {row.exists && <span className="ml-2 font-sans text-[10px] uppercase text-muted-foreground">já existe</span>}
-                                                {row.warnings.map((warning) => (
-                                                    <div key={warning} className="font-sans text-[10px] text-amber-500 flex items-center gap-1">
-                                                        <AlertTriangle className="w-3 h-3" /> {warning}
-                                                    </div>
-                                                ))}
-                                            </td>
-                                            <td className="py-1.5 pr-2 max-w-[200px]">
-                                                {row.identityFile ? (
-                                                    <span className="flex items-center gap-1 truncate font-mono" title={row.identityFile}>
-                                                        <KeyRound className="w-3 h-3 shrink-0" />
-                                                        <span className="truncate">{row.identityFile.split(/[\\/]/).pop()}</span>
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-muted-foreground">padrão</span>
-                                                )}
-                                            </td>
-                                            <td className="py-1.5">
-                                                <GroupSelect
-                                                    groups={groups}
-                                                    value={row.groupId}
-                                                    onChange={(groupId) => updateRow(row.key, { groupId })}
-                                                    className="h-7 text-xs"
-                                                />
-                                            </td>
-                                        </tr>
+                                        <ImportRow key={row.key} row={row} groups={groups} onChange={updateRow} />
                                     ))}
                                 </tbody>
                             </table>
@@ -288,3 +245,56 @@ export default function DialogImportSshConfig() {
         </>
     );
 }
+
+/** Linha da tabela; memoizada para editar uma linha não re-renderizar as outras. */
+const ImportRow = memo(function ImportRow({ row, groups, onChange }) {
+    return (
+        <tr className={cn("border-b last:border-0 align-middle", row.exists && "opacity-50")}>
+            <td className="py-1.5 pr-2">
+                <input
+                    type="checkbox"
+                    checked={row.selected}
+                    disabled={row.exists}
+                    onChange={(e) => onChange(row.key, { selected: e.target.checked })}
+                    className="accent-primary"
+                    aria-label={`Selecionar ${row.alias}`}
+                />
+            </td>
+            <td className="py-1.5 pr-2">
+                <Input
+                    value={row.name}
+                    disabled={row.exists}
+                    onChange={(e) => onChange(row.key, { name: e.target.value })}
+                    className="h-7 text-xs"
+                />
+            </td>
+            <td className="py-1.5 pr-2 font-mono whitespace-nowrap">
+                {row.username ? `${row.username}@` : ""}{row.host}:{row.port}
+                {row.exists && <span className="ml-2 font-sans text-[10px] uppercase text-muted-foreground">já existe</span>}
+                {row.warnings.map((warning) => (
+                    <div key={warning} className="font-sans text-[10px] text-amber-500 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> {warning}
+                    </div>
+                ))}
+            </td>
+            <td className="py-1.5 pr-2 max-w-[200px]">
+                {row.identityFile ? (
+                    <span className="flex items-center gap-1 truncate font-mono" title={row.identityFile}>
+                        <KeyRound className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{row.identityFile.split(/[\\/]/).pop()}</span>
+                    </span>
+                ) : (
+                    <span className="text-muted-foreground">padrão</span>
+                )}
+            </td>
+            <td className="py-1.5">
+                <GroupSelect
+                    groups={groups}
+                    value={row.groupId}
+                    onChange={(groupId) => onChange(row.key, { groupId })}
+                    className="h-7 text-xs"
+                />
+            </td>
+        </tr>
+    );
+});
