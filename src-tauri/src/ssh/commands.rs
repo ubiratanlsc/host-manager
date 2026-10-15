@@ -6,7 +6,7 @@ use portable_pty::PtySize;
 use socket2::{SockRef, TcpKeepalive};
 use ssh2::{
     BlockDirections, CheckResult, ErrorCode, HashType, HostKeyType, KeyboardInteractivePrompt,
-    KnownHostFileKind,
+    KnownHostFileKind, MethodType,
 };
 use std::fs;
 use std::io::{Read, Write};
@@ -206,6 +206,75 @@ fn remove_known_host_entries(contents: &str, host: &str, port: u16) -> KnownHost
     }
 }
 
+/// Tipos de chave (ex.: "ssh-ed25519") já confiados para o host no
+/// known_hosts. Entradas exatas de host:porta vêm antes do fallback pelo host.
+fn known_host_key_types(contents: &str, host: &str, port: u16) -> Vec<String> {
+    let exact = known_host_names_to_replace(host, port);
+    let fallback = if port == 22 { Vec::new() } else { vec![host.to_string()] };
+    let mut types: Vec<String> = Vec::new();
+
+    for candidates in [&exact, &fallback] {
+        if candidates.is_empty() {
+            continue;
+        }
+        for line in contents.lines() {
+            let mut fields = line.split_whitespace();
+            let (Some(hosts), Some(key_type)) = (fields.next(), fields.next()) else {
+                continue;
+            };
+            // Comentários e marcadores (@cert-authority, @revoked) não são
+            // chaves do host.
+            if hosts.starts_with('#') || hosts.starts_with('@') {
+                continue;
+            }
+            let matches = hosts
+                .split(',')
+                .any(|pattern| host_pattern_matches(pattern, candidates));
+            if matches && !types.iter().any(|known| known == key_type) {
+                types.push(key_type.to_string());
+            }
+        }
+    }
+    types
+}
+
+/// Algoritmos de host key que validam uma chave do tipo salvo no known_hosts.
+fn host_key_algorithms_for(key_type: &str) -> &'static [&'static str] {
+    match key_type {
+        "ssh-ed25519" => &["ssh-ed25519"],
+        "ecdsa-sha2-nistp256" => &["ecdsa-sha2-nistp256"],
+        "ecdsa-sha2-nistp384" => &["ecdsa-sha2-nistp384"],
+        "ecdsa-sha2-nistp521" => &["ecdsa-sha2-nistp521"],
+        "ssh-rsa" => &["rsa-sha2-512", "rsa-sha2-256", "ssh-rsa"],
+        "ssh-dss" => &["ssh-dss"],
+        _ => &[],
+    }
+}
+
+/// Igual ao OpenSSH: pede primeiro ao servidor o tipo de chave já confiado,
+/// para não acusar "chave mudou" só porque ele também tem outra chave (ex.:
+/// salvo RSA, servidor prefere Ed25519). Os demais suportados vêm depois.
+/// `None` quando não há nada salvo (mantém a ordem padrão do libssh2).
+fn preferred_host_key_algorithms(known_types: &[String], supported: &[&str]) -> Option<String> {
+    let mut prefs: Vec<&str> = Vec::new();
+    for key_type in known_types {
+        for algorithm in host_key_algorithms_for(key_type) {
+            if supported.contains(algorithm) && !prefs.contains(algorithm) {
+                prefs.push(algorithm);
+            }
+        }
+    }
+    if prefs.is_empty() {
+        return None;
+    }
+    for algorithm in supported {
+        if !prefs.contains(algorithm) {
+            prefs.push(algorithm);
+        }
+    }
+    Some(prefs.join(","))
+}
+
 fn openssh_key_type(host_key_type: HostKeyType) -> Result<&'static str, String> {
     match host_key_type {
         HostKeyType::Rsa => Ok("ssh-rsa"),
@@ -340,7 +409,7 @@ fn is_timeout(error: &ssh2::Error) -> bool {
 fn auth_error(error: &ssh2::Error) -> String {
     if is_timeout(error) {
         return format!(
-            "O servidor não concluiu a autenticação em {}s. Verifique usuário e senha ou se ele exige outro método de login.",
+            "Falha na autenticação: o servidor não concluiu o login em {}s. Verifique usuário e senha ou se ele exige outro método de login.",
             SSH_OPERATION_TIMEOUT_MS / 1000
         );
     }
@@ -406,7 +475,10 @@ fn authenticate(
                     "ponto: 5.4 - Chave personalizada não encontrada: {}",
                     key_path.display()
                 );
-                return Err(format!("Identity file not found: {}", key_path.display()));
+                return Err(format!(
+                    "Falha na autenticação: a chave {} não foi encontrada",
+                    key_path.display()
+                ));
             }
         }
 
@@ -444,11 +516,13 @@ fn authenticate(
             }
         }
 
+        // Sem senha cadastrada e nenhuma chave aceita: o frontend usa este
+        // prefixo para pedir a senha do host.
         return Err(format!(
-            "Authentication failed: {}",
+            "Falha na autenticação: nenhuma senha cadastrada e nenhuma chave SSH foi aceita ({})",
             last_err
                 .map(|e| e.to_string())
-                .unwrap_or_else(|| "No SSH keys found".to_string())
+                .unwrap_or_else(|| "nenhuma chave encontrada em ~/.ssh".to_string())
         ));
     }
     println!("ponto: 7 - Autenticação bem-sucedida");
@@ -468,6 +542,10 @@ pub async fn spawn_ssh(
     identity_file: Option<String>,
 ) -> Result<String, String> {
     println!("ponto: 8 - Iniciando spawn_ssh para window: {}", window_id);
+
+    // Senha vazia vale como "sem senha": tenta ssh-agent e chaves em vez de
+    // um login por senha em branco (que sempre falha).
+    let password = password.filter(|p| !p.is_empty());
 
     // Verificar se já existe uma sessão para esta janela
     {
@@ -524,6 +602,19 @@ pub async fn spawn_ssh(
     // sempre e o frontend sem retorno. Depois do shell o modo é não-bloqueante
     // e o timeout deixa de se aplicar.
     sess.set_timeout(SSH_OPERATION_TIMEOUT_MS);
+
+    // Precisa ser antes do handshake.
+    if let Some(contents) = get_known_hosts_path().and_then(|path| fs::read_to_string(path).ok()) {
+        let known_types = known_host_key_types(&contents, &host, port);
+        if let Ok(supported) = sess.supported_algs(MethodType::HostKey) {
+            if let Some(prefs) = preferred_host_key_algorithms(&known_types, &supported) {
+                println!("ponto: 8.1 - Preferindo host keys já conhecidas: {}", prefs);
+                if let Err(error) = sess.method_pref(MethodType::HostKey, &prefs) {
+                    println!("ponto: 8.2 - Não foi possível definir a preferência: {}", error);
+                }
+            }
+        }
+    }
 
     sess.set_tcp_stream(tcp);
     if let Err(error) = sess.handshake() {
@@ -1069,6 +1160,64 @@ mod tests {
 
         assert_eq!(result.removed, 1);
         assert_eq!(result.contents, "192.168.7.5 ssh-ed25519 DEFAULTKEY\n");
+    }
+
+    #[test]
+    fn finds_trusted_key_types_for_plain_hashed_and_port_entries() {
+        let contents = concat!(
+            "# comentário\n",
+            "@cert-authority * ssh-ed25519 CAKEY\n",
+            "192.168.7.5,web ssh-ed25519 KEY1\n",
+            "192.168.7.5 ssh-rsa KEY2 host-manager\n",
+            "|1|AAECAwQFBgcICQoLDA0ODxAREhM=|xLxQPIhT/0cSdK2FzF6Q8PHkiLo= ecdsa-sha2-nistp256 KEY3\n",
+            "[10.0.0.1]:2222 ssh-rsa KEY4\n",
+            "10.0.0.1 ssh-ed25519 KEY5\n",
+        );
+
+        assert_eq!(
+            known_host_key_types(contents, "192.168.7.5", 22),
+            vec!["ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256"]
+        );
+        // Porta não padrão: a entrada exata vem antes do fallback pelo host.
+        assert_eq!(
+            known_host_key_types(contents, "10.0.0.1", 2222),
+            vec!["ssh-rsa", "ssh-ed25519"]
+        );
+        assert!(known_host_key_types(contents, "10.9.9.9", 22).is_empty());
+    }
+
+    #[test]
+    fn crypto_backend_supports_ed25519_host_keys() {
+        // O backend WinCNG (ssh2 sem vendored-openssl no Windows) não tem
+        // Ed25519 e fazia todo servidor Ed25519 parecer "chave mudou".
+        let supported = Session::new()
+            .unwrap()
+            .supported_algs(MethodType::HostKey)
+            .unwrap();
+        assert!(supported.contains(&"ssh-ed25519"), "{:?}", supported);
+    }
+
+    #[test]
+    fn prefers_the_already_trusted_host_key_algorithm() {
+        let supported = [
+            "ssh-ed25519",
+            "ecdsa-sha2-nistp256",
+            "rsa-sha2-512",
+            "rsa-sha2-256",
+            "ssh-rsa",
+        ];
+
+        assert_eq!(
+            preferred_host_key_algorithms(&["ssh-rsa".to_string()], &supported).unwrap(),
+            "rsa-sha2-512,rsa-sha2-256,ssh-rsa,ssh-ed25519,ecdsa-sha2-nistp256"
+        );
+        assert_eq!(
+            preferred_host_key_algorithms(&["ssh-ed25519".to_string()], &supported).unwrap(),
+            "ssh-ed25519,ecdsa-sha2-nistp256,rsa-sha2-512,rsa-sha2-256,ssh-rsa"
+        );
+        // Nada salvo (ou tipo não suportado): mantém a ordem padrão.
+        assert!(preferred_host_key_algorithms(&[], &supported).is_none());
+        assert!(preferred_host_key_algorithms(&["ssh-dss".to_string()], &supported).is_none());
     }
 
     #[test]
